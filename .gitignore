@@ -12,6 +12,7 @@ out/
 # Build outputs
 dist/
 build/
+*.tsbuildinfo
 
 # Env
 .env
