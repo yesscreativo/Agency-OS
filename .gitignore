@@ -1,0 +1,38 @@
+.DS_Store
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+
+# Turborepo
+.turbo/
+
+# Build outputs
+dist/
+build/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+
+# Backup con datos reales de clientes (PII) — nunca al historial de git
+backups/
+
+# Config local de Claude Code (no compartir/commitear)
+.claude/settings.local.json

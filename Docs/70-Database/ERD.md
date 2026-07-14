@@ -1,0 +1,20 @@
+# ERD
+
+Entidades principales:
+- organizations
+- clients
+- contacts
+- contracts
+- services
+- users
+- people
+- roles
+- permissions
+- work_items
+- work_item_dependencies
+- time_entries
+- notifications
+- events
+- approvals
+- skills
+- workflows
