@@ -2,7 +2,7 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { Button, Input } from "@agency-os/ui";
-import { login, type AuthActionState } from "@/lib/auth-actions";
+import { updatePassword, type AuthActionState } from "@/lib/auth-actions";
 
 const initialState: AuthActionState = { error: null };
 
@@ -10,52 +10,38 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending} className="w-full">
-      {pending ? "Ingresando..." : "Ingresar"}
+      {pending ? "Guardando..." : "Guardar nueva contraseña"}
     </Button>
   );
 }
 
-export default function LoginPage() {
-  const [state, formAction] = useFormState(login, initialState);
+export default function UpdatePasswordPage() {
+  const [state, formAction] = useFormState(updatePassword, initialState);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50">
       <form action={formAction} className="w-full max-w-sm space-y-4 rounded-lg border bg-white p-6 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold">Agency OS</h1>
-          <p className="text-sm text-slate-500">Ingresa con tu cuenta.</p>
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <Input id="email" name="email" type="email" required autoComplete="email" />
+          <h1 className="text-xl font-semibold">Nueva contraseña</h1>
         </div>
 
         <div className="space-y-1">
           <label htmlFor="password" className="text-sm font-medium">
-            Contraseña
+            Contraseña nueva
           </label>
           <Input
             id="password"
             name="password"
             type="password"
             required
-            autoComplete="current-password"
+            minLength={8}
+            autoComplete="new-password"
           />
         </div>
 
         {state.error && <p className="text-sm text-red-600">{state.error}</p>}
 
         <SubmitButton />
-
-        <a
-          href="/reset-password"
-          className="block text-center text-sm text-slate-500 hover:underline"
-        >
-          ¿Olvidaste tu contraseña?
-        </a>
       </form>
     </main>
   );
