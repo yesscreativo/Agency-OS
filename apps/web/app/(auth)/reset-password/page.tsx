@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { Button, Input } from "@agency-os/ui";
+import { Button, FieldError, Input, Label } from "@agency-os/ui";
 import { requestPasswordReset, type AuthActionState } from "@/lib/auth-actions";
 
 const initialState: AuthActionState = { error: null };
@@ -9,7 +9,7 @@ const initialState: AuthActionState = { error: null };
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full">
+    <Button type="submit" disabled={pending} className="mt-1 w-full">
       {pending ? "Enviando..." : "Enviar enlace de recuperación"}
     </Button>
   );
@@ -20,37 +20,38 @@ export default function ResetPasswordPage() {
 
   if (state.success) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="max-w-sm text-center text-sm text-slate-600">
-          Si el email existe, te enviamos un enlace para restablecer tu contraseña.
-        </p>
-      </main>
+      <p className="text-center text-sm leading-relaxed text-[#a1a1aa]">
+        Si el email existe, te enviamos un enlace para restablecer tu contraseña.
+      </p>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50">
-      <form action={formAction} className="w-full max-w-sm space-y-4 rounded-lg border bg-white p-6 shadow-sm">
-        <div>
-          <h1 className="text-xl font-semibold">Recuperar contraseña</h1>
-          <p className="text-sm text-slate-500">Te enviamos un enlace a tu email.</p>
-        </div>
+    <form action={formAction} className="space-y-4">
+      <div>
+        <h1 className="text-[22px] font-bold tracking-tight text-[#f6f6f7]">
+          Recuperar contraseña
+        </h1>
+        <p className="mt-1 text-[13.5px] text-[#a1a1aa]">Te enviamos un enlace a tu email.</p>
+      </div>
 
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <Input id="email" name="email" type="email" required autoComplete="email" />
-        </div>
+      <div>
+        <Label htmlFor="email" className="text-[#f6f6f7]">
+          Email
+        </Label>
+        <Input id="email" name="email" type="email" required autoComplete="email" />
+      </div>
 
-        {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+      <FieldError>{state.error}</FieldError>
 
-        <SubmitButton />
+      <SubmitButton />
 
-        <a href="/login" className="block text-center text-sm text-slate-500 hover:underline">
-          Volver a login
-        </a>
-      </form>
-    </main>
+      <a
+        href="/login"
+        className="block text-center text-[12.5px] text-[#71717a] transition hover:text-[#b8ff3c]"
+      >
+        Volver a login
+      </a>
+    </form>
   );
 }

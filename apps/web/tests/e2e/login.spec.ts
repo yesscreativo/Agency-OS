@@ -19,7 +19,7 @@ test("logs in, shows the RBAC shell, and logs out", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(TEST_EMAIL!);
   await page.getByLabel("Contraseña").fill(TEST_PASSWORD!);
-  await page.getByRole("button", { name: "Ingresar" }).click();
+  await page.getByRole("button", { name: "Entrar" }).click();
 
   await expect(page).toHaveURL(/\/crm$/);
   await expect(page.getByText("Yesid Parra")).toBeVisible();
@@ -34,7 +34,7 @@ test("rejects wrong credentials with an error message", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(TEST_EMAIL!);
   await page.getByLabel("Contraseña").fill("wrong-password");
-  await page.getByRole("button", { name: "Ingresar" }).click();
+  await page.getByRole("button", { name: "Entrar" }).click();
 
   await expect(page.getByText("Credenciales inválidas")).toBeVisible();
   await expect(page).toHaveURL(/\/login$/);

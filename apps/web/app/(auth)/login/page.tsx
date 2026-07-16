@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { Button, Input } from "@agency-os/ui";
+import { Button, FieldError, Input, Label } from "@agency-os/ui";
 import { login, type AuthActionState } from "@/lib/auth-actions";
 
 const initialState: AuthActionState = { error: null };
@@ -9,8 +9,8 @@ const initialState: AuthActionState = { error: null };
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full">
-      {pending ? "Ingresando..." : "Ingresar"}
+    <Button type="submit" disabled={pending} className="mt-1 w-full">
+      {pending ? "Ingresando..." : "Entrar"}
     </Button>
   );
 }
@@ -19,44 +19,44 @@ export default function LoginPage() {
   const [state, formAction] = useFormState(login, initialState);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50">
-      <form action={formAction} className="w-full max-w-sm space-y-4 rounded-lg border bg-white p-6 shadow-sm">
-        <div>
-          <h1 className="text-xl font-semibold">Agency OS</h1>
-          <p className="text-sm text-slate-500">Ingresa con tu cuenta.</p>
-        </div>
+    <form action={formAction} className="space-y-4">
+      <div>
+        <h1 className="text-[22px] font-bold tracking-tight text-[#f6f6f7]">
+          Bienvenido de nuevo
+        </h1>
+        <p className="mt-1 text-[13.5px] text-[#a1a1aa]">Entra a tu workspace.</p>
+      </div>
 
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <Input id="email" name="email" type="email" required autoComplete="email" />
-        </div>
+      <div>
+        <Label htmlFor="email" className="text-[#f6f6f7]">
+          Email
+        </Label>
+        <Input id="email" name="email" type="email" required autoComplete="email" />
+      </div>
 
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium">
-            Contraseña
-          </label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-          />
-        </div>
+      <div>
+        <Label htmlFor="password" className="text-[#f6f6f7]">
+          Contraseña
+        </Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          required
+          autoComplete="current-password"
+        />
+      </div>
 
-        {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+      <FieldError>{state.error}</FieldError>
 
-        <SubmitButton />
+      <SubmitButton />
 
-        <a
-          href="/reset-password"
-          className="block text-center text-sm text-slate-500 hover:underline"
-        >
-          ¿Olvidaste tu contraseña?
-        </a>
-      </form>
-    </main>
+      <a
+        href="/reset-password"
+        className="block text-center text-[12.5px] text-[#71717a] transition hover:text-[#b8ff3c]"
+      >
+        ¿Olvidaste tu contraseña?
+      </a>
+    </form>
   );
 }
