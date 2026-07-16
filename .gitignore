@@ -37,3 +37,7 @@ backups/
 
 # Config local de Claude Code (no compartir/commitear)
 .claude/settings.local.json
+
+# Temporales de Illustrator
+~ai-*.tmp
+*.tmp
