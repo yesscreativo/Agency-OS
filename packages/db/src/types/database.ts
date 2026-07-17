@@ -105,6 +105,39 @@ export type Database = {
           },
         ]
       }
+      modules: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       organizations: {
         Row: {
           code: string | null
@@ -545,6 +578,8 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_super: boolean
+          module_code: string | null
           name: string
           updated_at: string
         }
@@ -553,6 +588,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_super?: boolean
+          module_code?: string | null
           name: string
           updated_at?: string
         }
@@ -561,10 +598,20 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_super?: boolean
+          module_code?: string | null
           name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "roles_module_code_fkey"
+            columns: ["module_code"]
+            isOneToOne: false
+            referencedRelation: "modules"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       supplier_orders: {
         Row: {
@@ -709,6 +756,7 @@ export type Database = {
         Args: { perm_code: string }
         Returns: boolean
       }
+      current_user_module_codes: { Args: never; Returns: string[] }
       current_user_organization_ids: { Args: never; Returns: string[] }
       next_quote_seq: {
         Args: { p_client_id: string; p_day: string }

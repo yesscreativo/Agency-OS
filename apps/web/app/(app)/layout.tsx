@@ -1,17 +1,8 @@
 import { redirect } from "next/navigation";
 import { Avatar, ThemeToggle } from "@agency-os/ui";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { logout } from "@/lib/auth-actions";
 import { AppBackground } from "@/components/app-background";
-import { MainNav } from "@/components/main-nav";
-
-const NAV_ITEMS = [
-  { href: "/crm", label: "Cotizaciones" },
-  { href: "/crm/kanban", label: "Kanban" },
-  { href: "/crm/dashboard", label: "Dashboard" },
-  { href: "/crm/clientes", label: "Clientes" },
-  { href: "/crm/usuarios", label: "Usuarios", permission: "users.manage" },
-];
 
 function initialsOf(name: string) {
   return name
@@ -22,13 +13,12 @@ function initialsOf(name: string) {
     .join("");
 }
 
+// Shell mínimo compartido por toda la app: logo, tema, usuario, salir.
+// La navegación es responsabilidad de cada sección (sidebar del hub en
+// /inicio-/usuarios-/perfil, barra propia dentro de cada módulo como /crm).
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-
-  const visibleNavItems = NAV_ITEMS.filter(
-    (item) => !item.permission || hasPermission(user, item.permission),
-  );
 
   return (
     // Sin bg sólido en el wrapper: el canvas de AppBackground (-z-10) debe
@@ -37,25 +27,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppBackground />
       <header className="sticky top-0 z-20 border-b border-line bg-bg/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-4 px-8 py-3">
-          <div className="flex items-center gap-6">
-            <a href="/crm" className="flex items-center">
-              {/* Wordmark según tema: blanco sobre oscuro, negro sobre claro */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/assets/images/logo-Aos.png"
-                alt="Agency OS"
-                className="h-5 w-auto [[data-theme=light]_&]:hidden"
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/assets/images/logo-Aos-black.png"
-                alt=""
-                aria-hidden="true"
-                className="hidden h-5 w-auto [[data-theme=light]_&]:block"
-              />
-            </a>
-            <MainNav items={visibleNavItems.map((i) => ({ href: i.href, label: i.label }))} />
-          </div>
+          <a href="/inicio" className="flex items-center">
+            {/* Wordmark según tema: blanco sobre oscuro, negro sobre claro */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/assets/images/logo-Aos.png"
+              alt="Agency OS"
+              className="h-5 w-auto [[data-theme=light]_&]:hidden"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/assets/images/logo-Aos-black.png"
+              alt=""
+              aria-hidden="true"
+              className="hidden h-5 w-auto [[data-theme=light]_&]:block"
+            />
+          </a>
           <div className="flex items-center gap-3 text-sm">
             <ThemeToggle />
             <div className="flex items-center gap-2.5">

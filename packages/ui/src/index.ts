@@ -6,6 +6,7 @@ export * from "./chip";
 export * from "./dropdown";
 export * from "./input";
 export * from "./modal";
+export * from "./sidebar";
 export * from "./table";
 export * from "./tabs";
 export * from "./theme-toggle";

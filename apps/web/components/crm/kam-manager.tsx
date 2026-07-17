@@ -15,7 +15,7 @@ export interface KamManagerRow {
 /** Modal en edición: null cerrado, "new" para crear, o la fila que se renombra. */
 type Editing = null | "new" | KamManagerRow;
 
-export function KamManager({ kams }: { kams: KamManagerRow[] }) {
+export function KamManager({ kams, embedded = false }: { kams: KamManagerRow[]; embedded?: boolean }) {
   const [editing, setEditing] = useState<Editing>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +48,17 @@ export function KamManager({ kams }: { kams: KamManagerRow[] }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">KAMs / PMs</h1>
-          <p className="mt-1 text-sm text-muted">
-            Responsables de cuenta disponibles en el formulario
-          </p>
-        </div>
+      <div
+        className={`flex flex-wrap items-center gap-4 ${embedded ? "justify-end" : "justify-between"}`}
+      >
+        {!embedded && (
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">KAMs / PMs</h1>
+            <p className="mt-1 text-sm text-muted">
+              Responsables de cuenta disponibles en el formulario
+            </p>
+          </div>
+        )}
         <Button onClick={() => openModal("new")}>+ Nuevo KAM/PM</Button>
       </div>
 

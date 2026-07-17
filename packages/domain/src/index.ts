@@ -1,3 +1,4 @@
+export * from "./email-domain";
 export * from "./format";
 export * from "./quote-code";
 export * from "./quote-calc";

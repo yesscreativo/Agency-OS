@@ -14,7 +14,7 @@ type ManagerAuth =
 async function requireManager(): Promise<ManagerAuth> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "users.manage")) {
+  if (!hasPermission(user, "kam.manage")) {
     return { error: "No tienes permiso para administrar KAMs/PMs." };
   }
   const organizationId = user.organizationIds[0];
@@ -31,7 +31,7 @@ export async function createKam(name: string): Promise<KamActionResult> {
   try {
     const db = await getSupabaseServerClient();
     await createKamRepo(db, { name: trimmed, organization_id: auth.organizationId });
-    revalidatePath("/crm/usuarios");
+    revalidatePath("/crm/kams");
     return { ok: true };
   } catch (error) {
     console.error("createKam", error);
@@ -48,7 +48,7 @@ export async function renameKam(id: string, name: string): Promise<KamActionResu
   try {
     const db = await getSupabaseServerClient();
     await updateKam(db, id, { name: trimmed });
-    revalidatePath("/crm/usuarios");
+    revalidatePath("/crm/kams");
     return { ok: true };
   } catch (error) {
     console.error("renameKam", error);
@@ -63,7 +63,7 @@ export async function toggleKam(id: string, isActive: boolean): Promise<KamActio
   try {
     const db = await getSupabaseServerClient();
     await updateKam(db, id, { is_active: isActive });
-    revalidatePath("/crm/usuarios");
+    revalidatePath("/crm/kams");
     return { ok: true };
   } catch (error) {
     console.error("toggleKam", error);

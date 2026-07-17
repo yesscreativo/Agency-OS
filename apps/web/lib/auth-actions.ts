@@ -16,7 +16,7 @@ export async function login(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: "Credenciales inválidas" };
 
-  redirect("/crm");
+  redirect("/inicio");
 }
 
 export async function logout() {
@@ -54,5 +54,5 @@ export async function updatePassword(
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: "No se pudo actualizar la contraseña" };
 
-  redirect("/crm");
+  redirect("/inicio");
 }
