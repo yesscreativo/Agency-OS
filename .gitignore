@@ -23,6 +23,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Supabase local
 supabase/.branches/

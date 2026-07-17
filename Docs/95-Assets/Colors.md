@@ -33,6 +33,7 @@ Cambian con el tema. Implementados como CSS variables en `apps/web/app/globals.c
 | `--purple-strong` | `#6d28d9` | `#6d28d9` |
 | `--purple-soft` | `rgba(124,58,237,.20)` | `rgba(109,40,217,.10)` |
 | `--danger` | `#ff5c6c` | `#e0384a` |
+| `--warn` | `#f5b62e` | `#b7791f` |
 | `--shadow` | `0 8px 30px rgba(0,0,0,.45)` | `0 10px 30px rgba(0,0,0,.10)` |
 
 ## Reglas

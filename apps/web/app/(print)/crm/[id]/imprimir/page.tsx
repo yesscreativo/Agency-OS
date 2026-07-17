@@ -44,7 +44,7 @@ export default async function QuotePrintPage({
       <div className="mb-8 flex items-start justify-between gap-6 print:mb-6">
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/images/logo-Aos-black.png" alt="Agency OS" className="h-6 w-auto" />
+          <img src="/assets/images/LBRU-negro.svg" alt="Laburu" className="h-8 w-auto" />
           <div className="mt-4 font-mono text-sm font-bold">{quote.code ?? "BORRADOR"}</div>
           <div className="mt-1 text-2xl font-bold tracking-tight">
             {quote.quote_name ?? "Cotización"}

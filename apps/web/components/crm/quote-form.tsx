@@ -17,6 +17,7 @@ export interface QuoteFormInitial {
   id: string;
   status: string;
   clientId: string;
+  kamId: string | null;
   quoteType: string | null;
   quoteName: string | null;
   message: string | null;
@@ -33,6 +34,7 @@ export interface QuoteFormInitial {
 interface QuoteFormProps {
   initial: QuoteFormInitial | null;
   clients: { id: string; name: string; company: string | null }[];
+  kams: { id: string; name: string }[];
   canSeeCosts: boolean;
   briefSignedUrl: string | null;
   versions?: { version_number: number; created_at: string }[];
@@ -65,6 +67,7 @@ type SaveState =
 export function QuoteForm({
   initial,
   clients,
+  kams,
   canSeeCosts,
   briefSignedUrl,
   versions = [],
@@ -72,6 +75,7 @@ export function QuoteForm({
   const router = useRouter();
   const [quoteId, setQuoteId] = useState<string | null>(initial?.id ?? null);
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
+  const [kamId, setKamId] = useState(initial?.kamId ?? "");
   const [quoteType, setQuoteType] = useState(initial?.quoteType ?? "");
   const [quoteName, setQuoteName] = useState(initial?.quoteName ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
@@ -100,6 +104,7 @@ export function QuoteForm({
     return {
       id: quoteId ?? undefined,
       clientId,
+      kamId,
       quoteType: quoteType === "proyecto" || quoteType === "evolutivo" ? quoteType : "",
       quoteName,
       message,
@@ -121,6 +126,7 @@ export function QuoteForm({
   }, [
     quoteId,
     clientId,
+    kamId,
     quoteType,
     quoteName,
     message,
@@ -170,6 +176,7 @@ export function QuoteForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clientId,
+    kamId,
     quoteType,
     quoteName,
     message,
@@ -310,6 +317,17 @@ export function QuoteForm({
                   <option key={c.id} value={c.id}>
                     {c.name}
                     {c.company ? ` · ${c.company}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="qf-kam">KAM / PM</Label>
+              <Select id="qf-kam" value={kamId} onChange={(e) => setKamId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {kams.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name}
                   </option>
                 ))}
               </Select>

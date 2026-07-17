@@ -23,6 +23,10 @@
   --purple-strong: #6d28d9;
   --purple-soft: rgba(124, 58, 237, 0.2);
   --danger: #ff5c6c;
+  --warn: #f5b62e;
+  /* Superficies translúcidas para glassmorphism sobre el fondo animado */
+  --glass: color-mix(in srgb, var(--surface) 55%, transparent);
+  --glass-strong: color-mix(in srgb, var(--surface-2) 72%, transparent);
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
 }
 
@@ -43,6 +47,9 @@
   --purple-strong: #6d28d9;
   --purple-soft: rgba(109, 40, 217, 0.1);
   --danger: #e0384a;
+  --warn: #b7791f;
+  --glass: color-mix(in srgb, var(--surface) 68%, transparent);
+  --glass-strong: color-mix(in srgb, var(--surface-2) 82%, transparent);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 

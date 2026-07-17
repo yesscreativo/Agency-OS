@@ -33,6 +33,7 @@ export interface QuoteRecipientInput {
 export interface QuoteDraftInput {
   id?: string;
   clientId: string;
+  kamId: string;
   quoteType: "proyecto" | "evolutivo" | "";
   quoteName: string;
   message: string;
@@ -71,6 +72,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   const values: TablesUpdate<"quotes"> = {
     client_id: input.clientId,
+    kam_id: input.kamId || null,
     quote_type: input.quoteType || null,
     quote_name: input.quoteName.trim() || null,
     message: input.message.trim() || null,

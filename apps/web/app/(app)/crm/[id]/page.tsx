@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getQuoteById, listClients, listQuoteVersions } from "@agency-os/db";
+import { getQuoteById, listClients, listKams, listQuoteVersions } from "@agency-os/db";
 import { Badge } from "@agency-os/ui";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -16,10 +16,16 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const quote = await getQuoteById(db, params.id);
   if (!quote) notFound();
 
-  const [{ rows: clients }, versions] = await Promise.all([
+  const [{ rows: clients }, versions, kams] = await Promise.all([
     listClients(db, { pageSize: 200 }),
     listQuoteVersions(db, quote.id),
+    listKams(db),
   ]);
+
+  // Solo KAMs activas en el select, pero sin perder una asignación previa inactiva.
+  const kamOptions = kams
+    .filter((k) => k.is_active || k.id === quote.kam_id)
+    .map((k) => ({ id: k.id, name: k.name }));
 
   // El brief se guarda como ruta del bucket privado; el enlace se firma aquí.
   let briefSignedUrl: string | null = null;
@@ -32,6 +38,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     id: quote.id,
     status: quote.status,
     clientId: quote.client_id,
+    kamId: quote.kam_id,
     quoteType: quote.quote_type,
     quoteName: quote.quote_name,
     message: quote.message,
@@ -73,6 +80,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
       <QuoteForm
         initial={initial}
         clients={clients.map((c) => ({ id: c.id, name: c.name, company: c.company }))}
+        kams={kamOptions}
         canSeeCosts={hasPermission(user, "quote.see_costs")}
         briefSignedUrl={briefSignedUrl}
         versions={versions.map((v) => ({

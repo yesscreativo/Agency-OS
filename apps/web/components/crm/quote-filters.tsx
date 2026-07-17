@@ -6,6 +6,8 @@ import { QUOTE_STATUS_LABELS } from "@/lib/quote-ui";
 
 interface QuoteFiltersProps {
   q: string;
+  kam: string;
+  kams: { id: string; name: string }[];
   estado: string;
   desde: string;
   hasta: string;
@@ -13,12 +15,12 @@ interface QuoteFiltersProps {
 }
 
 /** Barra de filtros de la lista — formulario GET, el estado vive en la URL. */
-export function QuoteFilters({ q, estado, desde, hasta, cerradas }: QuoteFiltersProps) {
+export function QuoteFilters({ q, kam, kams, estado, desde, hasta, cerradas }: QuoteFiltersProps) {
   return (
     <form
       method="GET"
       action="/crm"
-      className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-surface p-4"
+      className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-glass p-4 backdrop-blur-xl"
     >
       <div className="min-w-[220px] flex-1">
         <label htmlFor="f-q" className="mb-1.5 block text-xs font-semibold text-muted">
@@ -28,9 +30,22 @@ export function QuoteFilters({ q, estado, desde, hasta, cerradas }: QuoteFilters
           id="f-q"
           name="q"
           defaultValue={q}
-          placeholder="Código o nombre…"
+          placeholder="Buscar por nombre, cliente o ID…"
           className="py-2.5"
         />
+      </div>
+      <div className="w-[200px]">
+        <label htmlFor="f-kam" className="mb-1.5 block text-xs font-semibold text-muted">
+          KAM / PM
+        </label>
+        <Select id="f-kam" name="kam" defaultValue={kam} className="py-2.5">
+          <option value="">Todas las KAM/PM</option>
+          {kams.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.name}
+            </option>
+          ))}
+        </Select>
       </div>
       <div className="w-[180px]">
         <label htmlFor="f-estado" className="mb-1.5 block text-xs font-semibold text-muted">

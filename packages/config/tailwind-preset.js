@@ -31,6 +31,11 @@ module.exports = {
           soft: "var(--purple-soft)",
         },
         danger: "var(--danger)",
+        warn: "var(--warn)",
+        glass: {
+          DEFAULT: "var(--glass)",
+          strong: "var(--glass-strong)",
+        },
         line: {
           DEFAULT: "var(--border)",
           strong: "var(--border-strong)",
