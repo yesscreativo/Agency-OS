@@ -58,6 +58,49 @@ export async function revokeRole(userRoleId: string): Promise<AccessActionResult
   }
 }
 
+/** Elimina por completo la cuenta de un usuario: borra la fila de auth.users vía
+ * Admin API (invalida su sesión y cascadea public.users → user_roles) y limpia la
+ * fila huérfana de people. Requiere service_role. No permite auto-eliminarse. */
+export async function deleteUser(userId: string): Promise<AccessActionResult> {
+  const current = await getCurrentUser();
+  if (!current) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!current.isSuper) {
+    return { error: "Solo un Administrador de sistema puede eliminar usuarios." };
+  }
+  if (!userId) return { error: "Usuario inválido." };
+  if (userId === current.id) return { error: "No puedes eliminar tu propia cuenta." };
+
+  try {
+    const admin = createSupabaseServiceRoleClient();
+
+    // person_id para limpiar la fila de people después: users→auth.users es CASCADE,
+    // pero people no se borra al borrar users (la FK va en el otro sentido).
+    const { data: row } = await admin
+      .from("users")
+      .select("person_id")
+      .eq("id", userId)
+      .single();
+    const personId = (row as { person_id: string | null } | null)?.person_id ?? null;
+
+    const { error } = await admin.auth.admin.deleteUser(userId);
+    if (error) throw error;
+
+    if (personId) {
+      // best-effort: si people está referenciada por otra entidad, la dejamos.
+      const { error: personError } = await admin.from("people").delete().eq("id", personId);
+      if (personError) {
+        console.warn("deleteUser: people huérfana no eliminada", personError.message);
+      }
+    }
+
+    revalidatePath("/usuarios");
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteUser", error);
+    return { error: "No se pudo eliminar el usuario. Intenta de nuevo." };
+  }
+}
+
 /** Crea la cuenta de auth de una persona antes de que inicie sesión (envía un
  * enlace de invitación). El trigger de la BD crea people/users automáticamente
  * al insertarse en auth.users; queda "Pendiente" hasta que se le asigne un rol. */

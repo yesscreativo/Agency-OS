@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Badge, Button, Input, Label, Modal, Select, Table, Td, Th } from "@agency-os/ui";
-import { grantRole, inviteUser, revokeRole } from "@/lib/access-actions";
+import { deleteUser, grantRole, inviteUser, revokeRole } from "@/lib/access-actions";
 
 export interface AccessUserRow {
   id: string;
@@ -26,6 +26,8 @@ interface AccessManagerProps {
   users: AccessUserRow[];
   roles: AccessRole[];
   modules: AccessModule[];
+  /** id del usuario en sesión, para no permitir auto-eliminarse. */
+  currentUserId: string;
 }
 
 function moduleLabel(modules: AccessModule[], code: string | null): string {
@@ -33,9 +35,10 @@ function moduleLabel(modules: AccessModule[], code: string | null): string {
   return modules.find((m) => m.code === code)?.name ?? code;
 }
 
-export function AccessManager({ users, roles, modules }: AccessManagerProps) {
+export function AccessManager({ users, roles, modules, currentUserId }: AccessManagerProps) {
   const [inviting, setInviting] = useState(false);
   const [assigning, setAssigning] = useState<AccessUserRow | null>(null);
+  const [deleting, setDeleting] = useState<AccessUserRow | null>(null);
   const [roleId, setRoleId] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
@@ -71,6 +74,20 @@ export function AccessManager({ users, roles, modules }: AccessManagerProps) {
   const revoke = (userRoleId: string) => {
     startTransition(async () => {
       await revokeRole(userRoleId);
+    });
+  };
+
+  const openDelete = (user: AccessUserRow) => {
+    setDeleting(user);
+    setError(null);
+  };
+
+  const submitDelete = () => {
+    if (!deleting) return;
+    startTransition(async () => {
+      const result = await deleteUser(deleting.id);
+      if (result.error) setError(result.error);
+      else setDeleting(null);
     });
   };
 
@@ -147,9 +164,16 @@ export function AccessManager({ users, roles, modules }: AccessManagerProps) {
                   )}
                 </Td>
                 <Td className="text-right">
-                  <Button variant="outline" size="sm" onClick={() => openAssign(user)}>
-                    Asignar rol
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => openAssign(user)}>
+                      Asignar rol
+                    </Button>
+                    {user.id !== currentUserId && (
+                      <Button variant="danger" size="sm" onClick={() => openDelete(user)}>
+                        Eliminar
+                      </Button>
+                    )}
+                  </div>
                 </Td>
               </tr>
             ))}
@@ -187,6 +211,34 @@ export function AccessManager({ users, roles, modules }: AccessManagerProps) {
           ))}
         </Select>
         {error && assigning && <p className="mt-2 text-sm text-danger">{error}</p>}
+      </Modal>
+
+      <Modal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Eliminar usuario"
+        description={
+          deleting
+            ? `Se eliminará la cuenta de ${deleting.fullName} y todos sus accesos. Esta acción no se puede deshacer.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeleting(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={submitDelete} disabled={pending}>
+              {pending ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </>
+        }
+      >
+        {deleting?.email && (
+          <p className="text-sm text-muted">
+            Correo: <span className="text-ink">{deleting.email}</span>
+          </p>
+        )}
+        {error && deleting && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Modal>
 
       <Modal

@@ -24,6 +24,7 @@ export default async function UsuariosPage() {
       users={users}
       roles={roles.map((r) => ({ id: r.id, name: r.name, moduleCode: r.module_code }))}
       modules={modules.map((m) => ({ code: m.code, name: m.name }))}
+      currentUserId={user.id}
     />
   );
 }
