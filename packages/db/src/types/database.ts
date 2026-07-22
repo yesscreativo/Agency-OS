@@ -371,6 +371,62 @@ export type Database = {
           },
         ]
       }
+      quote_statuses: {
+        Row: {
+          code: string
+          color: string
+          created_at: string
+          id: string
+          is_active: boolean
+          is_solid: boolean
+          is_system: boolean
+          kind: string
+          label: string
+          on_color: string | null
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          color: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_solid?: boolean
+          is_system?: boolean
+          kind?: string
+          label: string
+          on_color?: string | null
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_solid?: boolean
+          is_system?: boolean
+          kind?: string
+          label?: string
+          on_color?: string | null
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_statuses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_versions: {
         Row: {
           created_at: string
@@ -441,7 +497,7 @@ export type Database = {
           rejected_at: string | null
           rejection_reason: string | null
           sent_at: string | null
-          status: Database["public"]["Enums"]["quote_status"]
+          status: string
           updated_at: string
         }
         Insert: {
@@ -471,7 +527,7 @@ export type Database = {
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
-          status?: Database["public"]["Enums"]["quote_status"]
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -501,7 +557,7 @@ export type Database = {
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
-          status?: Database["public"]["Enums"]["quote_status"]
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -539,6 +595,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_status_fk"
+            columns: ["organization_id", "status"]
+            isOneToOne: false
+            referencedRelation: "quote_statuses"
+            referencedColumns: ["organization_id", "code"]
           },
         ]
       }
@@ -756,25 +819,21 @@ export type Database = {
         Args: { perm_code: string }
         Returns: boolean
       }
+      current_user_is_super: { Args: never; Returns: boolean }
       current_user_module_codes: { Args: never; Returns: string[] }
       current_user_organization_ids: { Args: never; Returns: string[] }
       next_quote_seq: {
         Args: { p_client_id: string; p_day: string }
         Returns: number
       }
+      reorder_quote_statuses: { Args: { p_ids: string[] }; Returns: undefined }
+      seed_default_quote_statuses: {
+        Args: { p_org: string }
+        Returns: undefined
+      }
     }
     Enums: {
       quote_item_status: "pending" | "accepted" | "rejected" | "changes"
-      quote_status:
-        | "draft"
-        | "sent"
-        | "under_review"
-        | "modified"
-        | "accepted"
-        | "rejected"
-        | "purchased"
-        | "closed"
-        | "review_future"
       quote_type: "proyecto" | "evolutivo"
       supplier_order_status: "pending" | "sent" | "confirmed"
     }
@@ -905,17 +964,6 @@ export const Constants = {
   public: {
     Enums: {
       quote_item_status: ["pending", "accepted", "rejected", "changes"],
-      quote_status: [
-        "draft",
-        "sent",
-        "under_review",
-        "modified",
-        "accepted",
-        "rejected",
-        "purchased",
-        "closed",
-        "review_future",
-      ],
       quote_type: ["proyecto", "evolutivo"],
       supplier_order_status: ["pending", "sent", "confirmed"],
     },

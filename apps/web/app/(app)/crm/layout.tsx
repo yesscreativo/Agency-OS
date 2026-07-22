@@ -8,6 +8,7 @@ const CRM_NAV_ITEMS: { href: string; label: string; permission?: string }[] = [
   { href: "/crm/dashboard", label: "Dashboard" },
   { href: "/crm/clientes", label: "Clientes" },
   { href: "/crm/kams", label: "KAMs / PMs", permission: "kam.manage" },
+  { href: "/crm/estados", label: "Estados", permission: "quote_status.manage" },
 ];
 
 // Navegación propia del módulo CRM: cada módulo arma la suya, distinta de la

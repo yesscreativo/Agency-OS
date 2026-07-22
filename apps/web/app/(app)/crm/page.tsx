@@ -3,27 +3,16 @@ import {
   calcQuote,
   formatDate,
   formatMoney,
-  isValidQuoteStatus,
   summarizeQuoteKpis,
   QUOTE_KPI_KEYS,
   type QuoteCalcResult,
 } from "@agency-os/domain";
-import {
-  listKams,
-  listQuotes,
-  listQuoteStatsRows,
-  type QuoteListRow,
-  type QuoteStatusDb,
-} from "@agency-os/db";
+import { listKams, listQuotes, listQuoteStatsRows, type QuoteListRow } from "@agency-os/db";
 import { Avatar, Badge, KpiCard, KpiDot, Table, Td, Th } from "@agency-os/ui";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import {
-  QUOTE_KPI_LABELS,
-  QUOTE_KPI_TONES,
-  QUOTE_STATUS_LABELS,
-  QUOTE_STATUS_TONES,
-} from "@/lib/quote-ui";
+import { QUOTE_KPI_LABELS, QUOTE_KPI_TONES } from "@/lib/quote-ui";
+import { getQuoteStatusMap, resolveStatus, statusOptions } from "@/lib/quote-status-catalog";
 import { QuoteFilters } from "@/components/crm/quote-filters";
 import { QUOTE_KPI_ICONS } from "@/components/crm/kpi-icons";
 
@@ -92,13 +81,12 @@ export default async function QuotesListPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const status =
-    searchParams.estado && isValidQuoteStatus(searchParams.estado)
-      ? (searchParams.estado as QuoteStatusDb)
-      : undefined;
+  // Cualquier código del catálogo (incluidos custom) es válido; un code inexistente
+  // simplemente filtra a 0 resultados.
+  const status = searchParams.estado || undefined;
 
   const db = await getSupabaseServerClient();
-  const [{ rows, total, page, pageSize }, statsRows, kams] = await Promise.all([
+  const [{ rows, total, page, pageSize }, statsRows, kams, statusMap] = await Promise.all([
     listQuotes(db, {
       search: searchParams.q,
       status,
@@ -111,6 +99,7 @@ export default async function QuotesListPage({
     }),
     listQuoteStatsRows(db),
     listKams(db, { onlyActive: true }),
+    getQuoteStatusMap(db),
   ]);
 
   // KPIs globales (todas las cotizaciones no borradas), no responden a los filtros.
@@ -162,6 +151,7 @@ export default async function QuotesListPage({
               key={key}
               label={QUOTE_KPI_LABELS[key]}
               value={kpis[key].count}
+              hint={key === "total" ? "Incluye cerradas" : undefined}
               icon={QUOTE_KPI_ICONS[key]}
               tone={tone}
               highlight={key === "total"}
@@ -183,6 +173,7 @@ export default async function QuotesListPage({
           q={searchParams.q ?? ""}
           kam={searchParams.kam ?? ""}
           kams={kams.map((k) => ({ id: k.id, name: k.name }))}
+          statuses={statusOptions(statusMap)}
           estado={status ?? ""}
           desde={searchParams.desde ?? ""}
           hasta={searchParams.hasta ?? ""}
@@ -260,9 +251,14 @@ export default async function QuotesListPage({
                       </div>
                     </Td>
                     <Td>
-                      <Badge tone={QUOTE_STATUS_TONES[row.status]}>
-                        {QUOTE_STATUS_LABELS[row.status]}
-                      </Badge>
+                      {(() => {
+                        const s = resolveStatus(statusMap, row.status);
+                        return (
+                          <Badge color={s.color} variant={s.variant} onColor={s.onColor}>
+                            {s.label}
+                          </Badge>
+                        );
+                      })()}
                     </Td>
                     <Td className="text-muted">{row.currency}</Td>
                     <Td className="whitespace-nowrap text-right font-mono text-sm font-bold">

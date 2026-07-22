@@ -56,6 +56,8 @@ const KPI_TONES: Record<KpiTone, { iconWrap: string; dot: string; ring: string }
 export interface KpiCardProps extends HTMLAttributes<HTMLDivElement> {
   label: string;
   value: ReactNode;
+  /** Aclaración sutil bajo el label (y tooltip), p. ej. "Incluye cerradas". */
+  hint?: string;
   /** Línea secundaria bajo el valor, p. ej. una suma de dinero. */
   sub?: ReactNode;
   /** Icono de la métrica; activa el layout rico (círculo tintado + divisor + dot). */
@@ -73,6 +75,7 @@ export interface KpiCardProps extends HTMLAttributes<HTMLDivElement> {
 export function KpiCard({
   label,
   value,
+  hint,
   sub,
   icon,
   tone = "neutral",
@@ -90,6 +93,7 @@ export function KpiCard({
         className={`relative rounded-lg border bg-glass p-5 backdrop-blur-xl transition hover:border-line-strong ${
           highlight ? `${toneStyles.ring} shadow-raised` : "border-line"
         } ${className}`}
+        title={hint}
         {...props}
       >
         <div
@@ -103,6 +107,7 @@ export function KpiCard({
         <div className="mt-1.5 text-[38px] font-bold leading-none tracking-tight text-ink">
           {value}
         </div>
+        {hint && <div className="mt-1 text-[10px] text-faint">{hint}</div>}
         {sub != null && (
           <div className="mt-4 space-y-1 border-t border-line pt-3">{sub}</div>
         )}

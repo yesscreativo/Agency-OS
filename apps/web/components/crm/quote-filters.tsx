@@ -1,13 +1,13 @@
 "use client";
 
-import { QUOTE_STATUSES } from "@agency-os/domain";
 import { Input, Select } from "@agency-os/ui";
-import { QUOTE_STATUS_LABELS } from "@/lib/quote-ui";
 
 interface QuoteFiltersProps {
   q: string;
   kam: string;
   kams: { id: string; name: string }[];
+  /** Estados activos del catálogo (ordenados), para el select. */
+  statuses: { code: string; label: string }[];
   estado: string;
   desde: string;
   hasta: string;
@@ -15,7 +15,16 @@ interface QuoteFiltersProps {
 }
 
 /** Barra de filtros de la lista — formulario GET, el estado vive en la URL. */
-export function QuoteFilters({ q, kam, kams, estado, desde, hasta, cerradas }: QuoteFiltersProps) {
+export function QuoteFilters({
+  q,
+  kam,
+  kams,
+  statuses,
+  estado,
+  desde,
+  hasta,
+  cerradas,
+}: QuoteFiltersProps) {
   return (
     <form
       method="GET"
@@ -53,9 +62,9 @@ export function QuoteFilters({ q, kam, kams, estado, desde, hasta, cerradas }: Q
         </label>
         <Select id="f-estado" name="estado" defaultValue={estado} className="py-2.5">
           <option value="">Todos</option>
-          {QUOTE_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {QUOTE_STATUS_LABELS[s]}
+          {statuses.map((s) => (
+            <option key={s.code} value={s.code}>
+              {s.label}
             </option>
           ))}
         </Select>

@@ -1,7 +1,10 @@
-import type { Enums, Tables, TablesInsert, TablesUpdate } from "../types/database";
+import type { Tables, TablesInsert, TablesUpdate } from "../types/database";
 import type { Db, Page } from "./shared";
 
-export type QuoteStatusDb = Enums<"quote_status">;
+// Antes era el enum Postgres `quote_status`; ahora los estados son un catálogo
+// administrable (tabla quote_statuses) y la columna es texto libre validada por
+// FK, así que el tipo de código es `string` (incluye estados custom por org).
+export type QuoteStatusDb = string;
 
 /** Fila de la lista: cotización + cliente + ítems mínimos para calcular totales. */
 export type QuoteListRow = Tables<"quotes"> & {

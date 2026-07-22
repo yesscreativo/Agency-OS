@@ -3,7 +3,7 @@ import { calcQuote, formatDate, formatMoney } from "@agency-os/domain";
 import { getQuoteById } from "@agency-os/db";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { QUOTE_STATUS_LABELS } from "@/lib/quote-ui";
+import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { PrintButton } from "@/components/crm/print-button";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,8 @@ export default async function QuotePrintPage({
   const db = await getSupabaseServerClient();
   const quote = await getQuoteById(db, params.id);
   if (!quote) notFound();
+
+  const statusLabel = resolveStatus(await getQuoteStatusMap(db), quote.status).label;
 
   const internal = searchParams.vista === "interna" && hasPermission(user, "quote.see_costs");
 
@@ -57,8 +59,7 @@ export default async function QuotePrintPage({
         </div>
         <div className="text-right text-sm text-[#71717a]">
           <div>
-            <span className="font-semibold text-[#161618]">Estado:</span>{" "}
-            {QUOTE_STATUS_LABELS[quote.status]}
+            <span className="font-semibold text-[#161618]">Estado:</span> {statusLabel}
           </div>
           <div>
             <span className="font-semibold text-[#161618]">Fecha:</span>{" "}

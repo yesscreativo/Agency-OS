@@ -3,6 +3,7 @@ export * from "./client/browser";
 export * from "./client/server";
 export * from "./repositories/shared";
 export * from "./repositories/quotes";
+export * from "./repositories/quote-statuses";
 export * from "./repositories/clients";
 export * from "./repositories/kams";
 export * from "./repositories/modules";
