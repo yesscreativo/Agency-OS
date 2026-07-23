@@ -203,7 +203,7 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       sent_at: new Date().toISOString(),
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     const totals = calcQuote(
       quote.quote_items.map((item) => ({
         clientPrice: item.client_price,
@@ -223,7 +223,7 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       recipients: quote.quote_recipients.map((r) => ({
         name: r.name,
         email: r.email,
-        link: `${appUrl}/respuesta?token=${r.token}`,
+        link: `${appUrl}/respuesta/${r.token}`,
         expires_at: r.expires_at,
       })),
     });

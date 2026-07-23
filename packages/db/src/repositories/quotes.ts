@@ -197,6 +197,25 @@ export async function replaceQuoteItems(
   return data;
 }
 
+export interface QuoteItemResponse {
+  id: string;
+  status: "pending" | "accepted" | "rejected" | "changes";
+  client_comment: string | null;
+}
+
+/** Actualiza IN-PLACE la respuesta del cliente por ítem (status + comentario) desde la
+ * vista pública `/respuesta`. A diferencia de `replaceQuoteItems` (borrar+insertar del
+ * autosave), aquí se preservan las filas y sus ids — solo se tocan status y client_comment. */
+export async function setQuoteItemResponses(db: Db, responses: QuoteItemResponse[]) {
+  for (const r of responses) {
+    const { error } = await db
+      .from("quote_items")
+      .update({ status: r.status, client_comment: r.client_comment })
+      .eq("id", r.id);
+    if (error) throw error;
+  }
+}
+
 /** Consecutivo atómico por cliente/día para la numeración MES+CLIENTE+DDMMAAAA-NN. */
 export async function nextQuoteSeq(db: Db, clientId: string, day: string): Promise<number> {
   const { data, error } = await db.rpc("next_quote_seq", { p_client_id: clientId, p_day: day });

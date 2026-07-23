@@ -16,7 +16,7 @@ export interface SendSupplierOrderInput {
 /** Envía (o reenvía) la orden de compra a un proveedor con SUS ítems.
  * Solo cuando la cotización está aceptada (paridad renderSupplierOrders del legacy).
  * Persiste la orden y dispara el webhook `supplier_order` a n8n (n8n manda el mail).
- * El flujo público /proveedor (confirmación por token) queda para Fase 6. */
+ * El proveedor confirma recepción en la vista pública `/proveedor/[token]`. */
 export async function sendSupplierOrder(
   quoteId: string,
   input: SendSupplierOrderInput,
@@ -61,7 +61,7 @@ export async function sendSupplierOrder(
       expiresAt,
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     await emitWebhook("supplier_order", {
       order_id: order.id,
       quote_id: quoteId,
@@ -70,7 +70,7 @@ export async function sendSupplierOrder(
       email: order.supplier_email,
       message: input.message.trim() || null,
       token: order.token,
-      supplier_url: `${appUrl}/proveedor?token=${order.token}`,
+      supplier_url: `${appUrl}/proveedor/${order.token}`,
       currency: quote.currency,
       items,
     });

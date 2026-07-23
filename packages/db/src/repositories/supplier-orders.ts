@@ -48,3 +48,38 @@ export async function upsertSupplierOrder(db: Db, input: UpsertSupplierOrderInpu
   if (error) throw error;
   return data;
 }
+
+/** Busca la orden por su token de enlace público (vista `/proveedor`). Se resuelve
+ * server-side con el cliente service_role (bypassa RLS). */
+export async function getSupplierOrderByToken(
+  db: Db,
+  token: string,
+): Promise<Tables<"supplier_orders"> | null> {
+  const { data, error } = await db
+    .from("supplier_orders")
+    .select("*")
+    .eq("token", token)
+    .maybeSingle<Tables<"supplier_orders">>();
+  if (error) throw error;
+  return data;
+}
+
+/** Marca la orden como confirmada por el proveedor (status='confirmed'). */
+export async function confirmSupplierOrder(
+  db: Db,
+  id: string,
+  input: { supplier_comment: string | null },
+) {
+  const { data, error } = await db
+    .from("supplier_orders")
+    .update({
+      status: "confirmed",
+      confirmed_at: new Date().toISOString(),
+      supplier_comment: input.supplier_comment,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
