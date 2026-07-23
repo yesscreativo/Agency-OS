@@ -38,6 +38,27 @@ export interface QuoteListFilters {
 const LIST_SELECT =
   "*, client:clients(id, name, company), quote_items(client_price, cost_price, quantity, is_group)";
 
+/** Resuelve las condiciones del .or() de búsqueda (código, nombre de cotización y
+ * cliente por name/company). PostgREST no permite un or() top-level sobre columnas
+ * embebidas, así que la búsqueda por cliente se resuelve con una pre-query de ids.
+ * Devuelve null si el término queda vacío tras sanear. Compartido por listQuotes y
+ * listQuoteStatsRows para que la lista y los KPI filtren igual. */
+async function buildSearchConditions(db: Db, search: string): Promise<string[] | null> {
+  // El parser del or() de PostgREST usa `,` y `()` como separadores — se quitan del término.
+  const term = search.replace(/[,()"]/g, "").trim();
+  if (!term) return null;
+  const { data: matchedClients, error } = await db
+    .from("clients")
+    .select("id")
+    .is("deleted_at", null)
+    .or(`name.ilike.%${term}%,company.ilike.%${term}%`);
+  if (error) throw error;
+  const clientIds = (matchedClients ?? []).map((c) => c.id);
+  const conditions = [`code.ilike.%${term}%`, `quote_name.ilike.%${term}%`];
+  if (clientIds.length > 0) conditions.push(`client_id.in.(${clientIds.join(",")})`);
+  return conditions;
+}
+
 export async function listQuotes(
   db: Db,
   filters: QuoteListFilters = {},
@@ -62,22 +83,8 @@ export async function listQuotes(
   if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999Z`);
   if (kamId) query = query.eq("kam_id", kamId);
   if (search) {
-    // El parser del or() de PostgREST usa `,` y `()` como separadores — se quitan del término.
-    const term = search.replace(/[,()"]/g, "").trim();
-    if (term) {
-      // PostgREST no permite un or() top-level sobre columnas embebidas, así que la
-      // búsqueda por cliente se resuelve con una pre-query de ids sobre clients.
-      const { data: matchedClients, error: clientError } = await db
-        .from("clients")
-        .select("id")
-        .is("deleted_at", null)
-        .or(`name.ilike.%${term}%,company.ilike.%${term}%`);
-      if (clientError) throw clientError;
-      const clientIds = (matchedClients ?? []).map((c) => c.id);
-      const conditions = [`code.ilike.%${term}%`, `quote_name.ilike.%${term}%`];
-      if (clientIds.length > 0) conditions.push(`client_id.in.(${clientIds.join(",")})`);
-      query = query.or(conditions.join(","));
-    }
+    const conditions = await buildSearchConditions(db, search);
+    if (conditions) query = query.or(conditions.join(","));
   }
 
   const { data, error, count } = await query.returns<QuoteListRow[]>();
@@ -99,20 +106,36 @@ export type QuoteStatsRow = Pick<
 const STATS_SELECT =
   "status, currency, has_iva, iva_percentage, quote_items(client_price, cost_price, quantity, is_group)";
 
-/** Todas las cotizaciones no borradas, con lo justo para calcular totales en app
- * (calcQuote vive en TypeScript; replicarlo en SQL duplicaría la lógica).
- * Pagina internamente en bloques de 1000 por el límite de filas de PostgREST. */
-export async function listQuoteStatsRows(db: Db): Promise<QuoteStatsRow[]> {
+/** Filtros de los KPI: los mismos de la lista SALVO `status`, para que el desglose
+ * por estado (Enviadas/Aceptadas/…) siga teniendo sentido aunque filtres por un
+ * estado puntual en la tabla. */
+export type QuoteStatsFilters = Omit<QuoteListFilters, "status" | "page" | "pageSize">;
+
+/** Cotizaciones no borradas (con los filtros de la lista salvo estado), con lo justo
+ * para calcular totales en app (calcQuote vive en TypeScript; replicarlo en SQL
+ * duplicaría la lógica). Pagina internamente en bloques de 1000 por el límite de
+ * filas de PostgREST. */
+export async function listQuoteStatsRows(
+  db: Db,
+  filters: QuoteStatsFilters = {},
+): Promise<QuoteStatsRow[]> {
+  const { search, dateFrom, dateTo, includeClosed = false, kamId } = filters;
+  const searchConditions = search ? await buildSearchConditions(db, search) : null;
   const pageSize = 1000;
   const rows: QuoteStatsRow[] = [];
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await db
+    let query = db
       .from("quotes")
       .select(STATS_SELECT)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
-      .range(from, from + pageSize - 1)
-      .returns<QuoteStatsRow[]>();
+      .range(from, from + pageSize - 1);
+    if (!includeClosed) query = query.neq("status", "closed");
+    if (dateFrom) query = query.gte("created_at", dateFrom);
+    if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999Z`);
+    if (kamId) query = query.eq("kam_id", kamId);
+    if (searchConditions) query = query.or(searchConditions.join(","));
+    const { data, error } = await query.returns<QuoteStatsRow[]>();
     if (error) throw error;
     rows.push(...(data ?? []));
     if (!data || data.length < pageSize) break;

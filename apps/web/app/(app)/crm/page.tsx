@@ -86,23 +86,31 @@ export default async function QuotesListPage({
   const status = searchParams.estado || undefined;
 
   const db = await getSupabaseServerClient();
+  const includeClosed = searchParams.cerradas === "1";
   const [{ rows, total, page, pageSize }, statsRows, kams, statusMap] = await Promise.all([
     listQuotes(db, {
       search: searchParams.q,
       status,
       dateFrom: searchParams.desde,
       dateTo: searchParams.hasta,
-      includeClosed: searchParams.cerradas === "1",
+      includeClosed,
       kamId: searchParams.kam || undefined,
       page: Number(searchParams.pagina) || 1,
       pageSize: 20,
     }),
-    listQuoteStatsRows(db),
+    // KPIs con los mismos filtros de la lista SALVO estado (así el desglose por
+    // estado sigue teniendo sentido aunque se filtre por un estado puntual).
+    listQuoteStatsRows(db, {
+      search: searchParams.q,
+      dateFrom: searchParams.desde,
+      dateTo: searchParams.hasta,
+      includeClosed,
+      kamId: searchParams.kam || undefined,
+    }),
     listKams(db, { onlyActive: true }),
     getQuoteStatusMap(db),
   ]);
 
-  // KPIs globales (todas las cotizaciones no borradas), no responden a los filtros.
   const kpis = summarizeQuoteKpis(
     statsRows.map((r) => ({
       status: r.status,
@@ -151,7 +159,13 @@ export default async function QuotesListPage({
               key={key}
               label={QUOTE_KPI_LABELS[key]}
               value={kpis[key].count}
-              hint={key === "total" ? "Incluye cerradas" : undefined}
+              hint={
+                key === "total"
+                  ? includeClosed
+                    ? "Incluye cerradas"
+                    : "Excluye cerradas"
+                  : undefined
+              }
               icon={QUOTE_KPI_ICONS[key]}
               tone={tone}
               highlight={key === "total"}

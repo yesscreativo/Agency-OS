@@ -75,6 +75,40 @@ export function canTransition(from: string, to: string, validCodes?: Set<string>
   return from.length > 0 && to.length > 0;
 }
 
+export type QuoteProgressTone = "danger" | "warn" | "success" | "neutral";
+
+export interface QuoteProgress {
+  /** Etapa comercial legible del deal. */
+  stage: string;
+  /** Avance 0–100 para la barra de progreso. */
+  pct: number;
+  tone: QuoteProgressTone;
+  rejected: boolean;
+}
+
+/** Progreso del deal ligado al estado (paridad getProgressInfo() del legacy,
+ * js/index.js). El % lo determina el estado; no es editable. Estados custom del
+ * catálogo (que no son de sistema) caen a una etapa neutra "En proceso". */
+const PROGRESS_BY_STATUS: Record<string, { stage: string; pct: number; tone: QuoteProgressTone }> = {
+  draft: { stage: "Evaluación inicial", pct: 20, tone: "danger" },
+  review_future: { stage: "Evaluación inicial", pct: 20, tone: "neutral" },
+  sent: { stage: "Negociación activa", pct: 40, tone: "warn" },
+  under_review: { stage: "Negociación activa", pct: 50, tone: "warn" },
+  modified: { stage: "Negociación activa", pct: 60, tone: "warn" },
+  accepted: { stage: "Cierre próximo", pct: 75, tone: "success" },
+  purchased: { stage: "Cierre próximo", pct: 90, tone: "success" },
+  closed: { stage: "Cotización finalizada", pct: 100, tone: "success" },
+};
+
+export function getQuoteProgress(status: string): QuoteProgress {
+  if (status === "rejected") {
+    return { stage: "Cotización rechazada", pct: 40, tone: "danger", rejected: true };
+  }
+  const known = PROGRESS_BY_STATUS[status];
+  if (known) return { ...known, rejected: false };
+  return { stage: "En proceso", pct: 20, tone: "neutral", rejected: false };
+}
+
 export type QuoteItemResponseStatus = "pending" | "accepted" | "rejected" | "changes";
 
 export function deriveStatusFromClientResponse(

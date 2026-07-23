@@ -1,5 +1,12 @@
 import { notFound, redirect } from "next/navigation";
-import { getQuoteById, listClients, listKams, listQuoteVersions } from "@agency-os/db";
+import {
+  getQuoteById,
+  listClients,
+  listKams,
+  listQuoteVersions,
+  listSupplierOrders,
+} from "@agency-os/db";
+import { calcQuote } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -16,13 +23,67 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const quote = await getQuoteById(db, params.id);
   if (!quote) notFound();
 
-  const [{ rows: clients }, versions, kams, statusMap] = await Promise.all([
+  const [{ rows: clients }, versions, kams, statusMap, supplierOrderRows] = await Promise.all([
     listClients(db, { pageSize: 200 }),
     listQuoteVersions(db, quote.id),
     listKams(db),
     getQuoteStatusMap(db),
+    listSupplierOrders(db, quote.id),
   ]);
   const statusMeta = resolveStatus(statusMap, quote.status);
+
+  // Estados activos del catálogo para el selector, conservando el estado actual
+  // aunque estuviera inactivo.
+  const statuses = Object.values(statusMap)
+    .filter((m) => m.isActive || m.code === quote.status)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((m) => ({
+      code: m.code,
+      label: m.label,
+      color: m.color,
+      variant: m.variant,
+      onColor: m.onColor,
+    }));
+
+  // Totales por versión desde el snapshot (paridad loadVersions del legacy).
+  const versionViews = versions.map((v) => {
+    const snap = (v.snapshot ?? {}) as {
+      items?: {
+        client_price?: number;
+        cost_price?: number;
+        quantity?: number;
+        is_group?: boolean;
+      }[];
+      currency?: string;
+      has_iva?: boolean;
+      iva_percentage?: number;
+    };
+    const snapItems = Array.isArray(snap.items) ? snap.items : [];
+    const t = calcQuote(
+      snapItems.map((it) => ({
+        clientPrice: it.client_price ?? 0,
+        costPrice: it.cost_price ?? 0,
+        quantity: it.quantity ?? 1,
+        isGroup: it.is_group ?? false,
+      })),
+      { role: "kam", hasIva: snap.has_iva ?? false, ivaPercentage: snap.iva_percentage ?? 0 },
+    );
+    return {
+      version_number: v.version_number,
+      created_at: v.created_at,
+      total: t.total,
+      itemCount: t.itemCount,
+      currency: snap.currency ?? quote.currency,
+    };
+  });
+
+  const supplierOrders = supplierOrderRows.map((o) => ({
+    supplierName: o.supplier_name,
+    supplierEmail: o.supplier_email,
+    status: o.status,
+    sentAt: o.sent_at,
+    confirmedAt: o.confirmed_at,
+  }));
 
   // Solo KAMs activas en el select, pero sin perder una asignación previa inactiva.
   const kamOptions = kams
@@ -38,6 +99,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
   const initial: QuoteFormInitial = {
     id: quote.id,
+    code: quote.code,
     status: quote.status,
     clientId: quote.client_id,
     kamId: quote.kam_id,
@@ -50,6 +112,11 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     hasIva: quote.has_iva,
     ivaPercentage: quote.iva_percentage,
     briefPath: quote.brief_url,
+    purchaseOrder: quote.purchase_order,
+    invoiceNumber: quote.invoice_number,
+    createdAt: quote.created_at,
+    sentAt: quote.sent_at,
+    currentVersion: versionViews[0]?.version_number ?? null,
     items: quote.quote_items.map((item) => ({
       description: item.description,
       quantity: item.quantity,
@@ -85,10 +152,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
         kams={kamOptions}
         canSeeCosts={hasPermission(user, "quote.see_costs")}
         briefSignedUrl={briefSignedUrl}
-        versions={versions.map((v) => ({
-          version_number: v.version_number,
-          created_at: v.created_at,
-        }))}
+        versions={versionViews}
+        statuses={statuses}
+        supplierOrders={supplierOrders}
       />
     </div>
   );

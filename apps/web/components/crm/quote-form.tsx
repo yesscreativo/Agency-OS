@@ -1,20 +1,40 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { calcQuote, formatDate, formatMoney } from "@agency-os/domain";
-import { Button, Input, Label, Select, Textarea } from "@agency-os/ui";
 import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { useRouter } from "next/navigation";
+import {
+  calcQuote,
+  clientPriceFromMargin,
+  formatDate,
+  formatMoney,
+  getQuoteProgress,
+  marginPctFromPrices,
+} from "@agency-os/domain";
+import { Badge, Button, Input, Label, Select, Textarea } from "@agency-os/ui";
+import {
+  deleteQuote,
+  saveCommercialDocs,
   saveQuoteDraft,
   sendQuote,
+  setQuoteStatus,
   uploadBrief,
   type QuoteDraftInput,
   type QuoteItemInput,
   type QuoteRecipientInput,
 } from "@/lib/quote-actions";
+import { sendSupplierOrder } from "@/lib/supplier-order-actions";
 
 export interface QuoteFormInitial {
   id: string;
+  code: string | null;
   status: string;
   clientId: string;
   kamId: string | null;
@@ -27,8 +47,37 @@ export interface QuoteFormInitial {
   hasIva: boolean;
   ivaPercentage: number;
   briefPath: string | null;
+  purchaseOrder: string | null;
+  invoiceNumber: string | null;
+  createdAt: string | null;
+  sentAt: string | null;
+  currentVersion: number | null;
   items: QuoteItemInput[];
   recipients: QuoteRecipientInput[];
+}
+
+export interface QuoteStatusOption {
+  code: string;
+  label: string;
+  color: string;
+  variant: "soft" | "solid";
+  onColor?: string;
+}
+
+export interface QuoteVersionView {
+  version_number: number;
+  created_at: string;
+  total: number;
+  itemCount: number;
+  currency: string;
+}
+
+export interface SupplierOrderView {
+  supplierName: string;
+  supplierEmail: string;
+  status: string;
+  sentAt: string | null;
+  confirmedAt: string | null;
 }
 
 interface QuoteFormProps {
@@ -37,13 +86,19 @@ interface QuoteFormProps {
   kams: { id: string; name: string }[];
   canSeeCosts: boolean;
   briefSignedUrl: string | null;
-  versions?: { version_number: number; created_at: string }[];
+  versions?: QuoteVersionView[];
+  statuses?: QuoteStatusOption[];
+  supplierOrders?: SupplierOrderView[];
 }
 
-type ItemRow = QuoteItemInput & { key: string };
+type ItemRow = QuoteItemInput & { key: string; marginPct: number };
 
+// Key única e irrepetible por fila. Se evita un contador de módulo porque el Fast
+// Refresh de dev lo reinicia y provoca colisiones de key entre filas viejas y nuevas
+// (React comparte el estado → el texto de una fila aparece en otra).
 let keySeq = 0;
-const nextKey = () => `row-${++keySeq}`;
+const nextKey = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `row-${++keySeq}`;
 
 function emptyItem(isGroup = false): ItemRow {
   return {
@@ -54,6 +109,7 @@ function emptyItem(isGroup = false): ItemRow {
     costPrice: 0,
     supplier: "",
     isGroup,
+    marginPct: 0,
   };
 }
 
@@ -64,6 +120,22 @@ type SaveState =
   | { kind: "saved"; at: string }
   | { kind: "error"; message: string };
 
+function nowLabel() {
+  return new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+}
+
+function autoGrow(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+// Miles con punto (es-CO) para los campos de precio; mejora la lectura de montos.
+const formatThousands = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0).toLocaleString("es-CO");
+const parseThousands = (s: string) => {
+  const digits = s.replace(/\D/g, "");
+  return digits ? parseInt(digits, 10) : 0;
+};
+
 export function QuoteForm({
   initial,
   clients,
@@ -71,6 +143,8 @@ export function QuoteForm({
   canSeeCosts,
   briefSignedUrl,
   versions = [],
+  statuses = [],
+  supplierOrders = [],
 }: QuoteFormProps) {
   const router = useRouter();
   const [quoteId, setQuoteId] = useState<string | null>(initial?.id ?? null);
@@ -88,7 +162,11 @@ export function QuoteForm({
   const [ivaPercentage, setIvaPercentage] = useState(initial?.ivaPercentage || 19);
   const [items, setItems] = useState<ItemRow[]>(() =>
     initial && initial.items.length > 0
-      ? initial.items.map((item) => ({ ...item, key: nextKey() }))
+      ? initial.items.map((item) => ({
+          ...item,
+          key: nextKey(),
+          marginPct: marginPctFromPrices(item.costPrice, item.clientPrice),
+        }))
       : [emptyItem()],
   );
   const [recipients, setRecipients] = useState<QuoteRecipientInput[]>(initial?.recipients ?? []);
@@ -96,9 +174,23 @@ export function QuoteForm({
   const [briefUrl, setBriefUrl] = useState(briefSignedUrl);
   const [isPending, startTransition] = useTransition();
 
+  // Estado / documentos comerciales / eliminar (solo cuando la cotización ya existe).
+  const [status, setStatus] = useState(initial?.status ?? "draft");
+  const [purchaseOrder, setPurchaseOrder] = useState(initial?.purchaseOrder ?? "");
+  const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber ?? "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Filtro por proveedor (solo de vista; no altera lo que se guarda).
+  const [supplierFilter, setSupplierFilter] = useState("");
+  // Formularios de envío a proveedor (email + mensaje) por proveedor.
+  const [supplierForms, setSupplierForms] = useState<
+    Record<string, { email: string; message: string }>
+  >({});
+
   const dragIndex = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const itemsBox = useRef<HTMLDivElement>(null);
 
   const buildInput = useCallback((): QuoteDraftInput => {
     return {
@@ -158,10 +250,7 @@ export function QuoteForm({
       // dispara re-navegación y remonta el formulario perdiendo estado en edición.
       if (!quoteId && result.id) setQuoteId(result.id);
       lastSaved.current = serialize(input);
-      setSaveState({
-        kind: "saved",
-        at: new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" }),
-      });
+      setSaveState({ kind: "saved", at: nowLabel() });
     });
   }, [buildInput, clientId, quoteId]);
 
@@ -189,22 +278,69 @@ export function QuoteForm({
     recipients,
   ]);
 
+  // Filtro por proveedor: oculta ítems que no coinciden; los grupos siempre visibles.
+  const supplierFilterNorm = supplierFilter.trim().toLowerCase();
+  const isVisible = useCallback(
+    (item: ItemRow) =>
+      item.isGroup ||
+      !supplierFilterNorm ||
+      (item.supplier ?? "").toLowerCase().includes(supplierFilterNorm),
+    [supplierFilterNorm],
+  );
+
+  // Totales calculados solo con los ítems visibles (paridad recalc() del legacy,
+  // que excluye las filas ocultas por el filtro de proveedor).
   const totals = useMemo(
     () =>
       calcQuote(
-        items.map((item) => ({
-          clientPrice: item.clientPrice,
-          costPrice: item.costPrice,
-          quantity: item.quantity,
-          isGroup: item.isGroup,
-        })),
+        items
+          .filter(isVisible)
+          .map((item) => ({
+            clientPrice: item.clientPrice,
+            costPrice: item.costPrice,
+            quantity: item.quantity,
+            isGroup: item.isGroup,
+          })),
         { role: "kam", hasIva, ivaPercentage },
       ),
-    [items, hasIva, ivaPercentage],
+    [items, isVisible, hasIva, ivaPercentage],
   );
 
-  const updateItem = (key: string, patch: Partial<QuoteItemInput>) => {
+  const updateItem = (key: string, patch: Partial<ItemRow>) => {
     setItems((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  };
+
+  // Recálculo margen ↔ precios (paridad onItemPriceChange del legacy: % = markup sobre costo).
+  const onClientPriceChange = (key: string, value: number) => {
+    setItems((rows) =>
+      rows.map((r) =>
+        r.key === key
+          ? { ...r, clientPrice: value, marginPct: marginPctFromPrices(r.costPrice, value) }
+          : r,
+      ),
+    );
+  };
+  const onCostChange = (key: string, value: number) => {
+    setItems((rows) =>
+      rows.map((r) => {
+        if (r.key !== key) return r;
+        // Si hay markup fijado, se mantiene y se recalcula el precio cliente;
+        // si no, se recalcula el % desde los precios.
+        if (r.marginPct) {
+          return { ...r, costPrice: value, clientPrice: clientPriceFromMargin(value, r.marginPct) };
+        }
+        return { ...r, costPrice: value, marginPct: marginPctFromPrices(value, r.clientPrice) };
+      }),
+    );
+  };
+  const onMarginChange = (key: string, value: number) => {
+    setItems((rows) =>
+      rows.map((r) =>
+        r.key === key
+          ? { ...r, marginPct: value, clientPrice: clientPriceFromMargin(r.costPrice, value) }
+          : r,
+      ),
+    );
   };
 
   const removeItem = (key: string) => {
@@ -223,6 +359,13 @@ export function QuoteForm({
     });
   };
 
+  // Auto-crecer los textarea de descripción (que el texto largo no se corte).
+  useLayoutEffect(() => {
+    itemsBox.current
+      ?.querySelectorAll<HTMLTextAreaElement>("textarea[data-autogrow]")
+      .forEach(autoGrow);
+  }, [items]);
+
   const onBriefSelected = () => {
     const file = fileInput.current?.files?.[0];
     if (!file) return;
@@ -235,10 +378,7 @@ export function QuoteForm({
           setSaveState({ kind: "error", message: result.error });
         } else {
           setBriefUrl(file.name);
-          setSaveState({
-            kind: "saved",
-            at: new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" }),
-          });
+          setSaveState({ kind: "saved", at: nowLabel() });
         }
       });
     };
@@ -277,13 +417,61 @@ export function QuoteForm({
         setSaveState({ kind: "error", message: sent.error });
         return;
       }
-      setSaveState({
-        kind: "saved",
-        at: new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" }),
-      });
+      setSaveState({ kind: "saved", at: nowLabel() });
+      setStatus("sent");
       // Enviada: ahora sí navegamos a la URL real (remontar ya no pierde nada).
       router.replace(`/crm/${saved.id}`);
       router.refresh();
+    });
+  };
+
+  const onStatusChange = (code: string) => {
+    if (!quoteId || code === status) return;
+    const prev = status;
+    setStatus(code);
+    startTransition(async () => {
+      const res = await setQuoteStatus(quoteId, code);
+      if (res.error) {
+        setStatus(prev);
+        setSaveState({ kind: "error", message: res.error });
+      } else {
+        setSaveState({ kind: "saved", at: nowLabel() });
+        router.refresh();
+      }
+    });
+  };
+
+  const onSaveCommercialDocs = () => {
+    if (!quoteId) return;
+    startTransition(async () => {
+      const res = await saveCommercialDocs(quoteId, { purchaseOrder, invoiceNumber });
+      if (res.error) setSaveState({ kind: "error", message: res.error });
+      else setSaveState({ kind: "saved", at: nowLabel() });
+    });
+  };
+
+  const onDelete = () => {
+    if (!quoteId) return;
+    startTransition(async () => {
+      const res = await deleteQuote(quoteId);
+      if (res.error) setSaveState({ kind: "error", message: res.error });
+      else router.push("/crm");
+    });
+  };
+
+  const onSendSupplierOrder = (name: string, email: string, message: string) => {
+    if (!quoteId) return;
+    startTransition(async () => {
+      const res = await sendSupplierOrder(quoteId, {
+        supplierName: name,
+        supplierEmail: email,
+        message,
+      });
+      if (res.error) setSaveState({ kind: "error", message: res.error });
+      else {
+        setSaveState({ kind: "saved", at: nowLabel() });
+        router.refresh();
+      }
     });
   };
 
@@ -295,23 +483,51 @@ export function QuoteForm({
     error: saveState.kind === "error" ? saveState.message : "",
   }[saveState.kind];
 
+  // Celdas editables: transparentes con texto brillante; el borde/relleno solo aparece
+  // al pasar el mouse o al enfocar (evita cajas pálidas que se leen como vacías).
   const inputCell =
-    "w-full rounded-[10px] border border-transparent bg-transparent px-2 py-1.5 text-sm text-ink outline-none transition focus:border-green focus:bg-surface";
+    "w-full rounded-[10px] border border-transparent bg-transparent px-2.5 py-2 text-sm text-ink outline-none transition hover:border-line-strong focus:border-green focus:bg-surface focus:shadow-focus";
+
+  const isAccepted = status === "accepted";
+  const statusMeta = statuses.find((s) => s.code === status);
+  const progress = getQuoteProgress(status);
+  const progressBar = {
+    danger: "bg-danger",
+    warn: "bg-warn",
+    success: "bg-green",
+    neutral: "bg-faint",
+  }[progress.tone];
+
+  // Numeración visible de ítems (los grupos no cuentan).
+  let itemCounter = 0;
+  const rowNumbers = items.map((it) => (it.isGroup ? null : ++itemCounter));
+
+  // Proveedores presentes en los ítems (para las órdenes a proveedores).
+  const supplierGroups = useMemo(() => {
+    const map = new Map<string, { name: string; items: ItemRow[] }>();
+    for (const it of items) {
+      if (it.isGroup) continue;
+      const s = (it.supplier ?? "").trim();
+      if (!s) continue;
+      if (!map.has(s)) map.set(s, { name: s, items: [] });
+      map.get(s)!.items.push(it);
+    }
+    return [...map.values()];
+  }, [items]);
+
+  const gridCols =
+    "grid-cols-[24px_28px_minmax(220px,1fr)_56px_104px_78px_104px_128px_112px_28px]";
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       <div className="space-y-6">
         {/* Datos generales */}
         <section className="rounded-lg border border-line bg-surface p-6">
           <h2 className="text-lg font-bold tracking-tight">Datos generales</h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="qf-client">Cliente *</Label>
-              <Select
-                id="qf-client"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-              >
+              <Select id="qf-client" value={clientId} onChange={(e) => setClientId(e.target.value)}>
                 <option value="">Selecciona…</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -344,7 +560,7 @@ export function QuoteForm({
                 <option value="evolutivo">Evolutivo</option>
               </Select>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <Label htmlFor="qf-name">Nombre de la cotización</Label>
               <Input
                 id="qf-name"
@@ -373,7 +589,7 @@ export function QuoteForm({
                 <option value="USD">USD — Dólar</option>
               </Select>
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-3">
               <Label htmlFor="qf-message">Mensaje para el cliente</Label>
               <Textarea
                 id="qf-message"
@@ -382,7 +598,7 @@ export function QuoteForm({
                 onChange={(e) => setMessage(e.target.value)}
               />
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-3">
               <Label htmlFor="qf-notes">Notas internas</Label>
               <Textarea
                 id="qf-notes"
@@ -399,117 +615,273 @@ export function QuoteForm({
         <section className="rounded-lg border border-line bg-surface p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold tracking-tight">Ítems</h2>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setItems((r) => [...r, emptyItem(true)])}>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Input
+                  value={supplierFilter}
+                  onChange={(e) => setSupplierFilter(e.target.value)}
+                  placeholder="Filtrar por proveedor…"
+                  className="w-52 py-2"
+                  aria-label="Filtrar por proveedor"
+                />
+                {supplierFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setSupplierFilter("")}
+                    aria-label="Limpiar filtro"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-faint hover:text-ink"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setItems((r) => [...r, emptyItem(true)])}
+              >
                 + Grupo
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setItems((r) => [...r, emptyItem()])}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setItems((r) => [...r, emptyItem()])}
+              >
                 + Ítem
               </Button>
             </div>
           </div>
 
+          {supplierFilterNorm && (
+            <p className="mt-2 text-[13px] text-warn">
+              Mostrando solo ítems del proveedor «{supplierFilter}». Los totales reflejan ese
+              proveedor.
+            </p>
+          )}
+
           <div className="ds-scroll mt-4 overflow-x-auto">
-            <div className="min-w-[640px]">
+            <div className="min-w-[900px]" ref={itemsBox}>
               <div
-                className={`grid ${canSeeCosts ? "grid-cols-[24px_1fr_64px_120px_120px_110px_32px]" : "grid-cols-[24px_1fr_64px_120px_110px_32px]"} gap-2 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted`}
+                className={`grid ${gridCols} gap-2 border-b border-line px-2 pb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted`}
               >
                 <span />
+                <span className="text-center text-purple">#</span>
                 <span>Descripción</span>
-                <span>Cant.</span>
-                <span>Precio cliente</span>
-                {canSeeCosts && <span>Costo</span>}
+                <span className="text-center">Cant.</span>
+                <span className="text-right">Precio cliente</span>
+                <span className="text-right">% Margen</span>
+                <span className="text-right">Precio costo</span>
                 <span>Proveedor</span>
+                <span className="text-right">Subtotal</span>
                 <span />
               </div>
-              <div className="space-y-1">
-                {items.map((item, index) => (
-                  <div
-                    key={item.key}
-                    draggable
-                    onDragStart={() => (dragIndex.current = index)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDrop(index)}
-                    className={`grid ${canSeeCosts ? "grid-cols-[24px_1fr_64px_120px_120px_110px_32px]" : "grid-cols-[24px_1fr_64px_120px_110px_32px]"} items-center gap-2 rounded-[12px] border px-1 py-1 ${
-                      item.isGroup
-                        ? "border-transparent bg-surface-2"
-                        : "border-line bg-bg/40"
-                    }`}
-                  >
-                    <span
-                      className="cursor-grab select-none text-center text-faint active:cursor-grabbing"
-                      title="Arrastra para reordenar"
+              <div className="mt-1.5 space-y-1.5">
+                {items.map((item, index) => {
+                  if (!isVisible(item)) return null;
+                  const rowSubtotal = item.isGroup ? 0 : item.clientPrice * item.quantity;
+                  return (
+                    <div
+                      key={item.key}
+                      draggable
+                      onDragStart={() => (dragIndex.current = index)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => onDrop(index)}
+                      className={`grid ${gridCols} items-start gap-2 rounded-[14px] border px-2 py-2 transition ${
+                        item.isGroup
+                          ? "border-l-2 border-l-purple border-y-transparent border-r-transparent bg-purple-soft/50"
+                          : "border-line bg-surface-2/30 hover:border-line-strong hover:bg-surface-2/70"
+                      }`}
                     >
-                      ⋮⋮
-                    </span>
-                    <input
-                      value={item.description}
-                      onChange={(e) => updateItem(item.key, { description: e.target.value })}
-                      placeholder={item.isGroup ? "Nombre del grupo…" : "Descripción del ítem…"}
-                      className={`${inputCell} ${item.isGroup ? "font-bold uppercase tracking-wide" : ""}`}
-                    />
-                    {item.isGroup ? (
-                      <span className="col-span-1 text-center text-xs text-faint">—</span>
-                    ) : (
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.quantity}
-                        onChange={(e) => updateItem(item.key, { quantity: Number(e.target.value) })}
-                        className={`${inputCell} text-center`}
-                      />
-                    )}
-                    {item.isGroup ? (
-                      <span className="text-center text-xs text-faint">—</span>
-                    ) : (
-                      <input
-                        type="number"
-                        min={0}
-                        value={item.clientPrice}
-                        onChange={(e) =>
-                          updateItem(item.key, { clientPrice: Number(e.target.value) })
+                      <span
+                        className="cursor-grab select-none pt-2 text-center text-faint transition hover:text-muted active:cursor-grabbing"
+                        title="Arrastra para reordenar"
+                      >
+                        ⋮⋮
+                      </span>
+                      {item.isGroup ? (
+                        <span className="pt-1.5 text-center text-purple">▾</span>
+                      ) : (
+                        <span className="mt-0.5 flex h-6 w-6 items-center justify-center justify-self-center rounded-[8px] bg-purple-soft font-mono text-[11px] font-bold text-purple">
+                          {rowNumbers[index] ?? "—"}
+                        </span>
+                      )}
+                      <textarea
+                        data-autogrow
+                        rows={1}
+                        value={item.description}
+                        onChange={(e) => {
+                          updateItem(item.key, { description: e.target.value });
+                          autoGrow(e.currentTarget);
+                        }}
+                        placeholder={item.isGroup ? "Nombre del grupo…" : "Descripción del ítem…"}
+                        className={
+                          item.isGroup
+                            ? "w-full resize-none overflow-hidden border-0 bg-transparent px-1 py-1.5 text-sm font-bold uppercase tracking-wide leading-snug text-purple outline-none placeholder:text-purple/50"
+                            : `${inputCell} resize-none overflow-hidden leading-snug`
                         }
-                        className={`${inputCell} text-right font-mono text-[13px]`}
                       />
-                    )}
-                    {canSeeCosts &&
-                      (item.isGroup ? (
-                        <span className="text-center text-xs text-faint">—</span>
+                      {item.isGroup ? (
+                        <span />
                       ) : (
                         <input
                           type="number"
-                          min={0}
-                          value={item.costPrice}
+                          min={1}
+                          value={item.quantity}
                           onChange={(e) =>
-                            updateItem(item.key, { costPrice: Number(e.target.value) })
+                            updateItem(item.key, { quantity: Number(e.target.value) })
                           }
+                          className={`${inputCell} text-center`}
+                        />
+                      )}
+                      {item.isGroup ? (
+                        <span />
+                      ) : (
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={item.clientPrice ? formatThousands(item.clientPrice) : ""}
+                          placeholder="0"
+                          onChange={(e) => onClientPriceChange(item.key, parseThousands(e.target.value))}
                           className={`${inputCell} text-right font-mono text-[13px]`}
                         />
-                      ))}
-                    {item.isGroup ? (
-                      <span className="text-center text-xs text-faint">—</span>
-                    ) : (
-                      <input
-                        value={item.supplier}
-                        onChange={(e) => updateItem(item.key, { supplier: e.target.value })}
-                        placeholder="—"
-                        className={`${inputCell} text-[13px]`}
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeItem(item.key)}
-                      aria-label="Eliminar fila"
-                      className="cursor-pointer text-center text-faint transition hover:text-danger"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                      )}
+                      {item.isGroup ? (
+                        <span />
+                      ) : (
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={Number(item.marginPct.toFixed(1))}
+                          onChange={(e) => onMarginChange(item.key, Number(e.target.value))}
+                          className={`${inputCell} text-right font-mono text-[13px] ${
+                            item.marginPct < 0 ? "text-warn" : ""
+                          }`}
+                        />
+                      )}
+                      {item.isGroup ? (
+                        <span />
+                      ) : (
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={item.costPrice ? formatThousands(item.costPrice) : ""}
+                          placeholder="0"
+                          onChange={(e) => onCostChange(item.key, parseThousands(e.target.value))}
+                          className={`${inputCell} text-right font-mono text-[13px]`}
+                        />
+                      )}
+                      {item.isGroup ? (
+                        <span />
+                      ) : (
+                        <input
+                          value={item.supplier}
+                          onChange={(e) => updateItem(item.key, { supplier: e.target.value })}
+                          placeholder="—"
+                          className={`${inputCell} text-[13px]`}
+                        />
+                      )}
+                      <span className="pt-2 text-right font-mono text-[13px] font-bold text-ink">
+                        {item.isGroup ? "" : formatMoney(rowSubtotal, currency)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.key)}
+                        aria-label="Eliminar fila"
+                        className="cursor-pointer pt-2.5 text-center text-faint transition hover:text-danger"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         </section>
+
+        {/* Órdenes a proveedores (solo con la cotización aceptada) */}
+        {quoteId && isAccepted && supplierGroups.length > 0 && (
+          <section className="rounded-lg border border-line bg-surface p-6">
+            <h2 className="text-lg font-bold tracking-tight">Órdenes a proveedores</h2>
+            <p className="mt-0.5 text-[13px] text-muted">
+              Envía a cada proveedor la orden con sus ítems. El proveedor recibe un correo con el
+              detalle.
+            </p>
+            <div className="mt-4 space-y-4">
+              {supplierGroups.map((group) => {
+                const existing = supplierOrders.find((o) => o.supplierName === group.name);
+                const form = supplierForms[group.name] ?? {
+                  email: existing?.supplierEmail ?? "",
+                  message: "",
+                };
+                const sent = existing?.status === "sent" || existing?.status === "confirmed";
+                const confirmed = existing?.status === "confirmed";
+                return (
+                  <div key={group.name} className="rounded-[12px] border border-line bg-bg/40 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-bold">{group.name}</h3>
+                      {confirmed ? (
+                        <Badge tone="success">Confirmó recepción</Badge>
+                      ) : sent ? (
+                        <Badge tone="info">Orden enviada</Badge>
+                      ) : (
+                        <Badge tone="neutral">Pendiente de envío</Badge>
+                      )}
+                    </div>
+                    <ul className="mt-2 space-y-1 text-[13px] text-muted">
+                      {group.items.map((it, i) => (
+                        <li key={i} className="flex justify-between gap-3">
+                          <span className="truncate">{it.description || "—"}</span>
+                          <span className="font-mono">×{it.quantity}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor={`so-email-${group.name}`}>Email del proveedor</Label>
+                        <Input
+                          id={`so-email-${group.name}`}
+                          type="email"
+                          value={form.email}
+                          placeholder="proveedor@correo.com"
+                          onChange={(e) =>
+                            setSupplierForms((s) => ({
+                              ...s,
+                              [group.name]: { ...form, email: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`so-msg-${group.name}`}>Mensaje (opcional)</Label>
+                        <Input
+                          id={`so-msg-${group.name}`}
+                          value={form.message}
+                          placeholder="Notas para el proveedor…"
+                          onChange={(e) =>
+                            setSupplierForms((s) => ({
+                              ...s,
+                              [group.name]: { ...form, message: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      variant={sent ? "outline" : "secondary"}
+                      size="sm"
+                      className="mt-3"
+                      disabled={isPending || !form.email.trim()}
+                      onClick={() => onSendSupplierOrder(group.name, form.email, form.message)}
+                    >
+                      {sent ? "Reenviar orden" : "Enviar orden"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Destinatarios */}
         <section className="rounded-lg border border-line bg-surface p-6">
@@ -568,16 +940,61 @@ export function QuoteForm({
         </section>
       </div>
 
-      {/* Panel lateral: totales + brief + guardado */}
+      {/* Panel lateral */}
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+        {/* Estado + acciones */}
+        {quoteId && (
+          <div className="rounded-lg border border-line bg-surface p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Estado</h3>
+              {statusMeta && (
+                <Badge
+                  color={statusMeta.color}
+                  variant={statusMeta.variant}
+                  onColor={statusMeta.onColor}
+                >
+                  {statusMeta.label}
+                </Badge>
+              )}
+            </div>
+            <Select
+              className="mt-3"
+              value={status}
+              onChange={(e) => onStatusChange(e.target.value)}
+              disabled={isPending}
+              aria-label="Cambiar estado"
+            >
+              {statuses.length === 0 && <option value={status}>{status}</option>}
+              {statuses.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+
+            {/* Progreso del deal */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="text-muted">{progress.stage}</span>
+                <span className="font-mono font-bold">{progress.pct}%</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-pill bg-surface-2">
+                <div
+                  className={`h-full rounded-pill transition-all ${progressBar}`}
+                  style={{ width: `${progress.pct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Resumen */}
         <div className="rounded-lg border border-line bg-surface p-6">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Resumen</h3>
           <dl className="mt-4 space-y-2.5 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted">Subtotal</dt>
-              <dd className="font-mono font-bold">
-                {formatMoney(totals.subtotalClient, currency)}
-              </dd>
+              <dd className="font-mono font-bold">{formatMoney(totals.subtotalClient, currency)}</dd>
             </div>
             <div className="flex items-center justify-between">
               <dt className="flex items-center gap-2 text-muted">
@@ -611,30 +1028,82 @@ export function QuoteForm({
             </div>
             <div className="flex justify-between border-t border-line pt-2.5 text-base">
               <dt className="font-semibold">Total</dt>
-              <dd className="font-mono font-bold text-green">
-                {formatMoney(totals.total, currency)}
+              <dd className="font-mono font-bold text-green">{formatMoney(totals.total, currency)}</dd>
+            </div>
+            <div className="flex justify-between border-t border-line pt-2.5">
+              <dt className="text-muted">Costo total</dt>
+              <dd className="font-mono">{formatMoney(totals.subtotalCost, currency)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted">Margen</dt>
+              <dd
+                className={`font-mono font-bold ${totals.margin >= 0 ? "text-green" : "text-warn"}`}
+              >
+                {formatMoney(totals.margin, currency)} · {totals.marginPercentage.toFixed(1)}%
               </dd>
             </div>
-            {canSeeCosts && (
-              <>
-                <div className="flex justify-between border-t border-line pt-2.5">
-                  <dt className="text-muted">Costo total</dt>
-                  <dd className="font-mono">{formatMoney(totals.subtotalCost, currency)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted">Margen</dt>
-                  <dd
-                    className={`font-mono font-bold ${totals.margin >= 0 ? "text-green" : "text-danger"}`}
-                  >
-                    {formatMoney(totals.margin, currency)} ·{" "}
-                    {totals.marginPercentage.toFixed(1)}%
-                  </dd>
-                </div>
-              </>
+            <div className="flex justify-between border-t border-line pt-2.5">
+              <dt className="text-muted">Ítems</dt>
+              <dd className="font-mono">{totals.itemCount}</dd>
+            </div>
+            {initial?.createdAt && (
+              <div className="flex justify-between">
+                <dt className="text-muted">Creada</dt>
+                <dd>{formatDate(initial.createdAt)}</dd>
+              </div>
             )}
+            <div className="flex justify-between">
+              <dt className="text-muted">Enviada</dt>
+              <dd>{initial?.sentAt ? formatDate(initial.sentAt) : "—"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted">Versión</dt>
+              <dd className="font-mono">
+                {initial?.currentVersion ? `v${initial.currentVersion}` : "—"}
+              </dd>
+            </div>
           </dl>
         </div>
 
+        {/* Documentos comerciales (solo aceptada) */}
+        {quoteId && isAccepted && (
+          <div className="rounded-lg border border-line bg-surface p-6">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
+              Documentos comerciales
+            </h3>
+            <div className="mt-3 space-y-3">
+              <div>
+                <Label htmlFor="qf-po">Orden de compra</Label>
+                <Input
+                  id="qf-po"
+                  value={purchaseOrder}
+                  onChange={(e) => setPurchaseOrder(e.target.value)}
+                  placeholder="OC-2026-001"
+                />
+              </div>
+              <div>
+                <Label htmlFor="qf-invoice">Número de factura</Label>
+                <Input
+                  id="qf-invoice"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="FE-2026-001"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={isPending}
+                onClick={onSaveCommercialDocs}
+              >
+                Guardar documentos
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Brief */}
         <div className="rounded-lg border border-line bg-surface p-6">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Brief</h3>
           {briefUrl ? (
@@ -642,7 +1111,9 @@ export function QuoteForm({
               📎 <span className="text-muted">{briefUrl.split("/").pop()}</span>
             </p>
           ) : (
-            <p className="mt-3 text-[13px] text-muted">Adjunta el brief del proyecto (máx 10 MB).</p>
+            <p className="mt-3 text-[13px] text-muted">
+              Adjunta el brief del proyecto (máx 10 MB).
+            </p>
           )}
           <input
             ref={fileInput}
@@ -662,6 +1133,7 @@ export function QuoteForm({
           </Button>
         </div>
 
+        {/* Guardado + envío */}
         <div className="rounded-lg border border-line bg-surface p-6">
           <div
             className={`text-[13px] ${saveState.kind === "error" ? "text-danger" : "text-muted"}`}
@@ -689,9 +1161,10 @@ export function QuoteForm({
           </Button>
         </div>
 
+        {/* PDF */}
         {quoteId && (
           <div className="rounded-lg border border-line bg-surface p-6">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">PDF</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Exportar</h3>
             <div className="mt-3 flex flex-col gap-2">
               <a
                 href={`/crm/${quoteId}/imprimir?vista=cliente`}
@@ -715,19 +1188,62 @@ export function QuoteForm({
           </div>
         )}
 
+        {/* Historial de versiones */}
         {versions.length > 0 && (
           <div className="rounded-lg border border-line bg-surface p-6">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-              Versiones
+              Historial de versiones
             </h3>
-            <ul className="mt-3 space-y-2 text-sm">
-              {versions.map((v) => (
-                <li key={v.version_number} className="flex justify-between">
-                  <span className="font-mono font-bold">v{v.version_number}</span>
-                  <span className="text-muted">{formatDate(v.created_at)}</span>
+            <ul className="mt-3 space-y-2">
+              {versions.map((v, i) => (
+                <li
+                  key={v.version_number}
+                  className="rounded-[12px] border border-line bg-bg/40 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold">v{v.version_number}</span>
+                    {i === 0 && <Badge tone="info">Actual</Badge>}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-[13px] text-muted">
+                    <span>
+                      {formatDate(v.created_at)} · {v.itemCount} ítems
+                    </span>
+                    <span className="font-mono font-bold text-ink">
+                      {formatMoney(v.total, v.currency)}
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* Eliminar */}
+        {quoteId && (
+          <div className="rounded-lg border border-danger/40 bg-surface p-6">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Acciones</h3>
+            {confirmDelete ? (
+              <div className="mt-3">
+                <p className="text-[13px] text-muted">¿Eliminar esta cotización?</p>
+                <div className="mt-2 flex gap-2">
+                  <Button variant="danger" size="sm" disabled={isPending} onClick={onDelete}>
+                    Sí, eliminar
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full border-danger/40 text-danger hover:border-danger"
+                onClick={() => setConfirmDelete(true)}
+              >
+                Eliminar cotización
+              </Button>
+            )}
           </div>
         )}
       </aside>

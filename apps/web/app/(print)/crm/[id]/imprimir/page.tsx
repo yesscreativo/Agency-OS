@@ -173,6 +173,39 @@ export default async function QuotePrintPage({
         </dl>
       </div>
 
+      {internal && (quote.purchase_order || quote.invoice_number) && (
+        <div className="mt-8 rounded-lg border border-[#e4e4e7] p-5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[#a1a1aa]">
+            Documentos comerciales
+          </div>
+          <div className="mt-2 flex flex-wrap gap-8 text-sm">
+            {quote.purchase_order && (
+              <div>
+                <span className="text-[#71717a]">Orden de compra: </span>
+                <span className="font-semibold">{quote.purchase_order}</span>
+              </div>
+            )}
+            {quote.invoice_number && (
+              <div>
+                <span className="text-[#71717a]">Número de factura: </span>
+                <span className="font-semibold">{quote.invoice_number}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {internal && quote.internal_notes && (
+        <div className="mt-6 rounded-lg border border-[#e4e4e7] p-5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[#a1a1aa]">
+            Notas internas
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+            {quote.internal_notes}
+          </p>
+        </div>
+      )}
+
       <div className="mt-12 flex items-center justify-between border-t border-[#e4e4e7] pt-6 text-xs text-[#a1a1aa] print:mt-8">
         <span>
           Generado con Agency OS · {formatDate(quote.sent_at ?? quote.created_at)}

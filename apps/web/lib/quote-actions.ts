@@ -8,6 +8,7 @@ import {
   nextQuoteSeq,
   replaceQuoteItems,
   replaceQuoteRecipients,
+  softDeleteQuote,
   updateQuote,
   type TablesUpdate,
 } from "@agency-os/db";
@@ -233,6 +234,84 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
   } catch (error) {
     console.error("sendQuote", error);
     return { error: "No se pudo enviar la cotización. Intenta de nuevo." };
+  }
+}
+
+/** Cambia el estado de la cotización (selector del formulario / paridad Kanban).
+ * Permite mover libremente entre estados del catálogo; NO ejecuta el envío
+ * (código/versión/webhook) — eso vive en `sendQuote`. Estampa el timestamp del
+ * hito al entrar a accepted/rejected/closed (paridad adminApprove/confirmReject). */
+export async function setQuoteStatus(
+  quoteId: string,
+  statusCode: string,
+): Promise<QuoteSaveResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "quote.update")) {
+    return { error: "No tienes permiso para cambiar el estado." };
+  }
+  if (!statusCode.trim()) return { error: "Estado inválido." };
+
+  const db = await getSupabaseServerClient();
+  try {
+    const values: TablesUpdate<"quotes"> = { status: statusCode };
+    const now = new Date().toISOString();
+    if (statusCode === "accepted") values.accepted_at = now;
+    else if (statusCode === "rejected") values.rejected_at = now;
+    else if (statusCode === "closed") values.closed_at = now;
+
+    await updateQuote(db, quoteId, values);
+    revalidatePath("/crm");
+    revalidatePath(`/crm/${quoteId}`);
+    return { id: quoteId };
+  } catch (error) {
+    console.error("setQuoteStatus", error);
+    return { error: "No se pudo cambiar el estado. Intenta de nuevo." };
+  }
+}
+
+/** Guarda los documentos comerciales (orden de compra / número de factura).
+ * Solo tienen sentido con la cotización aceptada (paridad legacy). */
+export async function saveCommercialDocs(
+  quoteId: string,
+  input: { purchaseOrder: string; invoiceNumber: string },
+): Promise<QuoteSaveResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "quote.update")) {
+    return { error: "No tienes permiso para editar documentos comerciales." };
+  }
+
+  const db = await getSupabaseServerClient();
+  try {
+    await updateQuote(db, quoteId, {
+      purchase_order: input.purchaseOrder.trim() || null,
+      invoice_number: input.invoiceNumber.trim() || null,
+    });
+    revalidatePath(`/crm/${quoteId}`);
+    return { id: quoteId };
+  } catch (error) {
+    console.error("saveCommercialDocs", error);
+    return { error: "No se pudieron guardar los documentos comerciales." };
+  }
+}
+
+/** Elimina (soft delete) la cotización. La navegación de vuelta a /crm la hace el cliente. */
+export async function deleteQuote(quoteId: string): Promise<{ ok?: true; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "quote.update")) {
+    return { error: "No tienes permiso para eliminar cotizaciones." };
+  }
+
+  const db = await getSupabaseServerClient();
+  try {
+    await softDeleteQuote(db, quoteId);
+    revalidatePath("/crm");
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteQuote", error);
+    return { error: "No se pudo eliminar la cotización." };
   }
 }
 
