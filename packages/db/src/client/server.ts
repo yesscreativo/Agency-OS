@@ -18,11 +18,22 @@ export function createSupabaseServerClient(cookies: CookieAdapter) {
 }
 
 /** Cliente con `service_role`: bypassa RLS. Solo para rutas server-side de confianza
- * (magic links por token, webhooks de n8n) — nunca exponer esta key al navegador. */
+ * (magic links por token, webhooks de n8n) — nunca exponer esta key al navegador.
+ * Fuerza `cache: 'no-store'` en todas sus peticiones: estos lookups (token, alta de
+ * usuarios) deben ver siempre el estado actual, no la Data Cache de Next (que, indexada
+ * por URL REST, devolvería un `expires_at`/estado obsoleto aunque la página sea dinámica). */
 export function createSupabaseServiceRoleClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: {
+        // `cache` es una opción válida de fetch (Next la lee); los tipos de Node no la
+        // declaran en RequestInit, de ahí el cast.
+        fetch: (input, init) =>
+          fetch(input, { ...init, cache: "no-store" } as RequestInit),
+      },
+    },
   );
 }

@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Tokens del design system "Agency OS".
+   Verde = acción · Morado = marca secundaria · Neutros de bajo croma.
+   Fuente canónica: Docs/95-Assets/Colors.md */
+:root,
+[data-theme="dark"] {
+  --bg: #0a0a0b;
+  --surface: #161618;
+  --surface-2: #1e1e22;
+  --elev: #26262b;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.17);
+  --text: #f6f6f7;
+  --muted: #a1a1aa;
+  --faint: #6b6b73;
+  --green: #b8ff3c;
+  --green-soft: rgba(184, 255, 60, 0.14);
+  --green-ink: #0d0f08;
+  --purple: #8b5cf6;
+  --purple-strong: #6d28d9;
+  --purple-soft: rgba(124, 58, 237, 0.2);
+  --danger: #ff5c6c;
+  --warn: #f5b62e;
+  /* Superficies translúcidas para glassmorphism sobre el fondo animado */
+  --glass: color-mix(in srgb, var(--surface) 55%, transparent);
+  --glass-strong: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="light"] {
+  --bg: #f2f2f3;
+  --surface: #ffffff;
+  --surface-2: #f5f5f6;
+  --elev: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --text: #161618;
+  --muted: #71717a;
+  --faint: #a1a1aa;
+  --green: #8fdb1a;
+  --green-soft: rgba(143, 219, 26, 0.16);
+  --green-ink: #0d0f08;
+  --purple: #6d28d9;
+  --purple-strong: #6d28d9;
+  --purple-soft: rgba(109, 40, 217, 0.1);
+  --danger: #e0384a;
+  --warn: #b7791f;
+  --glass: color-mix(in srgb, var(--surface) 68%, transparent);
+  --glass-strong: color-mix(in srgb, var(--surface-2) 82%, transparent);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition:
+    background 0.25s,
+    color 0.25s;
+}
+
+::selection {
+  background: var(--green);
+  color: var(--green-ink);
+}
+
+.ds-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.ds-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+}

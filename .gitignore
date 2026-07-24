@@ -23,6 +23,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Supabase local
 supabase/.branches/
@@ -37,3 +38,7 @@ backups/
 
 # Config local de Claude Code (no compartir/commitear)
 .claude/settings.local.json
+
+# Temporales de Illustrator
+~ai-*.tmp
+*.tmp

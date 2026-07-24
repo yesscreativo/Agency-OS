@@ -1,3 +1,7 @@
-export default function UsersPage() {
-  return <main className="p-8">Usuarios — pendiente (Fase 7).</main>;
+import { redirect } from "next/navigation";
+
+// El catálogo de KAM/PM es del módulo CRM; el acceso general de personas vive
+// en /usuarios (solo Administrador de sistema).
+export default function CrmUsuariosRedirect() {
+  redirect("/crm/kams");
 }

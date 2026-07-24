@@ -16,3 +16,4 @@
 ## Baja
 - App móvil
 - SaaS Multiempresa
+- Dojo (engagement gamificado) — ver `Docs/30-Functional/Dojo.md`
