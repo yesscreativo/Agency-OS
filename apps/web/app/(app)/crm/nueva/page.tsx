@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { listClients, listKams } from "@agency-os/db";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap } from "@/lib/quote-status-catalog";
 import { QuoteForm } from "@/components/crm/quote-form";
@@ -11,6 +11,7 @@ export default async function NewQuotePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!hasPermission(user, "quote.create")) redirect("/crm");
+  const access = quoteAccess(user);
 
   const db = await getSupabaseServerClient();
   const [{ rows: clients }, kams, statusMap] = await Promise.all([
@@ -44,7 +45,7 @@ export default async function NewQuotePage() {
         initial={null}
         clients={clients.map((c) => ({ id: c.id, name: c.name, company: c.company }))}
         kams={kams.map((k) => ({ id: k.id, name: k.name }))}
-        canSeeCosts={hasPermission(user, "quote.see_costs")}
+        access={access}
         briefSignedUrl={null}
         statuses={statuses}
       />

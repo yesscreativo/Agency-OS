@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { calcQuote, formatDate, formatMoney } from "@agency-os/domain";
 import { getQuoteById } from "@agency-os/db";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { PrintButton } from "@/components/crm/print-button";
@@ -20,6 +20,7 @@ export default async function QuotePrintPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const access = quoteAccess(user);
 
   const db = await getSupabaseServerClient();
   const quote = await getQuoteById(db, params.id);
@@ -27,7 +28,12 @@ export default async function QuotePrintPage({
 
   const statusLabel = resolveStatus(await getQuoteStatusMap(db), quote.status).label;
 
-  const internal = searchParams.vista === "interna" && hasPermission(user, "quote.see_costs");
+  // Vista interna (costos + margen) solo para quien ve ambos precios (admin).
+  const internal = searchParams.vista === "interna" && access.seeMargin;
+
+  // Precio de línea a mostrar: cliente para admin/viewer, costo para el creador.
+  const unitPrice = (item: { client_price: number; cost_price: number }) =>
+    access.seeClientPrice ? item.client_price : item.cost_price;
 
   const totals = calcQuote(
     quote.quote_items.map((item) => ({
@@ -36,7 +42,7 @@ export default async function QuotePrintPage({
       quantity: item.quantity,
       isGroup: item.is_group,
     })),
-    { role: "kam", hasIva: quote.has_iva, ivaPercentage: quote.iva_percentage },
+    { role: access.priceRole, hasIva: quote.has_iva, ivaPercentage: quote.iva_percentage },
   );
 
   const money = (n: number) => formatMoney(n, quote.currency);
@@ -124,7 +130,7 @@ export default async function QuotePrintPage({
                 </td>
                 <td className="py-2.5 pr-3 text-center">{item.quantity}</td>
                 <td className="py-2.5 pr-3 text-right font-mono text-[13px]">
-                  {money(item.client_price)}
+                  {money(unitPrice(item))}
                 </td>
                 {internal && (
                   <td className="py-2.5 pr-3 text-right font-mono text-[13px] text-[#71717a]">
@@ -132,7 +138,7 @@ export default async function QuotePrintPage({
                   </td>
                 )}
                 <td className="py-2.5 text-right font-mono text-[13px] font-bold">
-                  {money(item.client_price * item.quantity)}
+                  {money(unitPrice(item) * item.quantity)}
                 </td>
               </tr>
             ),

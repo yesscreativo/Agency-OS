@@ -108,3 +108,41 @@ export function hasPermission(user: CurrentUser | null, code: string): boolean {
 export function canAccessModule(user: CurrentUser | null, moduleCode: string): boolean {
   return user?.moduleCodes.includes(moduleCode) ?? false;
 }
+
+/** Alcance del usuario sobre las cotizaciones (matriz de permisos CRM).
+ * Centraliza qué precios ve y qué acciones puede hacer, para no repetir la
+ * lógica en lista/detalle/formulario/PDF/actions. `priceRole` alimenta el
+ * `calcQuote` del dominio: "creator" usa el costo como precio a mostrar. */
+export interface QuoteAccess {
+  /** Ve/edita el precio costo (crm_admin, crm_creator). */
+  seeCost: boolean;
+  /** Ve/edita el precio cliente (crm_admin, crm_viewer). */
+  seeClientPrice: boolean;
+  /** El margen solo se ve con ambos precios → solo el admin. */
+  seeMargin: boolean;
+  /** Crea cotizaciones (quote.create). */
+  canCreate: boolean;
+  /** Edita cotizaciones e ítems (quote.update). */
+  canEdit: boolean;
+  /** Envía al cliente y gestiona destinatarios (quote.send). */
+  canSend: boolean;
+  /** Estado, docs comerciales, brief, órdenes a proveedor y eliminar (quote.approve). */
+  canManageInternal: boolean;
+  /** Qué precio es "el precio" a mostrar: cliente para admin/viewer, costo para creator. */
+  priceRole: "kam" | "creator";
+}
+
+export function quoteAccess(user: CurrentUser | null): QuoteAccess {
+  const seeCost = hasPermission(user, "quote.see_costs");
+  const seeClientPrice = hasPermission(user, "quote.see_client_price");
+  return {
+    seeCost,
+    seeClientPrice,
+    seeMargin: seeCost && seeClientPrice,
+    canCreate: hasPermission(user, "quote.create"),
+    canEdit: hasPermission(user, "quote.update"),
+    canSend: hasPermission(user, "quote.send"),
+    canManageInternal: hasPermission(user, "quote.approve"),
+    priceRole: seeClientPrice ? "kam" : "creator",
+  };
+}

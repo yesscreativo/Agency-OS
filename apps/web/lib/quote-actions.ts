@@ -13,11 +13,14 @@ import {
   type TablesUpdate,
 } from "@agency-os/db";
 import { buildQuoteCode, calcQuote, validateBriefSize, validateQuote } from "@agency-os/domain";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { emitWebhook } from "@/lib/webhooks";
 
 export interface QuoteItemInput {
+  /** id del ítem existente; solo se usa para conservar precios enmascarados
+   * (un rol que no ve un precio no puede sobrescribirlo). Los ítems nuevos no lo traen. */
+  id?: string;
   description: string;
   quantity: number;
   clientPrice: number;
@@ -71,6 +74,26 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   const db = await getSupabaseServerClient();
 
+  // Precios enmascarados: quien no ve un precio no puede sobrescribirlo. Se conserva
+  // el valor almacenado (buscado por id de ítem); los ítems nuevos quedan en 0 hasta
+  // que un rol con permiso los complete. Solo consultamos la BD si hace falta.
+  const access = quoteAccess(user);
+  const storedPrices = new Map<string, { client_price: number; cost_price: number }>();
+  if (input.id && (!access.seeClientPrice || !access.seeCost)) {
+    const existing = await getQuoteById(db, input.id);
+    for (const it of existing?.quote_items ?? []) {
+      storedPrices.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
+    }
+  }
+  const resolveClientPrice = (item: QuoteItemInput) =>
+    access.seeClientPrice
+      ? sanitizeNumber(item.clientPrice)
+      : (item.id && storedPrices.get(item.id)?.client_price) || 0;
+  const resolveCostPrice = (item: QuoteItemInput) =>
+    access.seeCost
+      ? sanitizeNumber(item.costPrice)
+      : (item.id && storedPrices.get(item.id)?.cost_price) || 0;
+
   const values: TablesUpdate<"quotes"> = {
     client_id: input.clientId,
     kam_id: input.kamId || null,
@@ -107,8 +130,8 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
         .map((item) => ({
           description: item.description.trim(),
           quantity: Math.max(1, Math.round(sanitizeNumber(item.quantity, 1))),
-          client_price: sanitizeNumber(item.clientPrice),
-          cost_price: sanitizeNumber(item.costPrice),
+          client_price: resolveClientPrice(item),
+          cost_price: resolveCostPrice(item),
           supplier: item.supplier.trim() || null,
           is_group: item.isGroup,
         })),
@@ -139,7 +162,7 @@ export type QuoteSendResult =
 export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.update")) {
+  if (!hasPermission(user, "quote.send")) {
     return { error: "No tienes permiso para enviar cotizaciones." };
   }
 
@@ -247,7 +270,7 @@ export async function setQuoteStatus(
 ): Promise<QuoteSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.update")) {
+  if (!hasPermission(user, "quote.approve")) {
     return { error: "No tienes permiso para cambiar el estado." };
   }
   if (!statusCode.trim()) return { error: "Estado inválido." };
@@ -278,7 +301,7 @@ export async function saveCommercialDocs(
 ): Promise<QuoteSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.update")) {
+  if (!hasPermission(user, "quote.approve")) {
     return { error: "No tienes permiso para editar documentos comerciales." };
   }
 
@@ -300,7 +323,7 @@ export async function saveCommercialDocs(
 export async function deleteQuote(quoteId: string): Promise<{ ok?: true; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.update")) {
+  if (!hasPermission(user, "quote.approve")) {
     return { error: "No tienes permiso para eliminar cotizaciones." };
   }
 
@@ -319,7 +342,7 @@ export async function deleteQuote(quoteId: string): Promise<{ ok?: true; error?:
 export async function uploadBrief(quoteId: string, formData: FormData): Promise<QuoteSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.update")) {
+  if (!hasPermission(user, "quote.approve")) {
     return { error: "No tienes permiso para adjuntar archivos." };
   }
 

@@ -31,6 +31,7 @@ import {
   type QuoteRecipientInput,
 } from "@/lib/quote-actions";
 import { sendSupplierOrder } from "@/lib/supplier-order-actions";
+import type { QuoteAccess } from "@/lib/auth";
 
 export interface QuoteFormInitial {
   id: string;
@@ -84,7 +85,7 @@ interface QuoteFormProps {
   initial: QuoteFormInitial | null;
   clients: { id: string; name: string; company: string | null }[];
   kams: { id: string; name: string }[];
-  canSeeCosts: boolean;
+  access: QuoteAccess;
   briefSignedUrl: string | null;
   versions?: QuoteVersionView[];
   statuses?: QuoteStatusOption[];
@@ -103,6 +104,7 @@ const nextKey = () =>
 function emptyItem(isGroup = false): ItemRow {
   return {
     key: nextKey(),
+    id: undefined,
     description: "",
     quantity: 1,
     clientPrice: 0,
@@ -140,12 +142,14 @@ export function QuoteForm({
   initial,
   clients,
   kams,
-  canSeeCosts,
+  access,
   briefSignedUrl,
   versions = [],
   statuses = [],
   supplierOrders = [],
 }: QuoteFormProps) {
+  const { seeCost, seeClientPrice, seeMargin, canEdit, canSend, canManageInternal, priceRole } =
+    access;
   const router = useRouter();
   const [quoteId, setQuoteId] = useState<string | null>(initial?.id ?? null);
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
@@ -206,6 +210,7 @@ export function QuoteForm({
       hasIva,
       ivaPercentage,
       items: items.map((row) => ({
+        id: row.id,
         description: row.description,
         quantity: row.quantity,
         clientPrice: row.clientPrice,
@@ -237,7 +242,7 @@ export function QuoteForm({
   if (lastSaved.current === null) lastSaved.current = serialize(buildInput());
 
   const persist = useCallback(() => {
-    if (!clientId) return;
+    if (!clientId || !canEdit) return;
     const input = buildInput();
     setSaveState({ kind: "saving" });
     startTransition(async () => {
@@ -252,11 +257,11 @@ export function QuoteForm({
       lastSaved.current = serialize(input);
       setSaveState({ kind: "saved", at: nowLabel() });
     });
-  }, [buildInput, clientId, quoteId]);
+  }, [buildInput, clientId, quoteId, canEdit]);
 
   // Autosave con debounce: solo si el contenido difiere del último guardado.
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || !canEdit) return;
     if (serialize(buildInput()) === lastSaved.current) return;
     setSaveState((s) => (s.kind === "saving" ? s : { kind: "dirty" }));
     clearTimeout(saveTimer.current);
@@ -301,9 +306,9 @@ export function QuoteForm({
             quantity: item.quantity,
             isGroup: item.isGroup,
           })),
-        { role: "kam", hasIva, ivaPercentage },
+        { role: priceRole, hasIva, ivaPercentage },
       ),
-    [items, isVisible, hasIva, ivaPercentage],
+    [items, isVisible, hasIva, ivaPercentage, priceRole],
   );
 
   const updateItem = (key: string, patch: Partial<ItemRow>) => {
@@ -515,8 +520,23 @@ export function QuoteForm({
     return [...map.values()];
   }, [items]);
 
-  const gridCols =
-    "grid-cols-[24px_28px_minmax(220px,1fr)_56px_104px_78px_104px_128px_112px_28px]";
+  // Plantilla de columnas de la grilla de ítems, dinámica según qué precios ve el
+  // rol y si puede editar (arrastrar/eliminar). Se usa como estilo inline porque
+  // Tailwind no puede generar clases arbitrarias en runtime.
+  const itemGridTemplate = [
+    canEdit ? "24px" : null, // arrastrar
+    "28px", // #
+    "minmax(220px,1fr)", // descripción
+    "56px", // cantidad
+    seeClientPrice ? "104px" : null, // precio cliente
+    seeMargin ? "78px" : null, // % margen
+    seeCost ? "104px" : null, // precio costo
+    "128px", // proveedor
+    "112px", // subtotal
+    canEdit ? "28px" : null, // eliminar
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
@@ -527,7 +547,12 @@ export function QuoteForm({
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="qf-client">Cliente *</Label>
-              <Select id="qf-client" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+              <Select
+                id="qf-client"
+                value={clientId}
+                disabled={!canEdit}
+                onChange={(e) => setClientId(e.target.value)}
+              >
                 <option value="">Selecciona…</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -539,7 +564,12 @@ export function QuoteForm({
             </div>
             <div>
               <Label htmlFor="qf-kam">KAM / PM</Label>
-              <Select id="qf-kam" value={kamId} onChange={(e) => setKamId(e.target.value)}>
+              <Select
+                id="qf-kam"
+                value={kamId}
+                disabled={!canEdit}
+                onChange={(e) => setKamId(e.target.value)}
+              >
                 <option value="">Sin asignar</option>
                 {kams.map((k) => (
                   <option key={k.id} value={k.id}>
@@ -553,6 +583,7 @@ export function QuoteForm({
               <Select
                 id="qf-type"
                 value={quoteType ?? ""}
+                disabled={!canEdit}
                 onChange={(e) => setQuoteType(e.target.value)}
               >
                 <option value="">Sin tipo</option>
@@ -565,6 +596,7 @@ export function QuoteForm({
               <Input
                 id="qf-name"
                 value={quoteName}
+                disabled={!canEdit}
                 onChange={(e) => setQuoteName(e.target.value)}
                 placeholder="Campaña lanzamiento Q3…"
               />
@@ -575,6 +607,7 @@ export function QuoteForm({
                 id="qf-date"
                 type="date"
                 value={eventDate}
+                disabled={!canEdit}
                 onChange={(e) => setEventDate(e.target.value)}
               />
             </div>
@@ -583,6 +616,7 @@ export function QuoteForm({
               <Select
                 id="qf-currency"
                 value={currency}
+                disabled={!canEdit}
                 onChange={(e) => setCurrency(e.target.value === "USD" ? "USD" : "COP")}
               >
                 <option value="COP">COP — Peso colombiano</option>
@@ -595,6 +629,7 @@ export function QuoteForm({
                 id="qf-message"
                 rows={2}
                 value={message}
+                disabled={!canEdit}
                 onChange={(e) => setMessage(e.target.value)}
               />
             </div>
@@ -604,6 +639,7 @@ export function QuoteForm({
                 id="qf-notes"
                 rows={2}
                 value={internalNotes}
+                disabled={!canEdit}
                 onChange={(e) => setInternalNotes(e.target.value)}
                 placeholder="Solo visibles para el equipo"
               />
@@ -635,20 +671,24 @@ export function QuoteForm({
                   </button>
                 )}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setItems((r) => [...r, emptyItem(true)])}
-              >
-                + Grupo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setItems((r) => [...r, emptyItem()])}
-              >
-                + Ítem
-              </Button>
+              {canEdit && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setItems((r) => [...r, emptyItem(true)])}
+                  >
+                    + Grupo
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setItems((r) => [...r, emptyItem()])}
+                  >
+                    + Ítem
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
@@ -662,42 +702,49 @@ export function QuoteForm({
           <div className="ds-scroll mt-4 overflow-x-auto">
             <div className="min-w-[900px]" ref={itemsBox}>
               <div
-                className={`grid ${gridCols} gap-2 border-b border-line px-2 pb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted`}
+                className="grid gap-2 border-b border-line px-2 pb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted"
+                style={{ gridTemplateColumns: itemGridTemplate }}
               >
-                <span />
+                {canEdit && <span />}
                 <span className="text-center text-purple">#</span>
                 <span>Descripción</span>
                 <span className="text-center">Cant.</span>
-                <span className="text-right">Precio cliente</span>
-                <span className="text-right">% Margen</span>
-                <span className="text-right">Precio costo</span>
+                {seeClientPrice && <span className="text-right">Precio cliente</span>}
+                {seeMargin && <span className="text-right">% Margen</span>}
+                {seeCost && <span className="text-right">Precio costo</span>}
                 <span>Proveedor</span>
                 <span className="text-right">Subtotal</span>
-                <span />
+                {canEdit && <span />}
               </div>
               <div className="mt-1.5 space-y-1.5">
                 {items.map((item, index) => {
                   if (!isVisible(item)) return null;
-                  const rowSubtotal = item.isGroup ? 0 : item.clientPrice * item.quantity;
+                  // El subtotal usa el precio que el rol ve (cliente para admin/viewer,
+                  // costo para el creador).
+                  const shownPrice = seeClientPrice ? item.clientPrice : item.costPrice;
+                  const rowSubtotal = item.isGroup ? 0 : shownPrice * item.quantity;
                   return (
                     <div
                       key={item.key}
-                      draggable
+                      draggable={canEdit}
                       onDragStart={() => (dragIndex.current = index)}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => onDrop(index)}
-                      className={`grid ${gridCols} items-start gap-2 rounded-[14px] border px-2 py-2 transition ${
+                      className={`grid items-start gap-2 rounded-[14px] border px-2 py-2 transition ${
                         item.isGroup
                           ? "border-l-2 border-l-purple border-y-transparent border-r-transparent bg-purple-soft/50"
                           : "border-line bg-surface-2/30 hover:border-line-strong hover:bg-surface-2/70"
                       }`}
+                      style={{ gridTemplateColumns: itemGridTemplate }}
                     >
-                      <span
-                        className="cursor-grab select-none pt-2 text-center text-faint transition hover:text-muted active:cursor-grabbing"
-                        title="Arrastra para reordenar"
-                      >
-                        ⋮⋮
-                      </span>
+                      {canEdit && (
+                        <span
+                          className="cursor-grab select-none pt-2 text-center text-faint transition hover:text-muted active:cursor-grabbing"
+                          title="Arrastra para reordenar"
+                        >
+                          ⋮⋮
+                        </span>
+                      )}
                       {item.isGroup ? (
                         <span className="pt-1.5 text-center text-purple">▾</span>
                       ) : (
@@ -709,6 +756,7 @@ export function QuoteForm({
                         data-autogrow
                         rows={1}
                         value={item.description}
+                        readOnly={!canEdit}
                         onChange={(e) => {
                           updateItem(item.key, { description: e.target.value });
                           autoGrow(e.currentTarget);
@@ -727,54 +775,64 @@ export function QuoteForm({
                           type="number"
                           min={1}
                           value={item.quantity}
+                          readOnly={!canEdit}
                           onChange={(e) =>
                             updateItem(item.key, { quantity: Number(e.target.value) })
                           }
                           className={`${inputCell} text-center`}
                         />
                       )}
-                      {item.isGroup ? (
-                        <span />
-                      ) : (
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={item.clientPrice ? formatThousands(item.clientPrice) : ""}
-                          placeholder="0"
-                          onChange={(e) => onClientPriceChange(item.key, parseThousands(e.target.value))}
-                          className={`${inputCell} text-right font-mono text-[13px]`}
-                        />
-                      )}
-                      {item.isGroup ? (
-                        <span />
-                      ) : (
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={Number(item.marginPct.toFixed(1))}
-                          onChange={(e) => onMarginChange(item.key, Number(e.target.value))}
-                          className={`${inputCell} text-right font-mono text-[13px] ${
-                            item.marginPct < 0 ? "text-warn" : ""
-                          }`}
-                        />
-                      )}
-                      {item.isGroup ? (
-                        <span />
-                      ) : (
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={item.costPrice ? formatThousands(item.costPrice) : ""}
-                          placeholder="0"
-                          onChange={(e) => onCostChange(item.key, parseThousands(e.target.value))}
-                          className={`${inputCell} text-right font-mono text-[13px]`}
-                        />
-                      )}
+                      {seeClientPrice &&
+                        (item.isGroup ? (
+                          <span />
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.clientPrice ? formatThousands(item.clientPrice) : ""}
+                            placeholder="0"
+                            readOnly={!canEdit}
+                            onChange={(e) =>
+                              onClientPriceChange(item.key, parseThousands(e.target.value))
+                            }
+                            className={`${inputCell} text-right font-mono text-[13px]`}
+                          />
+                        ))}
+                      {seeMargin &&
+                        (item.isGroup ? (
+                          <span />
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={Number(item.marginPct.toFixed(1))}
+                            readOnly={!canEdit}
+                            onChange={(e) => onMarginChange(item.key, Number(e.target.value))}
+                            className={`${inputCell} text-right font-mono text-[13px] ${
+                              item.marginPct < 0 ? "text-warn" : ""
+                            }`}
+                          />
+                        ))}
+                      {seeCost &&
+                        (item.isGroup ? (
+                          <span />
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.costPrice ? formatThousands(item.costPrice) : ""}
+                            placeholder="0"
+                            readOnly={!canEdit}
+                            onChange={(e) => onCostChange(item.key, parseThousands(e.target.value))}
+                            className={`${inputCell} text-right font-mono text-[13px]`}
+                          />
+                        ))}
                       {item.isGroup ? (
                         <span />
                       ) : (
                         <input
                           value={item.supplier}
+                          readOnly={!canEdit}
                           onChange={(e) => updateItem(item.key, { supplier: e.target.value })}
                           placeholder="—"
                           className={`${inputCell} text-[13px]`}
@@ -783,14 +841,16 @@ export function QuoteForm({
                       <span className="pt-2 text-right font-mono text-[13px] font-bold text-ink">
                         {item.isGroup ? "" : formatMoney(rowSubtotal, currency)}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.key)}
-                        aria-label="Eliminar fila"
-                        className="cursor-pointer pt-2.5 text-center text-faint transition hover:text-danger"
-                      >
-                        ✕
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.key)}
+                          aria-label="Eliminar fila"
+                          className="cursor-pointer pt-2.5 text-center text-faint transition hover:text-danger"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -799,8 +859,8 @@ export function QuoteForm({
           </div>
         </section>
 
-        {/* Órdenes a proveedores (solo con la cotización aceptada) */}
-        {quoteId && isAccepted && supplierGroups.length > 0 && (
+        {/* Órdenes a proveedores (solo con la cotización aceptada; gestión interna) */}
+        {quoteId && isAccepted && canManageInternal && supplierGroups.length > 0 && (
           <section className="rounded-lg border border-line bg-surface p-6">
             <h2 className="text-lg font-bold tracking-tight">Órdenes a proveedores</h2>
             <p className="mt-0.5 text-[13px] text-muted">
@@ -883,7 +943,8 @@ export function QuoteForm({
           </section>
         )}
 
-        {/* Destinatarios */}
+        {/* Destinatarios (solo quien puede enviar al cliente) */}
+        {canSend && (
         <section className="rounded-lg border border-line bg-surface p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -938,6 +999,7 @@ export function QuoteForm({
             </div>
           )}
         </section>
+        )}
       </div>
 
       {/* Panel lateral */}
@@ -957,20 +1019,22 @@ export function QuoteForm({
                 </Badge>
               )}
             </div>
-            <Select
-              className="mt-3"
-              value={status}
-              onChange={(e) => onStatusChange(e.target.value)}
-              disabled={isPending}
-              aria-label="Cambiar estado"
-            >
-              {statuses.length === 0 && <option value={status}>{status}</option>}
-              {statuses.map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
+            {canManageInternal && (
+              <Select
+                className="mt-3"
+                value={status}
+                onChange={(e) => onStatusChange(e.target.value)}
+                disabled={isPending}
+                aria-label="Cambiar estado"
+              >
+                {statuses.length === 0 && <option value={status}>{status}</option>}
+                {statuses.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+            )}
 
             {/* Progreso del deal */}
             <div className="mt-4">
@@ -1030,18 +1094,22 @@ export function QuoteForm({
               <dt className="font-semibold">Total</dt>
               <dd className="font-mono font-bold text-green">{formatMoney(totals.total, currency)}</dd>
             </div>
-            <div className="flex justify-between border-t border-line pt-2.5">
-              <dt className="text-muted">Costo total</dt>
-              <dd className="font-mono">{formatMoney(totals.subtotalCost, currency)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted">Margen</dt>
-              <dd
-                className={`font-mono font-bold ${totals.margin >= 0 ? "text-green" : "text-warn"}`}
-              >
-                {formatMoney(totals.margin, currency)} · {totals.marginPercentage.toFixed(1)}%
-              </dd>
-            </div>
+            {seeCost && (
+              <div className="flex justify-between border-t border-line pt-2.5">
+                <dt className="text-muted">Costo total</dt>
+                <dd className="font-mono">{formatMoney(totals.subtotalCost, currency)}</dd>
+              </div>
+            )}
+            {seeMargin && (
+              <div className="flex justify-between">
+                <dt className="text-muted">Margen</dt>
+                <dd
+                  className={`font-mono font-bold ${totals.margin >= 0 ? "text-green" : "text-warn"}`}
+                >
+                  {formatMoney(totals.margin, currency)} · {totals.marginPercentage.toFixed(1)}%
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between border-t border-line pt-2.5">
               <dt className="text-muted">Ítems</dt>
               <dd className="font-mono">{totals.itemCount}</dd>
@@ -1065,8 +1133,8 @@ export function QuoteForm({
           </dl>
         </div>
 
-        {/* Documentos comerciales (solo aceptada) */}
-        {quoteId && isAccepted && (
+        {/* Documentos comerciales (solo aceptada; gestión interna) */}
+        {quoteId && isAccepted && canManageInternal && (
           <div className="rounded-lg border border-line bg-surface p-6">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
               Documentos comerciales
@@ -1103,7 +1171,8 @@ export function QuoteForm({
           </div>
         )}
 
-        {/* Brief */}
+        {/* Brief (gestión interna) */}
+        {canManageInternal && (
         <div className="rounded-lg border border-line bg-surface p-6">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Brief</h3>
           {briefUrl ? (
@@ -1132,8 +1201,10 @@ export function QuoteForm({
             {briefUrl ? "Reemplazar brief" : "Adjuntar brief"}
           </Button>
         </div>
+        )}
 
         {/* Guardado + envío */}
+        {(canEdit || canSend) && (
         <div className="rounded-lg border border-line bg-surface p-6">
           <div
             className={`text-[13px] ${saveState.kind === "error" ? "text-danger" : "text-muted"}`}
@@ -1141,25 +1212,30 @@ export function QuoteForm({
           >
             {clientId ? saveLabel : "Selecciona un cliente para empezar a guardar."}
           </div>
-          <Button
-            className="mt-3 w-full"
-            disabled={!clientId || saveState.kind === "saving"}
-            onClick={() => {
-              clearTimeout(saveTimer.current);
-              persist();
-            }}
-          >
-            Guardar borrador
-          </Button>
-          <Button
-            variant="secondary"
-            className="mt-2 w-full"
-            disabled={!clientId || isPending}
-            onClick={onSend}
-          >
-            {initial && initial.status !== "draft" ? "Reenviar al cliente" : "Enviar al cliente"}
-          </Button>
+          {canEdit && (
+            <Button
+              className="mt-3 w-full"
+              disabled={!clientId || saveState.kind === "saving"}
+              onClick={() => {
+                clearTimeout(saveTimer.current);
+                persist();
+              }}
+            >
+              Guardar borrador
+            </Button>
+          )}
+          {canSend && (
+            <Button
+              variant="secondary"
+              className="mt-2 w-full"
+              disabled={!clientId || isPending}
+              onClick={onSend}
+            >
+              {initial && initial.status !== "draft" ? "Reenviar al cliente" : "Enviar al cliente"}
+            </Button>
+          )}
         </div>
+        )}
 
         {/* PDF */}
         {quoteId && (
@@ -1174,7 +1250,7 @@ export function QuoteForm({
               >
                 Ver PDF cliente
               </a>
-              {canSeeCosts && (
+              {seeMargin && (
                 <a
                   href={`/crm/${quoteId}/imprimir?vista=interna`}
                   target="_blank"
@@ -1218,8 +1294,8 @@ export function QuoteForm({
           </div>
         )}
 
-        {/* Eliminar */}
-        {quoteId && (
+        {/* Eliminar (gestión interna) */}
+        {quoteId && canManageInternal && (
           <div className="rounded-lg border border-danger/40 bg-surface p-6">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Acciones</h3>
             {confirmDelete ? (

@@ -37,14 +37,17 @@ function addToBucket(bucket: QuoteKpi, currency: string, amount: number) {
  * de la lista) por bucket, individualizando el importe por moneda. "total" acumula
  * todas las cotizaciones; los estados sin bucket propio (draft, modified, purchased,
  * review_future) solo cuentan ahí. */
-export function summarizeQuoteKpis(rows: QuoteKpiSource[]): Record<QuoteKpiKey, QuoteKpi> {
+export function summarizeQuoteKpis(
+  rows: QuoteKpiSource[],
+  role = "kam",
+): Record<QuoteKpiKey, QuoteKpi> {
   const kpis = Object.fromEntries(
     QUOTE_KPI_KEYS.map((key) => [key, { count: 0, amounts: {} as Record<string, number> }]),
   ) as Record<QuoteKpiKey, QuoteKpi>;
 
   for (const row of rows) {
     const { total } = calcQuote(row.items, {
-      role: "kam",
+      role,
       hasIva: row.hasIva,
       ivaPercentage: row.ivaPercentage,
     });

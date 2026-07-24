@@ -4,9 +4,9 @@ import { MainNav } from "@/components/main-nav";
 
 const CRM_NAV_ITEMS: { href: string; label: string; permission?: string }[] = [
   { href: "/crm", label: "Cotizaciones" },
-  { href: "/crm/kanban", label: "Kanban" },
-  { href: "/crm/dashboard", label: "Dashboard" },
-  { href: "/crm/clientes", label: "Clientes" },
+  { href: "/crm/kanban", label: "Kanban", permission: "quote.pipeline" },
+  { href: "/crm/dashboard", label: "Dashboard", permission: "quote.dashboard" },
+  { href: "/crm/clientes", label: "Clientes", permission: "client.manage" },
   { href: "/crm/kams", label: "KAMs / PMs", permission: "kam.manage" },
   { href: "/crm/estados", label: "Estados", permission: "quote_status.manage" },
 ];

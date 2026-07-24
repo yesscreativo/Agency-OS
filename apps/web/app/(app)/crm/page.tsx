@@ -9,7 +9,7 @@ import {
 } from "@agency-os/domain";
 import { listKams, listQuotes, listQuoteStatsRows, type QuoteListRow } from "@agency-os/db";
 import { Avatar, Badge, KpiCard, KpiDot, Table, Td, Th } from "@agency-os/ui";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { QUOTE_KPI_LABELS, QUOTE_KPI_TONES } from "@/lib/quote-ui";
 import { getQuoteStatusMap, resolveStatus, statusOptions } from "@/lib/quote-status-catalog";
@@ -28,7 +28,7 @@ interface SearchParams {
   pagina?: string;
 }
 
-function quoteCalc(row: QuoteListRow): QuoteCalcResult {
+function quoteCalc(row: QuoteListRow, role: string): QuoteCalcResult {
   return calcQuote(
     row.quote_items.map((item) => ({
       clientPrice: item.client_price,
@@ -36,7 +36,7 @@ function quoteCalc(row: QuoteListRow): QuoteCalcResult {
       quantity: item.quantity,
       isGroup: item.is_group,
     })),
-    { role: "kam", hasIva: row.has_iva, ivaPercentage: row.iva_percentage },
+    { role, hasIva: row.has_iva, ivaPercentage: row.iva_percentage },
   );
 }
 
@@ -80,6 +80,7 @@ export default async function QuotesListPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const access = quoteAccess(user);
 
   // Cualquier código del catálogo (incluidos custom) es válido; un code inexistente
   // simplemente filtra a 0 resultados.
@@ -124,6 +125,7 @@ export default async function QuotesListPage({
         isGroup: i.is_group,
       })),
     })),
+    access.priceRole,
   );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -140,12 +142,14 @@ export default async function QuotesListPage({
             Crea y gestiona todas las cotizaciones de la agencia
           </p>
         </div>
-        <a
-          href="/crm/nueva"
-          className="rounded-pill bg-green px-[22px] py-[11px] text-sm font-semibold text-green-ink transition hover:brightness-105"
-        >
-          + Nueva cotización
-        </a>
+        {access.canCreate && (
+          <a
+            href="/crm/nueva"
+            className="rounded-pill bg-green px-[22px] py-[11px] text-sm font-semibold text-green-ink transition hover:brightness-105"
+          >
+            + Nueva cotización
+          </a>
+        )}
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
@@ -204,19 +208,23 @@ export default async function QuotesListPage({
             <p className="max-w-[44ch] text-sm text-muted">
               {hasFilters
                 ? "Ninguna cotización coincide con los filtros. Ajusta la búsqueda o límpialos."
-                : "Crea la primera cotización para empezar a trabajar con el CRM."}
+                : access.canCreate
+                  ? "Crea la primera cotización para empezar a trabajar con el CRM."
+                  : "Aún no hay cotizaciones para mostrar."}
             </p>
             {hasFilters ? (
               <a href="/crm" className="text-sm font-semibold text-green hover:underline">
                 Limpiar filtros
               </a>
             ) : (
-              <a
-                href="/crm/nueva"
-                className="mt-2 rounded-pill bg-green px-[22px] py-[11px] text-sm font-semibold text-green-ink transition hover:brightness-105"
-              >
-                + Nueva cotización
-              </a>
+              access.canCreate && (
+                <a
+                  href="/crm/nueva"
+                  className="mt-2 rounded-pill bg-green px-[22px] py-[11px] text-sm font-semibold text-green-ink transition hover:brightness-105"
+                >
+                  + Nueva cotización
+                </a>
+              )
             )}
           </div>
         ) : (
@@ -227,15 +235,15 @@ export default async function QuotesListPage({
                 <Th>Nombre / Cliente</Th>
                 <Th>Estado</Th>
                 <Th>Moneda</Th>
-                <Th className="text-right">Total cliente</Th>
-                <Th className="text-right">Margen</Th>
+                <Th className="text-right">{access.seeClientPrice ? "Total cliente" : "Costo total"}</Th>
+                {access.seeMargin && <Th className="text-right">Margen</Th>}
                 <Th>Fecha</Th>
                 <Th className="text-right"> </Th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => {
-                const totals = quoteCalc(row);
+                const totals = quoteCalc(row, access.priceRole);
                 return (
                   <tr key={row.id} className="transition hover:bg-surface-2">
                     <Td>
@@ -278,21 +286,22 @@ export default async function QuotesListPage({
                     <Td className="whitespace-nowrap text-right font-mono text-sm font-bold">
                       {formatMoney(totals.total, row.currency)}
                     </Td>
-                    {/* TODO(roles): ocultar Margen a quien no tenga quote.see_costs */}
-                    <Td
-                      className={`whitespace-nowrap text-right font-mono text-sm font-semibold ${
-                        totals.margin < 0 ? "text-warn" : "text-green"
-                      }`}
-                    >
-                      {formatMoney(totals.margin, row.currency)}
-                    </Td>
+                    {access.seeMargin && (
+                      <Td
+                        className={`whitespace-nowrap text-right font-mono text-sm font-semibold ${
+                          totals.margin < 0 ? "text-warn" : "text-green"
+                        }`}
+                      >
+                        {formatMoney(totals.margin, row.currency)}
+                      </Td>
+                    )}
                     <Td className="whitespace-nowrap text-muted">{formatDate(row.created_at)}</Td>
                     <Td className="text-right">
                       <a
                         href={`/crm/${row.id}`}
                         className="inline-block rounded-pill border border-line-strong px-4 py-1.5 text-xs font-semibold text-ink transition hover:border-green"
                       >
-                        Editar
+                        {access.canEdit ? "Editar" : "Ver"}
                       </a>
                     </Td>
                   </tr>

@@ -23,7 +23,7 @@ export async function sendSupplierOrder(
 ): Promise<{ ok?: true; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.update")) {
+  if (!hasPermission(user, "quote.approve")) {
     return { error: "No tienes permiso para enviar órdenes a proveedores." };
   }
   const supplierName = input.supplierName.trim();

@@ -8,7 +8,7 @@ import {
 } from "@agency-os/db";
 import { calcQuote } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { QuoteForm, type QuoteFormInitial } from "@/components/crm/quote-form";
@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function QuoteDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const access = quoteAccess(user);
 
   const db = await getSupabaseServerClient();
   const quote = await getQuoteById(db, params.id);
@@ -66,7 +67,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
         quantity: it.quantity ?? 1,
         isGroup: it.is_group ?? false,
       })),
-      { role: "kam", hasIva: snap.has_iva ?? false, ivaPercentage: snap.iva_percentage ?? 0 },
+      { role: access.priceRole, hasIva: snap.has_iva ?? false, ivaPercentage: snap.iva_percentage ?? 0 },
     );
     return {
       version_number: v.version_number,
@@ -117,11 +118,14 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     createdAt: quote.created_at,
     sentAt: quote.sent_at,
     currentVersion: versionViews[0]?.version_number ?? null,
+    // Enmascarado en el servidor: el precio que el rol no puede ver NO viaja al
+    // navegador (se envía 0). El id permite conservarlo al guardar (ver saveQuoteDraft).
     items: quote.quote_items.map((item) => ({
+      id: item.id,
       description: item.description,
       quantity: item.quantity,
-      clientPrice: item.client_price,
-      costPrice: item.cost_price,
+      clientPrice: access.seeClientPrice ? item.client_price : 0,
+      costPrice: access.seeCost ? item.cost_price : 0,
       supplier: item.supplier ?? "",
       isGroup: item.is_group,
     })),
@@ -150,7 +154,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
         initial={initial}
         clients={clients.map((c) => ({ id: c.id, name: c.name, company: c.company }))}
         kams={kamOptions}
-        canSeeCosts={hasPermission(user, "quote.see_costs")}
+        access={access}
         briefSignedUrl={briefSignedUrl}
         versions={versionViews}
         statuses={statuses}
