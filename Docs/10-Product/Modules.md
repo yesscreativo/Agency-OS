@@ -15,5 +15,8 @@ RRHH.
 ## Inteligencia
 Dashboards, IA.
 
+## Cultura
+Dojo (engagement gamificado: avatares samurái, presencia, progresión). (V2)
+
 ## Configuración
 Workflows, Notificaciones, Campos personalizados.
