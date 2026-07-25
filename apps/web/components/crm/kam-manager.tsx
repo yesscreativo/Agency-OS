@@ -2,28 +2,47 @@
 
 import { useState, useTransition } from "react";
 import { formatDate } from "@agency-os/domain";
-import { Badge, Button, Input, Label, Modal, Table, Td, Th } from "@agency-os/ui";
-import { createKam, renameKam, toggleKam } from "@/lib/kam-actions";
+import { Badge, Button, Input, Label, Modal, Select, Table, Td, Th } from "@agency-os/ui";
+import { createKam, renameKam, setKamUser, toggleKam } from "@/lib/kam-actions";
 
 export interface KamManagerRow {
   id: string;
   name: string;
   isActive: boolean;
   createdAt: string;
+  userId: string | null;
+}
+
+export interface KamUserOption {
+  id: string;
+  name: string;
 }
 
 /** Modal en edición: null cerrado, "new" para crear, o la fila que se renombra. */
 type Editing = null | "new" | KamManagerRow;
 
-export function KamManager({ kams, embedded = false }: { kams: KamManagerRow[]; embedded?: boolean }) {
+export function KamManager({
+  kams,
+  users = [],
+  embedded = false,
+}: {
+  kams: KamManagerRow[];
+  users?: KamUserOption[];
+  embedded?: boolean;
+}) {
   const [editing, setEditing] = useState<Editing>(null);
   const [name, setName] = useState("");
+  const [userId, setUserId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const userName = (id: string | null) =>
+    id ? (users.find((u) => u.id === id)?.name ?? "—") : null;
 
   const openModal = (target: Exclude<Editing, null>) => {
     setEditing(target);
     setName(target === "new" ? "" : target.name);
+    setUserId(target === "new" ? "" : (target.userId ?? ""));
     setError(null);
   };
 
@@ -31,12 +50,22 @@ export function KamManager({ kams, embedded = false }: { kams: KamManagerRow[]; 
     if (!editing) return;
     startTransition(async () => {
       const result =
-        editing === "new" ? await createKam(name) : await renameKam(editing.id, name);
+        editing === "new"
+          ? await createKam(name, userId || null)
+          : await renameKam(editing.id, name);
       if (result.error) {
         setError(result.error);
-      } else {
-        setEditing(null);
+        return;
       }
+      // Al renombrar una existente, actualizamos también el vínculo de usuario.
+      if (editing !== "new") {
+        const link = await setKamUser(editing.id, userId || null);
+        if (link.error) {
+          setError(link.error);
+          return;
+        }
+      }
+      setEditing(null);
     });
   };
 
@@ -75,6 +104,7 @@ export function KamManager({ kams, embedded = false }: { kams: KamManagerRow[]; 
             <thead>
               <tr>
                 <Th>Nombre</Th>
+                <Th>Usuario vinculado</Th>
                 <Th>Estado</Th>
                 <Th>Creado</Th>
                 <Th className="text-right"> </Th>
@@ -84,6 +114,9 @@ export function KamManager({ kams, embedded = false }: { kams: KamManagerRow[]; 
               {kams.map((kam) => (
                 <tr key={kam.id} className="transition hover:bg-surface-2">
                   <Td className="text-sm font-semibold">{kam.name}</Td>
+                  <Td className="text-sm text-muted">
+                    {userName(kam.userId) ?? <span className="text-faint">Sin vincular</span>}
+                  </Td>
                   <Td>
                     <Badge tone={kam.isActive ? "success" : "neutral"}>
                       {kam.isActive ? "Activo" : "Inactivo"}
@@ -139,6 +172,17 @@ export function KamManager({ kams, embedded = false }: { kams: KamManagerRow[]; 
           placeholder="Nombre y apellido"
           autoFocus
         />
+        <div className="mt-4">
+          <Label htmlFor="kam-user">Usuario vinculado (para notificaciones)</Label>
+          <Select id="kam-user" value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <option value="">Sin vincular</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </Select>
+        </div>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Modal>
     </div>

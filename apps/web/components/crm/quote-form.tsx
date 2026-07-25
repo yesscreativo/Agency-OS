@@ -32,6 +32,11 @@ import {
 } from "@/lib/quote-actions";
 import { sendSupplierOrder } from "@/lib/supplier-order-actions";
 import type { QuoteAccess } from "@/lib/auth";
+import {
+  QUOTE_ITEM_STATUS_META,
+  summarizeClientResponse,
+  type QuoteItemStatus,
+} from "@/lib/quote-item-status";
 
 export interface QuoteFormInitial {
   id: string;
@@ -101,10 +106,17 @@ let keySeq = 0;
 const nextKey = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `row-${++keySeq}`;
 
+/** id estable de BD para un ítem nuevo (uuid), generado en el cliente para que el
+ * upsert por id conserve la respuesta del cliente y los precios entre guardados. */
+const newItemId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${++keySeq}`;
+
 function emptyItem(isGroup = false): ItemRow {
   return {
     key: nextKey(),
-    id: undefined,
+    id: newItemId(),
     description: "",
     quantity: 1,
     clientPrice: 0,
@@ -520,6 +532,19 @@ export function QuoteForm({
     return [...map.values()];
   }, [items]);
 
+  // Respuesta del cliente (solo lectura, tomada del snapshot del server para que
+  // no cambie mientras el equipo edita la cotización).
+  const clientResponse = useMemo(() => {
+    if (!initial) return null;
+    const realItems = initial.items.filter((it) => !it.isGroup);
+    const statuses = realItems.map((it) => (it.status ?? "pending") as QuoteItemStatus);
+    const summary = summarizeClientResponse(statuses);
+    const recipient =
+      initial.recipients.find((r) => r.viewedAt || r.clientComment) ?? null;
+    if (!summary && !recipient?.viewedAt) return null;
+    return { realItems, summary, recipient };
+  }, [initial]);
+
   // Plantilla de columnas de la grilla de ítems, dinámica según qué precios ve el
   // rol y si puede editar (arrastrar/eliminar). Se usa como estilo inline porque
   // Tailwind no puede generar clases arbitrarias en runtime.
@@ -858,6 +883,64 @@ export function QuoteForm({
             </div>
           </div>
         </section>
+
+        {/* Respuesta del cliente (solo lectura; llega del enlace público) */}
+        {clientResponse && (
+          <section className="rounded-lg border border-line bg-surface p-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
+                Respuesta del cliente
+              </h2>
+              {clientResponse.summary && (
+                <Badge
+                  tone={clientResponse.summary.tone}
+                  color={clientResponse.summary.color}
+                >
+                  {clientResponse.summary.label}
+                </Badge>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {clientResponse.realItems.map((it, i) => {
+                const meta = QUOTE_ITEM_STATUS_META[(it.status ?? "pending") as QuoteItemStatus];
+                return (
+                  <div
+                    key={i}
+                    className="rounded-[12px] border border-line bg-bg/40 px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm font-semibold">
+                        {it.description || "—"}
+                      </span>
+                      <Badge tone={meta.tone} color={meta.color}>
+                        {meta.label}
+                      </Badge>
+                    </div>
+                    {it.clientComment && (
+                      <p className="mt-1.5 text-[13px] text-muted">“{it.clientComment}”</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {(clientResponse.recipient?.clientComment ||
+              clientResponse.recipient?.viewedAt) && (
+              <div className="mt-4 border-t border-line pt-3 text-[13px] text-muted">
+                {clientResponse.recipient?.clientComment && (
+                  <p className="text-ink">“{clientResponse.recipient.clientComment}”</p>
+                )}
+                {clientResponse.recipient?.viewedAt && (
+                  <p className="mt-1">
+                    {clientResponse.recipient.name || "Cliente"} · visto el{" "}
+                    {formatDate(clientResponse.recipient.viewedAt)}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Órdenes a proveedores (solo con la cotización aceptada; gestión interna) */}
         {quoteId && isAccepted && canManageInternal && supplierGroups.length > 0 && (

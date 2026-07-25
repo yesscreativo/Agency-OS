@@ -2,12 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  createNotifications,
   createQuote,
   createQuoteVersion,
+  createSupabaseServiceRoleClient,
   getQuoteById,
   nextQuoteSeq,
   replaceQuoteItems,
   replaceQuoteRecipients,
+  resolveQuoteNotifyUserIds,
   softDeleteQuote,
   updateQuote,
   type TablesUpdate,
@@ -15,11 +18,13 @@ import {
 import { buildQuoteCode, calcQuote, validateBriefSize, validateQuote } from "@agency-os/domain";
 import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { emitWebhook } from "@/lib/webhooks";
 
 export interface QuoteItemInput {
-  /** id del ítem existente; solo se usa para conservar precios enmascarados
-   * (un rol que no ve un precio no puede sobrescribirlo). Los ítems nuevos no lo traen. */
+  /** id del ítem existente; se usa para conservar precios enmascarados
+   * (un rol que no ve un precio no puede sobrescribirlo) y la respuesta del
+   * cliente (status/comentario) al guardar. Los ítems nuevos no lo traen. */
   id?: string;
   description: string;
   quantity: number;
@@ -27,11 +32,17 @@ export interface QuoteItemInput {
   costPrice: number;
   supplier: string;
   isGroup: boolean;
+  /** Respuesta del cliente por ítem (solo display; no se reescribe al guardar). */
+  status?: "pending" | "accepted" | "rejected" | "changes";
+  clientComment?: string | null;
 }
 
 export interface QuoteRecipientInput {
   name: string;
   email: string;
+  /** Solo display: cuándo abrió el enlace y su comentario general. */
+  viewedAt?: string | null;
+  clientComment?: string | null;
 }
 
 export interface QuoteDraftInput {
@@ -74,25 +85,26 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   const db = await getSupabaseServerClient();
 
-  // Precios enmascarados: quien no ve un precio no puede sobrescribirlo. Se conserva
-  // el valor almacenado (buscado por id de ítem); los ítems nuevos quedan en 0 hasta
-  // que un rol con permiso los complete. Solo consultamos la BD si hace falta.
+  // Precios enmascarados: quien no ve un precio no puede sobrescribirlo; se conserva
+  // el valor almacenado (buscado por id ESTABLE de ítem). El status/comentario del
+  // cliente NO se toca aquí: replaceQuoteItems hace upsert sin esas columnas, así el
+  // valor existente se mantiene y los ítems nuevos quedan en `pending`.
   const access = quoteAccess(user);
-  const storedPrices = new Map<string, { client_price: number; cost_price: number }>();
+  const stored = new Map<string, { client_price: number; cost_price: number }>();
   if (input.id && (!access.seeClientPrice || !access.seeCost)) {
     const existing = await getQuoteById(db, input.id);
     for (const it of existing?.quote_items ?? []) {
-      storedPrices.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
+      stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
     }
   }
   const resolveClientPrice = (item: QuoteItemInput) =>
     access.seeClientPrice
       ? sanitizeNumber(item.clientPrice)
-      : (item.id && storedPrices.get(item.id)?.client_price) || 0;
+      : (item.id && stored.get(item.id)?.client_price) || 0;
   const resolveCostPrice = (item: QuoteItemInput) =>
     access.seeCost
       ? sanitizeNumber(item.costPrice)
-      : (item.id && storedPrices.get(item.id)?.cost_price) || 0;
+      : (item.id && stored.get(item.id)?.cost_price) || 0;
 
   const values: TablesUpdate<"quotes"> = {
     client_id: input.clientId,
@@ -128,6 +140,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
       input.items
         .filter((item) => item.description.trim() || item.isGroup)
         .map((item) => ({
+          id: item.id ?? crypto.randomUUID(),
           description: item.description.trim(),
           quantity: Math.max(1, Math.round(sanitizeNumber(item.quantity, 1))),
           client_price: resolveClientPrice(item),
@@ -224,6 +237,7 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       code,
       status: "sent",
       sent_at: new Date().toISOString(),
+      sent_by: user.id,
     });
 
     const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -284,6 +298,33 @@ export async function setQuoteStatus(
     else if (statusCode === "closed") values.closed_at = now;
 
     await updateQuote(db, quoteId, values);
+
+    // Notifica en la plataforma a quien envió + KAM vinculado (excepto el actor).
+    // Se usa service_role: insertar filas de otros usuarios no lo permite la RLS.
+    try {
+      const quote = await getQuoteById(db, quoteId);
+      if (quote) {
+        const notifyIds = await resolveQuoteNotifyUserIds(db, quote, user.id);
+        if (notifyIds.length > 0) {
+          const label = resolveStatus(await getQuoteStatusMap(db), statusCode).label;
+          const service = createSupabaseServiceRoleClient();
+          await createNotifications(
+            service,
+            notifyIds.map((uid) => ({
+              organization_id: quote.organization_id,
+              user_id: uid,
+              type: "status_change",
+              quote_id: quote.id,
+              title: `Cotización ${quote.code ?? ""} → ${label}`.trim(),
+              body: `${user.fullName} cambió el estado.`,
+            })),
+          );
+        }
+      }
+    } catch (notifyError) {
+      console.error("setQuoteStatus:notify", notifyError);
+    }
+
     revalidatePath("/crm");
     revalidatePath(`/crm/${quoteId}`);
     return { id: quoteId };

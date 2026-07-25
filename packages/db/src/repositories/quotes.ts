@@ -181,17 +181,32 @@ export async function softDeleteQuote(db: Db, id: string) {
 
 /** Reemplaza el set de ítems de una cotización (estrategia del autosave:
  * borrar+insertar mantiene el sort_order simple y atómico a nivel de fila). */
+/** Sincroniza los ítems por id ESTABLE (el cliente genera el uuid de los nuevos):
+ * borra los que ya no están, y hace upsert del resto. NO incluye status/client_comment
+ * en el payload, así el upsert conserva la respuesta del cliente de las filas existentes
+ * (y las nuevas quedan con el default `pending`). Los ids estables evitan que un
+ * reguardado/autosave pierda la respuesta o los precios preservados por rol. */
 export async function replaceQuoteItems(
   db: Db,
   quoteId: string,
-  items: Omit<TablesInsert<"quote_items">, "quote_id">[],
+  items: (Omit<TablesInsert<"quote_items">, "quote_id"> & { id: string })[],
 ) {
-  const { error: deleteError } = await db.from("quote_items").delete().eq("quote_id", quoteId);
+  if (items.length === 0) {
+    const { error } = await db.from("quote_items").delete().eq("quote_id", quoteId);
+    if (error) throw error;
+    return [];
+  }
+  const ids = items.map((i) => i.id);
+  const { error: deleteError } = await db
+    .from("quote_items")
+    .delete()
+    .eq("quote_id", quoteId)
+    .not("id", "in", `(${ids.join(",")})`);
   if (deleteError) throw deleteError;
-  if (items.length === 0) return [];
+
   const { data, error } = await db
     .from("quote_items")
-    .insert(items.map((item, i) => ({ ...item, quote_id: quoteId, sort_order: i })))
+    .upsert(items.map((item, i) => ({ ...item, quote_id: quoteId, sort_order: i })))
     .select();
   if (error) throw error;
   return data;

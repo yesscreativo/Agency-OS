@@ -128,8 +128,15 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
       costPrice: access.seeCost ? item.cost_price : 0,
       supplier: item.supplier ?? "",
       isGroup: item.is_group,
+      status: item.status,
+      clientComment: item.client_comment,
     })),
-    recipients: quote.quote_recipients.map((r) => ({ name: r.name, email: r.email })),
+    recipients: quote.quote_recipients.map((r) => ({
+      name: r.name,
+      email: r.email,
+      viewedAt: r.viewed_at,
+      clientComment: r.client_comment,
+    })),
   };
 
   return (

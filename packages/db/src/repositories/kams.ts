@@ -25,7 +25,7 @@ export async function createKam(db: Db, values: TablesInsert<"kams">): Promise<K
 export async function updateKam(
   db: Db,
   id: string,
-  values: Partial<Pick<KamRow, "name" | "is_active">>,
+  values: Partial<Pick<KamRow, "name" | "is_active" | "user_id">>,
 ): Promise<KamRow> {
   const { data, error } = await db.from("kams").update(values).eq("id", id).select().single();
   if (error) throw error;
