@@ -81,6 +81,8 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const supplierOrders = supplierOrderRows.map((o) => ({
     supplierName: o.supplier_name,
     supplierEmail: o.supplier_email,
+    message: o.message,
+    token: o.token,
     status: o.status,
     sentAt: o.sent_at,
     confirmedAt: o.confirmed_at,

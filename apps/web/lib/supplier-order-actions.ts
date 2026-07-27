@@ -23,7 +23,7 @@ export async function sendSupplierOrder(
 ): Promise<{ ok?: true; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
-  if (!hasPermission(user, "quote.approve")) {
+  if (!hasPermission(user, "quote.supplier_order")) {
     return { error: "No tienes permiso para enviar órdenes a proveedores." };
   }
   const supplierName = input.supplierName.trim();
@@ -53,11 +53,13 @@ export async function sendSupplierOrder(
       Date.now() + SUPPLIER_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
 
+    const message = input.message.trim() || null;
     const order = await upsertSupplierOrder(db, {
       quoteId,
       supplierName,
       supplierEmail,
       items,
+      message,
       expiresAt,
     });
 
@@ -68,7 +70,7 @@ export async function sendSupplierOrder(
       code: quote.code,
       supplier: order.supplier_name,
       email: order.supplier_email,
-      message: input.message.trim() || null,
+      message,
       token: order.token,
       supplier_url: `${appUrl}/proveedor/${order.token}`,
       currency: quote.currency,

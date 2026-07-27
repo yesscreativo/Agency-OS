@@ -761,6 +761,7 @@ export type Database = {
           expires_at: string
           id: string
           items: Json
+          message: string | null
           quote_id: string
           sent_at: string | null
           status: Database["public"]["Enums"]["supplier_order_status"]
@@ -776,6 +777,7 @@ export type Database = {
           expires_at?: string
           id?: string
           items?: Json
+          message?: string | null
           quote_id: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["supplier_order_status"]
@@ -791,6 +793,7 @@ export type Database = {
           expires_at?: string
           id?: string
           items?: Json
+          message?: string | null
           quote_id?: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["supplier_order_status"]

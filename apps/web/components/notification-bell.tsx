@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@agency-os/domain";
-import { markNotificationsRead } from "@/lib/notification-actions";
+import { fetchNotificationState, markNotificationsRead } from "@/lib/notification-actions";
 
 export interface NotificationItem {
   id: string;
@@ -14,6 +14,61 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+/** Cada cuánto se consulta el estado de notificaciones mientras la app está
+ * abierta. Sin push: es un polling ligero, no realtime. */
+const POLL_MS = 25_000;
+
+const hrefFor = (n: NotificationItem) => (n.quoteId ? `/crm/${n.quoteId}` : "/notificaciones");
+
+/** "Ding" corto sintetizado con Web Audio API (dos tonos), para no depender de
+ * un archivo de audio. Silencioso ante cualquier error o bloqueo de autoplay. */
+function playChime() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    void ctx.resume();
+    const base = ctx.currentTime;
+    [880, 1174.7].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = base + i * 0.12;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.14, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.3);
+    });
+    setTimeout(() => void ctx.close().catch(() => {}), 800);
+  } catch {
+    /* audio no disponible: se ignora */
+  }
+}
+
+/** Notificación del sistema (app abierta). Requiere permiso concedido; al hacer
+ * clic enfoca la ventana y navega a la cotización. */
+function systemNotify(item: NotificationItem) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const n = new Notification(item.title, {
+      body: item.body ?? undefined,
+      tag: item.id,
+    });
+    n.onclick = () => {
+      window.focus();
+      window.location.href = hrefFor(item);
+      n.close();
+    };
+  } catch {
+    /* notificaciones no disponibles: se ignora */
+  }
+}
+
 export function NotificationBell({
   initial,
   unread,
@@ -22,14 +77,60 @@ export function NotificationBell({
   unread: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<NotificationItem[]>(initial);
+  const [unreadCount, setUnreadCount] = useState(unread);
   const router = useRouter();
+  const seenIds = useRef<Set<string>>(new Set(initial.map((n) => n.id)));
+
+  // Re-sincroniza con el servidor cuando cambian los props (navegación / refresh).
+  useEffect(() => {
+    setItems(initial);
+    setUnreadCount(unread);
+    for (const n of initial) seenIds.current.add(n.id);
+  }, [initial, unread]);
+
+  // Polling en vivo (app abierta). Al detectar notificaciones nuevas NO leídas,
+  // suena el "ding" y dispara la notificación del sistema.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const state = await fetchNotificationState();
+        if (cancelled || !state) return;
+        const fresh = state.items.filter((n) => !seenIds.current.has(n.id));
+        const alertable = fresh.filter((n) => !n.readAt);
+        if (alertable.length > 0) {
+          playChime();
+          for (const n of alertable) systemNotify(n);
+        }
+        for (const n of state.items) seenIds.current.add(n.id);
+        setItems(state.items);
+        setUnreadCount(state.unread);
+      } catch {
+        /* red intermitente: se reintenta en el próximo tick */
+      }
+    };
+    const id = setInterval(tick, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const onToggle = () => {
+    // Pide permiso de notificaciones aprovechando el gesto del usuario (mejor
+    // práctica que pedirlo al cargar la página).
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission().catch(() => {});
+    }
     const next = !open;
     setOpen(next);
     if (next) {
-      const unreadIds = initial.filter((n) => !n.readAt).map((n) => n.id);
+      const unreadIds = items.filter((n) => !n.readAt).map((n) => n.id);
       if (unreadIds.length > 0) {
+        const now = new Date().toISOString();
+        setItems((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: now })));
+        setUnreadCount(0);
         markNotificationsRead(unreadIds).then(() => router.refresh());
       }
     }
@@ -47,9 +148,9 @@ export function NotificationBell({
           <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
-        {unread > 0 && (
+        {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-pill bg-green px-1 text-[10px] font-bold text-green-ink">
-            {unread > 9 ? "9+" : unread}
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
@@ -66,14 +167,14 @@ export function NotificationBell({
             <div className="border-b border-line px-4 py-3 text-sm font-semibold">
               Notificaciones
             </div>
-            {initial.length === 0 ? (
+            {items.length === 0 ? (
               <p className="px-4 py-8 text-center text-[13px] text-muted">
                 No tienes notificaciones.
               </p>
             ) : (
               <ul className="max-h-96 overflow-y-auto">
-                {initial.map((n) => {
-                  const href = n.quoteId ? `/crm/${n.quoteId}` : "/notificaciones";
+                {items.map((n) => {
+                  const href = hrefFor(n);
                   return (
                     <li key={n.id} className="border-b border-line last:border-0">
                       <a

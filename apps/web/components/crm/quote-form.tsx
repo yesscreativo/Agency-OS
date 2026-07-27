@@ -81,6 +81,8 @@ export interface QuoteVersionView {
 export interface SupplierOrderView {
   supplierName: string;
   supplierEmail: string;
+  message: string | null;
+  token: string;
   status: string;
   sentAt: string | null;
   confirmedAt: string | null;
@@ -160,8 +162,16 @@ export function QuoteForm({
   statuses = [],
   supplierOrders = [],
 }: QuoteFormProps) {
-  const { seeCost, seeClientPrice, seeMargin, canEdit, canSend, canManageInternal, priceRole } =
-    access;
+  const {
+    seeCost,
+    seeClientPrice,
+    seeMargin,
+    canEdit,
+    canSend,
+    canManageInternal,
+    canSendSupplierOrder,
+    priceRole,
+  } = access;
   const router = useRouter();
   const [quoteId, setQuoteId] = useState<string | null>(initial?.id ?? null);
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
@@ -943,7 +953,7 @@ export function QuoteForm({
         )}
 
         {/* Órdenes a proveedores (solo con la cotización aceptada; gestión interna) */}
-        {quoteId && isAccepted && canManageInternal && supplierGroups.length > 0 && (
+        {quoteId && isAccepted && canSendSupplierOrder && supplierGroups.length > 0 && (
           <section className="rounded-lg border border-line bg-surface p-6">
             <h2 className="text-lg font-bold tracking-tight">Órdenes a proveedores</h2>
             <p className="mt-0.5 text-[13px] text-muted">
@@ -955,7 +965,7 @@ export function QuoteForm({
                 const existing = supplierOrders.find((o) => o.supplierName === group.name);
                 const form = supplierForms[group.name] ?? {
                   email: existing?.supplierEmail ?? "",
-                  message: "",
+                  message: existing?.message ?? "",
                 };
                 const sent = existing?.status === "sent" || existing?.status === "confirmed";
                 const confirmed = existing?.status === "confirmed";
@@ -1019,6 +1029,22 @@ export function QuoteForm({
                     >
                       {sent ? "Reenviar orden" : "Enviar orden"}
                     </Button>
+                    {/* Confirmada: la orden vale como orden de compra → CTA para abrirla/descargarla. */}
+                    {confirmed && existing?.token && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+                        <a
+                          href={`/proveedor/${existing.token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-pill border border-line-strong bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink transition hover:border-green"
+                        >
+                          Ver / descargar orden de compra ↗
+                        </a>
+                        <span className="text-xs text-muted">
+                          Ábrela y usa Imprimir (Cmd+P) para guardar el PDF.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
