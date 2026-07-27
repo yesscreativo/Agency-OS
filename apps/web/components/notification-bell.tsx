@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@agency-os/domain";
 import { fetchNotificationState, markNotificationsRead } from "@/lib/notification-actions";
@@ -69,6 +69,44 @@ function systemNotify(item: NotificationItem) {
   }
 }
 
+/** Aviso emergente dentro de la app (no depende de permisos del navegador/OS).
+ * Entra con una transición suave y se auto-descarta a los 6s. */
+function Toast({
+  item,
+  onDismiss,
+}: {
+  item: NotificationItem;
+  onDismiss: (id: string) => void;
+}) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setShown(true));
+    const timer = setTimeout(() => onDismiss(item.id), 6000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [item.id, onDismiss]);
+
+  return (
+    <a
+      href={hrefFor(item)}
+      role="status"
+      className={`pointer-events-auto flex gap-2.5 rounded-lg border border-line bg-glass-strong px-4 py-3 shadow-overlay backdrop-blur-xl transition-all duration-300 ${
+        shown ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0"
+      }`}
+    >
+      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-pill bg-green" />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
+        {item.body && (
+          <span className="block truncate text-[13px] text-muted">{item.body}</span>
+        )}
+      </span>
+    </a>
+  );
+}
+
 export function NotificationBell({
   initial,
   unread,
@@ -79,8 +117,13 @@ export function NotificationBell({
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>(initial);
   const [unreadCount, setUnreadCount] = useState(unread);
+  const [toasts, setToasts] = useState<NotificationItem[]>([]);
   const router = useRouter();
   const seenIds = useRef<Set<string>>(new Set(initial.map((n) => n.id)));
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Re-sincroniza con el servidor cuando cambian los props (navegación / refresh).
   useEffect(() => {
@@ -102,6 +145,8 @@ export function NotificationBell({
         if (alertable.length > 0) {
           playChime();
           for (const n of alertable) systemNotify(n);
+          // Toast in-app (visible siempre, sin depender de permisos del OS).
+          setToasts((prev) => [...alertable, ...prev].slice(0, 3));
         }
         for (const n of state.items) seenIds.current.add(n.id);
         setItems(state.items);
@@ -137,6 +182,7 @@ export function NotificationBell({
   };
 
   return (
+    <>
     <div className="relative">
       <button
         type="button"
@@ -213,5 +259,18 @@ export function NotificationBell({
         </>
       )}
     </div>
+
+      {/* Toasts in-app: visibles siempre, sin depender de permisos del OS. */}
+      {toasts.length > 0 && (
+        <div
+          className="pointer-events-none fixed right-4 top-16 z-[60] flex w-80 flex-col gap-2"
+          aria-live="polite"
+        >
+          {toasts.map((t) => (
+            <Toast key={t.id} item={t} onDismiss={dismissToast} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
