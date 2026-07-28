@@ -92,6 +92,47 @@ export async function listQuotes(
   return { rows: data ?? [], total: count ?? 0, page, pageSize };
 }
 
+/** Fila del tablero Kanban: cotización + cliente + KAM + ítems para el total. */
+export type PipelineQuoteRow = QuoteListRow & {
+  kam: Pick<Tables<"kams">, "id" | "name"> | null;
+};
+
+const PIPELINE_SELECT =
+  "*, client:clients(id, name, company), kam:kams(id, name), quote_items(client_price, cost_price, quantity, is_group)";
+
+/** Todas las cotizaciones no borradas para el pipeline (agrupadas por estado en
+ * la app), con los mismos filtros que la lista. Pagina internamente en bloques de
+ * 1000 (límite de PostgREST). `includeClosed` por defecto oculta las cerradas
+ * (paridad con la lista); la columna Cerrada existe igual pero sin tarjetas. */
+export async function listPipelineQuotes(
+  db: Db,
+  filters: QuoteListFilters = {},
+): Promise<PipelineQuoteRow[]> {
+  const { search, status, dateFrom, dateTo, includeClosed = false, kamId } = filters;
+  const searchConditions = search ? await buildSearchConditions(db, search) : null;
+  const pageSize = 1000;
+  const rows: PipelineQuoteRow[] = [];
+  for (let from = 0; ; from += pageSize) {
+    let query = db
+      .from("quotes")
+      .select(PIPELINE_SELECT)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (status) query = query.eq("status", status);
+    else if (!includeClosed) query = query.neq("status", "closed");
+    if (dateFrom) query = query.gte("created_at", dateFrom);
+    if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999Z`);
+    if (kamId) query = query.eq("kam_id", kamId);
+    if (searchConditions) query = query.or(searchConditions.join(","));
+    const { data, error } = await query.returns<PipelineQuoteRow[]>();
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
 /** Fila mínima para los KPIs globales de la lista (conteo + suma por estado). */
 export type QuoteStatsRow = Pick<
   Tables<"quotes">,
