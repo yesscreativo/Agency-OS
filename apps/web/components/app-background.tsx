@@ -119,9 +119,9 @@ void main() {
   float md   = distance(cP, u_mouse);
   float spot = u_mousePresent * (1.0 - smoothstep(0.0, u_spotRadius, md));
 
-  float baseR   = 0.032;
-  float r       = mix(baseR, baseR * 2.1, spot);
-  float dotMask = 1.0 - smoothstep(r, r + 0.05, dcell);
+  float baseR   = 0.022;
+  float r       = mix(baseR, baseR * 2.2, spot);
+  float dotMask = 1.0 - smoothstep(r, r + 0.03, dcell);
   // Los puntos también se realzan levemente sobre las auroras (como en Stitch).
   float reveal  = clamp(aW * u_auroraGain, 0.0, 1.0);
   float dotA    = dotMask * clamp(mix(u_dotBaseAlpha, u_dotHotAlpha, spot) + reveal * 0.25, 0.0, 0.85);
@@ -146,11 +146,11 @@ const THEMES = {
     blue: "#3b6dff",
     purple: "#7c3aed",
     magenta: "#c026d3",
-    dot: "#4a4a55",
+    dot: "#70707e", // más claro para que los puntos se noten sobre el negro
     spot: "#e6f0ff", // realce sutil (no verde), como Stitch
     auroraGain: 0.85,
-    dotBaseAlpha: 0.16,
-    dotHotAlpha: 0.5,
+    dotBaseAlpha: 0.35,
+    dotHotAlpha: 0.55,
   },
   light: {
     bg: "#f2f2f3",
