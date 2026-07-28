@@ -29,7 +29,7 @@ export function Dropdown({ trigger, label, children, align = "left" }: DropdownP
       <div onClick={() => setOpen((o) => !o)}>{trigger(open)}</div>
       {open && (
         <div
-          className={`absolute z-40 mt-2 w-[230px] rounded-md border border-line bg-elev p-2 shadow-overlay ${
+          className={`absolute z-40 mt-2 w-[230px] rounded-md border border-line bg-glass-strong p-2 shadow-overlay backdrop-blur-xl ${
             align === "right" ? "right-0" : "left-0"
           }`}
         >

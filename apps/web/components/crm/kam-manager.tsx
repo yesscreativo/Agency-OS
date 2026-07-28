@@ -93,7 +93,7 @@ export function KamManager({
 
       <div className="mt-6">
         {kams.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface px-8 py-16 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-glass px-8 py-16 text-center backdrop-blur-xl">
             <div className="text-lg font-semibold">Todavía no hay KAMs/PMs</div>
             <p className="max-w-[44ch] text-sm text-muted">
               Crea la primera para poder asignarla en las cotizaciones.

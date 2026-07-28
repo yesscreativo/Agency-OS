@@ -1,13 +1,37 @@
+import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getClientById, listClientQuotes } from "@agency-os/db";
-import { calcQuote, formatDate, formatMoney } from "@agency-os/domain";
-import { Badge, Table, Td, Th } from "@agency-os/ui";
+import { calcQuote, formatMoney } from "@agency-os/domain";
+import { KpiCard, KpiDot, type KpiTone } from "@agency-os/ui";
 import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { ClientForm } from "@/components/crm/client-form";
+import { ClientDangerZone } from "@/components/crm/client-danger-zone";
+import {
+  ClientQuoteHistory,
+  type ClientQuoteHistoryRow,
+} from "@/components/crm/client-quote-history";
+import { QUOTE_KPI_ICONS } from "@/components/crm/kpi-icons";
 
 export const dynamic = "force-dynamic";
+
+// Estados que cuentan como "ganado" (decisión de negocio).
+const WON_STATUSES = new Set(["accepted", "purchased", "closed"]);
+
+/** Líneas de importe por moneda para el `sub` de una KpiCard. */
+function amountLines(amounts: Record<string, number>, tone: KpiTone): ReactNode {
+  const entries = Object.entries(amounts);
+  if (entries.length === 0) {
+    return <div className="font-mono text-[13px] text-muted">$ 0</div>;
+  }
+  return entries.map(([currency, amount]) => (
+    <div key={currency} className="flex items-center gap-1.5 font-mono text-[13px] text-muted">
+      <KpiDot tone={tone} />
+      <span className="font-bold text-ink">{formatMoney(amount, currency)}</span>
+    </div>
+  ));
+}
 
 export default async function ClientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -24,10 +48,14 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
     getQuoteStatusMap(db),
   ]);
 
-  // Resumen: nº cotizaciones, total por moneda, aceptadas.
-  const totalsByCurrency: Record<string, number> = {};
-  let acceptedCount = 0;
-  const history = quotes.map((q) => {
+  // KPIs por cliente + filas del historial (un solo recorrido).
+  const totalByCurrency: Record<string, number> = {};
+  const wonByCurrency: Record<string, number> = {};
+  const reviewByCurrency: Record<string, number> = {};
+  let wonCount = 0;
+  let reviewCount = 0;
+
+  const historyRows: ClientQuoteHistoryRow[] = quotes.map((q) => {
     const totals = calcQuote(
       q.quote_items.map((i) => ({
         clientPrice: i.client_price,
@@ -37,11 +65,29 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
       })),
       { role: access.priceRole, hasIva: q.has_iva, ivaPercentage: q.iva_percentage },
     );
-    totalsByCurrency[q.currency] = (totalsByCurrency[q.currency] ?? 0) + totals.total;
-    if (q.status === "accepted") acceptedCount += 1;
-    return { ...q, total: totals.total };
+    totalByCurrency[q.currency] = (totalByCurrency[q.currency] ?? 0) + totals.total;
+    if (WON_STATUSES.has(q.status)) {
+      wonCount += 1;
+      wonByCurrency[q.currency] = (wonByCurrency[q.currency] ?? 0) + totals.total;
+    }
+    if (q.status === "under_review") {
+      reviewCount += 1;
+      reviewByCurrency[q.currency] = (reviewByCurrency[q.currency] ?? 0) + totals.total;
+    }
+    const s = resolveStatus(statusMap, q.status);
+    return {
+      id: q.id,
+      code: q.code,
+      quoteName: q.quote_name,
+      status: { label: s.label, color: s.color, variant: s.variant, onColor: s.onColor ?? null },
+      total: totals.total,
+      currency: q.currency,
+      createdAt: q.created_at,
+    };
   });
-  const currencyLines = Object.entries(totalsByCurrency);
+
+  const totalCount = quotes.length;
+  const conversion = totalCount === 0 ? 0 : Math.round((wonCount / totalCount) * 100);
 
   return (
     <div>
@@ -60,8 +106,40 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         {client.company && <p className="mt-1 text-sm text-muted">{client.company}</p>}
       </div>
 
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="Total cotizaciones"
+          value={totalCount}
+          icon={QUOTE_KPI_ICONS.total}
+          tone="purple"
+          highlight
+          sub={amountLines(totalByCurrency, "purple")}
+        />
+        <KpiCard
+          label="Cotizaciones ganadas"
+          value={wonCount}
+          icon={QUOTE_KPI_ICONS.accepted}
+          tone="green"
+          sub={amountLines(wonByCurrency, "green")}
+        />
+        <KpiCard
+          label="Tasa de conversión"
+          value={`${conversion}%`}
+          hint="Ganadas / total"
+          icon={QUOTE_KPI_ICONS.sent}
+          tone="purple"
+        />
+        <KpiCard
+          label="Total en revisión"
+          value={reviewCount}
+          icon={QUOTE_KPI_ICONS.under_review}
+          tone="warn"
+          sub={amountLines(reviewByCurrency, "warn")}
+        />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h2 className="mb-4 text-lg font-bold tracking-tight">Perfil del cliente</h2>
           <ClientForm
             initial={{
@@ -74,93 +152,22 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
               email: client.email ?? "",
               phone: client.phone ?? "",
             }}
-            quoteCount={quotes.length}
           />
         </section>
 
-        <aside className="rounded-lg border border-line bg-surface p-6">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Resumen</h3>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-muted">Cotizaciones</dt>
-              <dd className="font-mono font-bold">{quotes.length}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted">Aceptadas</dt>
-              <dd className="font-mono font-bold text-green">{acceptedCount}</dd>
-            </div>
-            <div className="border-t border-line pt-2">
-              <dt className="text-muted">Total cotizado</dt>
-              {currencyLines.length === 0 ? (
-                <dd className="mt-1 font-mono text-muted">$ 0</dd>
-              ) : (
-                currencyLines.map(([currency, amount]) => (
-                  <dd key={currency} className="mt-1 font-mono font-bold">
-                    {formatMoney(amount, currency)}
-                  </dd>
-                ))
-              )}
-            </div>
-          </dl>
+        <aside>
+          <ClientDangerZone clientId={client.id} quoteCount={totalCount} />
         </aside>
       </div>
 
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-bold tracking-tight">Historial de cotizaciones</h2>
-        {history.length === 0 ? (
+        {historyRows.length === 0 ? (
           <div className="rounded-lg border border-line bg-glass px-8 py-12 text-center text-sm text-muted backdrop-blur-xl">
             Este cliente todavía no tiene cotizaciones.
           </div>
         ) : (
-          <Table>
-            <thead>
-              <tr>
-                <Th>Código</Th>
-                <Th>Nombre</Th>
-                <Th>Estado</Th>
-                <Th className="text-right">Total</Th>
-                <Th>Fecha</Th>
-                <Th className="text-right"> </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((q) => {
-                const s = resolveStatus(statusMap, q.status);
-                return (
-                  <tr key={q.id} className="transition hover:bg-surface-2">
-                    <Td>
-                      <a
-                        href={`/crm/${q.id}`}
-                        className="whitespace-nowrap font-mono text-[13px] font-bold text-ink hover:text-green"
-                      >
-                        {q.code ?? "— borrador —"}
-                      </a>
-                    </Td>
-                    <Td>
-                      <span className="max-w-[28ch] truncate text-sm">{q.quote_name ?? "—"}</span>
-                    </Td>
-                    <Td>
-                      <Badge color={s.color} variant={s.variant} onColor={s.onColor}>
-                        {s.label}
-                      </Badge>
-                    </Td>
-                    <Td className="whitespace-nowrap text-right font-mono text-sm font-bold">
-                      {formatMoney(q.total, q.currency)}
-                    </Td>
-                    <Td className="whitespace-nowrap text-muted">{formatDate(q.created_at)}</Td>
-                    <Td className="text-right">
-                      <a
-                        href={`/crm/${q.id}`}
-                        className="inline-block rounded-pill border border-line-strong px-4 py-1.5 text-xs font-semibold text-ink transition hover:border-green"
-                      >
-                        Abrir
-                      </a>
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
+          <ClientQuoteHistory rows={historyRows} />
         )}
       </section>
     </div>

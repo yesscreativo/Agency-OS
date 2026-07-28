@@ -27,7 +27,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const [{ rows: clients }, versions, kams, statusMap, supplierOrderRows] = await Promise.all([
     listClients(db, { pageSize: 200 }),
     listQuoteVersions(db, quote.id),
-    listKams(db),
+    listKams(db, { onlyActive: true }),
     getQuoteStatusMap(db),
     listSupplierOrders(db, quote.id),
   ]);
@@ -88,10 +88,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     confirmedAt: o.confirmed_at,
   }));
 
-  // Solo KAMs activas en el select, pero sin perder una asignación previa inactiva.
-  const kamOptions = kams
-    .filter((k) => k.is_active || k.id === quote.kam_id)
-    .map((k) => ({ id: k.id, name: k.name }));
+  // Solo KAMs activas en el select: una KAM desactivada no debe aparecer, aunque
+  // esta cotización la tuviera asignada (se mostrará "Sin asignar" hasta re-guardar).
+  const kamOptions = kams.map((k) => ({ id: k.id, name: k.name }));
 
   // El brief se guarda como ruta del bucket privado; el enlace se firma aquí.
   let briefSignedUrl: string | null = null;

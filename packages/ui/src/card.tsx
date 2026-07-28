@@ -3,9 +3,10 @@ import type { HTMLAttributes, ReactNode } from "react";
 export type CardVariant = "flat" | "raised" | "overlay" | "active";
 
 const VARIANTS: Record<CardVariant, string> = {
-  flat: "bg-surface border border-line",
-  raised: "bg-surface border border-line shadow-raised",
-  overlay: "bg-elev border border-line shadow-overlay",
+  // Glassmorphism por defecto: dejan ver el fondo animado a través de la card.
+  flat: "bg-glass backdrop-blur-xl border border-line",
+  raised: "bg-glass backdrop-blur-xl border border-line shadow-raised",
+  overlay: "bg-glass-strong backdrop-blur-xl border border-line shadow-overlay",
   // Tarjeta activa: se rellena de verde (tarea en curso, destacado)
   active: "bg-green text-green-ink border border-transparent",
 };

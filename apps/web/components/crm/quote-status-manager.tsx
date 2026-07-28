@@ -264,7 +264,7 @@ export function QuoteStatusManager({ statuses }: { statuses: QuoteStatusManagerR
             Estilo sólido (fondo lleno, para estados finales)
           </label>
 
-          <div className="flex items-center gap-3 rounded-md border border-line bg-surface-2 p-3">
+          <div className="flex items-center gap-3 rounded-md border border-line bg-glass p-3 backdrop-blur-xl">
             <span className="text-xs text-muted">Vista previa:</span>
             <Badge color={color} variant={isSolid ? "solid" : "soft"}>
               {label.trim() || "Estado"}

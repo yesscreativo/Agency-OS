@@ -175,7 +175,11 @@ export function QuoteForm({
   const router = useRouter();
   const [quoteId, setQuoteId] = useState<string | null>(initial?.id ?? null);
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
-  const [kamId, setKamId] = useState(initial?.kamId ?? "");
+  // Si la KAM asignada ya no está entre las opciones (fue desactivada), el select
+  // arranca en "Sin asignar" y al guardar queda null.
+  const [kamId, setKamId] = useState(
+    initial?.kamId && kams.some((k) => k.id === initial.kamId) ? initial.kamId : "",
+  );
   const [quoteType, setQuoteType] = useState(initial?.quoteType ?? "");
   const [quoteName, setQuoteName] = useState(initial?.quoteName ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
@@ -577,7 +581,7 @@ export function QuoteForm({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       <div className="space-y-6">
         {/* Datos generales */}
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h2 className="text-lg font-bold tracking-tight">Datos generales</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
@@ -683,7 +687,7 @@ export function QuoteForm({
         </section>
 
         {/* Ítems */}
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold tracking-tight">Ítems</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -896,7 +900,7 @@ export function QuoteForm({
 
         {/* Respuesta del cliente (solo lectura; llega del enlace público) */}
         {clientResponse && (
-          <section className="rounded-lg border border-line bg-surface p-6">
+          <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
                 Respuesta del cliente
@@ -954,7 +958,7 @@ export function QuoteForm({
 
         {/* Órdenes a proveedores (solo con la cotización aceptada; gestión interna) */}
         {quoteId && isAccepted && canSendSupplierOrder && supplierGroups.length > 0 && (
-          <section className="rounded-lg border border-line bg-surface p-6">
+          <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h2 className="text-lg font-bold tracking-tight">Órdenes a proveedores</h2>
             <p className="mt-0.5 text-[13px] text-muted">
               Envía a cada proveedor la orden con sus ítems. El proveedor recibe un correo con el
@@ -1054,7 +1058,7 @@ export function QuoteForm({
 
         {/* Destinatarios (solo quien puede enviar al cliente) */}
         {canSend && (
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold tracking-tight">Destinatarios</h2>
@@ -1115,7 +1119,7 @@ export function QuoteForm({
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
         {/* Estado + acciones */}
         {quoteId && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Estado</h3>
               {statusMeta && (
@@ -1162,7 +1166,7 @@ export function QuoteForm({
         )}
 
         {/* Resumen */}
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Resumen</h3>
           <dl className="mt-4 space-y-2.5 text-sm">
             <div className="flex justify-between">
@@ -1244,7 +1248,7 @@ export function QuoteForm({
 
         {/* Documentos comerciales (solo aceptada; gestión interna) */}
         {quoteId && isAccepted && canManageInternal && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
               Documentos comerciales
             </h3>
@@ -1282,7 +1286,7 @@ export function QuoteForm({
 
         {/* Brief (gestión interna) */}
         {canManageInternal && (
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Brief</h3>
           {briefUrl ? (
             <p className="mt-3 truncate text-sm text-ink">
@@ -1314,7 +1318,7 @@ export function QuoteForm({
 
         {/* Guardado + envío */}
         {(canEdit || canSend) && (
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div
             className={`text-[13px] ${saveState.kind === "error" ? "text-danger" : "text-muted"}`}
             role="status"
@@ -1348,7 +1352,7 @@ export function QuoteForm({
 
         {/* PDF */}
         {quoteId && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Exportar</h3>
             <div className="mt-3 flex flex-col gap-2">
               <a
@@ -1375,7 +1379,7 @@ export function QuoteForm({
 
         {/* Historial de versiones */}
         {versions.length > 0 && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
               Historial de versiones
             </h3>
@@ -1405,7 +1409,7 @@ export function QuoteForm({
 
         {/* Eliminar (gestión interna) */}
         {quoteId && canManageInternal && (
-          <div className="rounded-lg border border-danger/40 bg-surface p-6">
+          <div className="rounded-lg border border-danger/40 bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Acciones</h3>
             {confirmDelete ? (
               <div className="mt-3">

@@ -45,10 +45,10 @@ export default async function NotificationsPage() {
               const href = n.quote_id ? `/crm/${n.quote_id}` : undefined;
               const Row = (
                 <div
-                  className={`flex gap-3 rounded-lg border px-5 py-4 transition ${
+                  className={`flex gap-3 rounded-lg border px-5 py-4 backdrop-blur-xl transition ${
                     n.read_at
-                      ? "border-line bg-surface"
-                      : "border-green/40 bg-surface hover:border-green"
+                      ? "border-line bg-glass"
+                      : "border-green/40 bg-glass hover:border-green"
                   }`}
                 >
                   <span
