@@ -35,8 +35,8 @@ function addToBucket(bucket: QuoteKpi, currency: string, amount: number) {
 
 /** Conteo + suma del total cliente (con IVA, mismo criterio que la columna Total
  * de la lista) por bucket, individualizando el importe por moneda. "total" acumula
- * todas las cotizaciones; los estados sin bucket propio (draft, modified, purchased,
- * review_future) solo cuentan ahí. */
+ * todas las cotizaciones; los estados sin bucket propio (draft, modified, purchased
+ * y los custom) solo cuentan ahí. */
 export function summarizeQuoteKpis(
   rows: QuoteKpiSource[],
   role = "kam",

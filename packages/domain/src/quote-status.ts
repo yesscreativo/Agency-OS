@@ -2,7 +2,6 @@
 
 export const QUOTE_STATUSES = [
   "draft",
-  "review_future",
   "sent",
   "under_review",
   "modified",
@@ -36,13 +35,14 @@ export interface QuoteStatusSeed {
   sortOrder: number;
 }
 
-/** Semilla de los 9 estados de sistema. Espeja 1:1 el seed SQL de la migración
- * `012_quote_status_catalog.sql` (seed_default_quote_statuses). Sirve de fallback
- * en la app cuando el catálogo no está disponible y de fuente para el test de
- * paridad con `QUOTE_STATUSES`. Si cambia el seed SQL, actualizar aquí también. */
+/** Semilla de los 8 estados de sistema. Espeja 1:1 el seed SQL (función
+ * `seed_default_quote_statuses`, migraciones 012 + 017). Sirve de fallback en la
+ * app cuando el catálogo no está disponible y de fuente para el test de paridad
+ * con `QUOTE_STATUSES`. Si cambia el seed SQL, actualizar aquí también.
+ * Nota: "Revisión a futuro" (review_future) dejó de ser de sistema (migración
+ * 017): ahora es un estado CUSTOM editable/borrable por organización. */
 export const SYSTEM_QUOTE_STATUS_SEED: readonly QuoteStatusSeed[] = [
   { code: "draft", label: "Borrador", color: "#9aa1ab", isSolid: false, kind: "draft", sortOrder: 10 },
-  { code: "review_future", label: "Revisión a futuro", color: "#9aa1ab", isSolid: false, kind: "open", sortOrder: 20 },
   { code: "sent", label: "Enviada", color: "#7eb8ff", isSolid: false, kind: "sent", sortOrder: 30 },
   { code: "under_review", label: "En revisión", color: "#f5c95a", isSolid: false, kind: "in_review", sortOrder: 40 },
   { code: "modified", label: "Modificada", color: "#8b5cf6", isSolid: false, kind: "in_review", sortOrder: 50 },
@@ -91,7 +91,6 @@ export interface QuoteProgress {
  * catálogo (que no son de sistema) caen a una etapa neutra "En proceso". */
 const PROGRESS_BY_STATUS: Record<string, { stage: string; pct: number; tone: QuoteProgressTone }> = {
   draft: { stage: "Evaluación inicial", pct: 20, tone: "danger" },
-  review_future: { stage: "Evaluación inicial", pct: 20, tone: "neutral" },
   sent: { stage: "Negociación activa", pct: 40, tone: "warn" },
   under_review: { stage: "Negociación activa", pct: 50, tone: "warn" },
   modified: { stage: "Negociación activa", pct: 60, tone: "warn" },
