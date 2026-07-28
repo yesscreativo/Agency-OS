@@ -250,6 +250,19 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       })),
       { role: "kam", hasIva: quote.has_iva, ivaPercentage: quote.iva_percentage },
     );
+
+    // Brief adjunto (si existe): URL firmada válida 7 días para que n8n lo descargue
+    // y lo anexe al correo del cliente.
+    let brief: { filename: string; url: string } | null = null;
+    if (quote.brief_url) {
+      const { data: signed } = await db.storage
+        .from("briefs")
+        .createSignedUrl(quote.brief_url, 60 * 60 * 24 * 7);
+      if (signed?.signedUrl) {
+        brief = { filename: quote.brief_url.split("/").pop() ?? "brief", url: signed.signedUrl };
+      }
+    }
+
     await emitWebhook("quote_sent", {
       quote_id: quoteId,
       code,
@@ -257,6 +270,7 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       client: quote.client ? { name: quote.client.name, email: quote.client.email } : null,
       currency: quote.currency,
       total: totals.total,
+      brief,
       recipients: quote.quote_recipients.map((r) => ({
         name: r.name,
         email: r.email,
