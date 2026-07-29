@@ -212,6 +212,15 @@ export function QuoteForm({
 
   // Filtro por proveedor (solo de vista; no altera lo que se guarda).
   const [supplierFilter, setSupplierFilter] = useState("");
+  // Grupos colapsados (solo de vista): key del ítem-grupo → sus ítems ocultos.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   // Formularios de envío a proveedor (email + mensaje) por proveedor.
   const [supplierForms, setSupplierForms] = useState<
     Record<string, { email: string; message: string }>
@@ -533,6 +542,28 @@ export function QuoteForm({
   let itemCounter = 0;
   const rowNumbers = items.map((it) => (it.isGroup ? null : ++itemCounter));
 
+  // A qué grupo pertenece cada ítem (por índice) + resumen por grupo (nº ítems y
+  // subtotal con el precio que ve el rol), para colapsar y mostrar el resumen plegado.
+  const groupKeyOf: (string | null)[] = [];
+  const groupStats = new Map<string, { count: number; subtotal: number }>();
+  {
+    let current: string | null = null;
+    for (const it of items) {
+      if (it.isGroup) {
+        current = it.key;
+        if (!groupStats.has(it.key)) groupStats.set(it.key, { count: 0, subtotal: 0 });
+        groupKeyOf.push(null);
+      } else {
+        groupKeyOf.push(current);
+        if (current) {
+          const s = groupStats.get(current)!;
+          s.count += 1;
+          s.subtotal += (seeClientPrice ? it.clientPrice : it.costPrice) * it.quantity;
+        }
+      }
+    }
+  }
+
   // Proveedores presentes en los ítems (para las órdenes a proveedores).
   const supplierGroups = useMemo(() => {
     const map = new Map<string, { name: string; items: ItemRow[] }>();
@@ -758,6 +789,9 @@ export function QuoteForm({
               <div className="mt-1.5 space-y-1.5">
                 {items.map((item, index) => {
                   if (!isVisible(item)) return null;
+                  const groupKey = groupKeyOf[index];
+                  if (!item.isGroup && groupKey && collapsedGroups.has(groupKey)) return null;
+                  const isCollapsed = item.isGroup && collapsedGroups.has(item.key);
                   // El subtotal usa el precio que el rol ve (cliente para admin/viewer,
                   // costo para el creador).
                   const shownPrice = seeClientPrice ? item.clientPrice : item.costPrice;
@@ -785,7 +819,15 @@ export function QuoteForm({
                         </span>
                       )}
                       {item.isGroup ? (
-                        <span className="pt-1.5 text-center text-purple">▾</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(item.key)}
+                          aria-expanded={!isCollapsed}
+                          title={isCollapsed ? "Expandir grupo" : "Colapsar grupo"}
+                          className="cursor-pointer select-none pt-1.5 text-center text-purple transition hover:text-purple/70"
+                        >
+                          {isCollapsed ? "▸" : "▾"}
+                        </button>
                       ) : (
                         <span className="mt-0.5 flex h-6 w-6 items-center justify-center justify-self-center rounded-[8px] bg-purple-soft font-mono text-[11px] font-bold text-purple">
                           {rowNumbers[index] ?? "—"}
@@ -878,7 +920,14 @@ export function QuoteForm({
                         />
                       )}
                       <span className="pt-2 text-right font-mono text-[13px] font-bold text-ink">
-                        {item.isGroup ? "" : formatMoney(rowSubtotal, currency)}
+                        {item.isGroup
+                          ? isCollapsed
+                            ? `${groupStats.get(item.key)?.count ?? 0} ít · ${formatMoney(
+                                groupStats.get(item.key)?.subtotal ?? 0,
+                                currency,
+                              )}`
+                            : ""
+                          : formatMoney(rowSubtotal, currency)}
                       </span>
                       {canEdit && (
                         <button
