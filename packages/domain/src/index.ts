@@ -7,3 +7,4 @@ export * from "./quote-stats";
 export * from "./quote-status";
 export * from "./quote-validation";
 export * from "./token-expiry";
+export * from "./work-item";
