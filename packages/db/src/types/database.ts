@@ -891,6 +891,203 @@ export type Database = {
           },
         ]
       }
+      work_item_assignees: {
+        Row: {
+          organization_id: string
+          user_id: string
+          work_item_id: string
+        }
+        Insert: {
+          organization_id: string
+          user_id: string
+          work_item_id: string
+        }
+        Update: {
+          organization_id?: string
+          user_id?: string
+          work_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_item_assignees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_assignees_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_assignees_work_item_id_fkey"
+            columns: ["work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_item_statuses: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          is_done: boolean
+          label: string
+          organization_id: string
+          project_id: string
+          sort_order: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_done?: boolean
+          label: string
+          organization_id: string
+          project_id: string
+          sort_order?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_done?: boolean
+          label?: string
+          organization_id?: string
+          project_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_item_statuses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_statuses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_items: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          organization_id: string
+          parent_id: string | null
+          priority: Database["public"]["Enums"]["work_item_priority"]
+          project_id: string
+          project_state: Database["public"]["Enums"]["project_state"] | null
+          quote_id: string | null
+          sort_order: number
+          start_date: string | null
+          status_id: string | null
+          title: string
+          type: Database["public"]["Enums"]["work_item_type"]
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          organization_id: string
+          parent_id?: string | null
+          priority?: Database["public"]["Enums"]["work_item_priority"]
+          project_id: string
+          project_state?: Database["public"]["Enums"]["project_state"] | null
+          quote_id?: string | null
+          sort_order?: number
+          start_date?: string | null
+          status_id?: string | null
+          title: string
+          type: Database["public"]["Enums"]["work_item_type"]
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          organization_id?: string
+          parent_id?: string | null
+          priority?: Database["public"]["Enums"]["work_item_priority"]
+          project_id?: string
+          project_state?: Database["public"]["Enums"]["project_state"] | null
+          quote_id?: string | null
+          sort_order?: number
+          start_date?: string | null
+          status_id?: string | null
+          title?: string
+          type?: Database["public"]["Enums"]["work_item_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_status_fk"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "work_item_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -912,11 +1109,18 @@ export type Database = {
         Args: { p_org: string }
         Returns: undefined
       }
+      seed_default_work_item_statuses: {
+        Args: { p_org: string; p_project_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
+      project_state: "active" | "completed" | "archived"
       quote_item_status: "pending" | "accepted" | "rejected" | "changes"
       quote_type: "proyecto" | "evolutivo"
       supplier_order_status: "pending" | "sent" | "confirmed"
+      work_item_priority: "low" | "normal" | "high" | "urgent"
+      work_item_type: "project" | "task" | "subtask"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1044,9 +1248,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      project_state: ["active", "completed", "archived"],
       quote_item_status: ["pending", "accepted", "rejected", "changes"],
       quote_type: ["proyecto", "evolutivo"],
       supplier_order_status: ["pending", "sent", "confirmed"],
+      work_item_priority: ["low", "normal", "high", "urgent"],
+      work_item_type: ["project", "task", "subtask"],
     },
   },
 } as const
