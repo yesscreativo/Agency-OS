@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
 import { formatDate, type WorkItemPriority } from "@agency-os/domain";
@@ -95,15 +95,38 @@ export function ProjectBoard({
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Estado por tarea (status_id) para el movimiento optimista del tablero.
-  const [statusById, setStatusById] = useState<Record<string, string | null>>(() =>
-    Object.fromEntries(tasks.filter((t) => t.type === "task").map((t) => [t.id, t.statusId])),
-  );
+  // Overlay optimista *transitorio*: solo contiene entradas para tareas con un
+  // drag en curso (o recién confirmado, hasta que `tasks` refleje el cambio).
+  // Para cualquier otra tarea, `grouped` usa directamente `t.statusId` (prop
+  // fresca), así que un cambio de estado hecho desde el editor (que solo
+  // dispara `router.refresh()`) se refleja de inmediato sin overlay que lo tape.
+  const [statusById, setStatusById] = useState<Record<string, string | null>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
   const savingRef = useRef<Set<string>>(new Set());
 
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+
+  // Una vez que `tasks` (prop fresca, tras `router.refresh()`) confirma el
+  // nuevo estado de una tarea con override, soltamos el override: ya no hace
+  // falta y así no queda una sombra permanente tapando futuras ediciones de
+  // esa misma tarea (el bug original).
+  useEffect(() => {
+    setStatusById((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const fresh = tasksById.get(id);
+        if (!fresh || fresh.statusId === next[id]) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tasksById]);
+
   const topTasks = useMemo(() => tasks.filter((t) => t.type === "task"), [tasks]);
   const childrenByParent = useMemo(() => {
     const map = new Map<string, BoardTask[]>();
@@ -134,9 +157,19 @@ export function ProjectBoard({
     const res = await moveWorkItem(taskId, to);
     savingRef.current.delete(taskId);
     if (res.error) {
-      setStatusById((s) => ({ ...s, [taskId]: from })); // rollback
+      // Rollback: quitamos el override en vez de fijarlo a `from` — la prop
+      // `tasks` ya refleja `from` (nunca cambió), así que no hace falta
+      // conservar una sombra permanente para esta tarea.
+      setStatusById((s) => {
+        const next = { ...s };
+        delete next[taskId];
+        return next;
+      });
       setError(res.error);
     } else {
+      // El override queda activo hasta que `tasks` (tras este refresh) confirme
+      // `to`; lo soltamos entonces desde el efecto de arriba, sin dejar una
+      // sombra permanente que tape futuros cambios de estado (p.ej. desde el editor).
       router.refresh();
     }
   };
@@ -207,7 +240,7 @@ export function ProjectBoard({
                 onDragLeave={() => setOverCol((c) => (c === col.id ? null : c))}
                 onDrop={() => {
                   if (!canManage || !dragId) return;
-                  const from = statusById[dragId] ?? null;
+                  const from = statusById[dragId] ?? tasksById.get(dragId)?.statusId ?? null;
                   setOverCol(null);
                   void move(dragId, from, col.id);
                   setDragId(null);
