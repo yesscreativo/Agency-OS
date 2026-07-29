@@ -8,11 +8,10 @@ import {
 } from "./quote-status";
 
 describe("QUOTE_STATUSES / isValidQuoteStatus", () => {
-  it("lists the 9 statuses of the domain", () => {
-    expect(QUOTE_STATUSES).toHaveLength(9);
+  it("lists the 8 system statuses of the domain", () => {
+    expect(QUOTE_STATUSES).toHaveLength(8);
     expect(QUOTE_STATUSES).toEqual([
       "draft",
-      "review_future",
       "sent",
       "under_review",
       "modified",
@@ -32,10 +31,9 @@ describe("QUOTE_STATUSES / isValidQuoteStatus", () => {
 
 describe("SYSTEM_QUOTE_STATUS_SEED", () => {
   // Debe espejar 1:1 los códigos de QUOTE_STATUSES (y el seed SQL de la migración).
-  it("cubre los 9 códigos de sistema, en el mismo orden que sort_order", () => {
+  it("cubre los 8 códigos de sistema, en el mismo orden que sort_order", () => {
     expect(SYSTEM_QUOTE_STATUS_SEED.map((s) => s.code)).toEqual([
       "draft",
-      "review_future",
       "sent",
       "under_review",
       "modified",

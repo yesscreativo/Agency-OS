@@ -23,7 +23,7 @@ export function Modal({ open, onClose, title, description, children, footer }: M
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-[380px] rounded-lg border border-line bg-elev p-6 shadow-overlay"
+        className="w-full max-w-[380px] rounded-lg border border-line bg-glass-strong p-6 shadow-overlay backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

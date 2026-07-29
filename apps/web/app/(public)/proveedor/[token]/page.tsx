@@ -87,6 +87,15 @@ export default async function SupplierResponsePage({
         </div>
       </div>
 
+      {order.message && (
+        <div className="mb-6 rounded-lg border border-[#e4e4e7] bg-[#fafafa] p-5 sm:p-6">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[#71717a]">
+            Mensaje de Laburu Agency
+          </div>
+          <p className="mt-2 whitespace-pre-line text-sm text-[#161618]">{order.message}</p>
+        </div>
+      )}
+
       <div className="rounded-lg border border-[#e4e4e7] bg-white p-5 sm:p-7">
         <table className="w-full border-collapse text-sm">
           <thead>

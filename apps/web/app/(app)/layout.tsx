@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { countUnread, listNotifications } from "@agency-os/db";
 import { Avatar, ThemeToggle } from "@agency-os/ui";
 import { getCurrentUser } from "@/lib/auth";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { logout } from "@/lib/auth-actions";
 import { AppBackground } from "@/components/app-background";
+import { NotificationBell } from "@/components/notification-bell";
 
 function initialsOf(name: string) {
   return name
@@ -19,6 +22,12 @@ function initialsOf(name: string) {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const db = await getSupabaseServerClient();
+  const [notifs, unread] = await Promise.all([
+    listNotifications(db, user.id, { limit: 8 }),
+    countUnread(db, user.id),
+  ]);
 
   return (
     // Sin bg sólido en el wrapper: el canvas de AppBackground (-z-10) debe
@@ -45,6 +54,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </a>
           <div className="flex items-center gap-3 text-sm">
             <ThemeToggle />
+            <NotificationBell
+              unread={unread}
+              initial={notifs.map((n) => ({
+                id: n.id,
+                title: n.title,
+                body: n.body,
+                quoteId: n.quote_id,
+                readAt: n.read_at,
+                createdAt: n.created_at,
+              }))}
+            />
             <div className="flex items-center gap-2.5">
               <Avatar initials={initialsOf(user.fullName)} tone="purple" size="md" />
               <div className="leading-tight">

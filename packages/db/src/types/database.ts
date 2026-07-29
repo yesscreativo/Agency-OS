@@ -78,6 +78,7 @@ export type Database = {
           is_active: boolean
           name: string
           organization_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -86,6 +87,7 @@ export type Database = {
           is_active?: boolean
           name: string
           organization_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -94,6 +96,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           organization_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -101,6 +104,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kams_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -137,6 +147,64 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          organization_id: string
+          quote_id: string | null
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          organization_id: string
+          quote_id?: string | null
+          read_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          organization_id?: string
+          quote_id?: string | null
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       organizations: {
         Row: {
@@ -497,6 +565,7 @@ export type Database = {
           rejected_at: string | null
           rejection_reason: string | null
           sent_at: string | null
+          sent_by: string | null
           status: string
           updated_at: string
         }
@@ -527,6 +596,7 @@ export type Database = {
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
+          sent_by?: string | null
           status?: string
           updated_at?: string
         }
@@ -557,6 +627,7 @@ export type Database = {
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
+          sent_by?: string | null
           status?: string
           updated_at?: string
         }
@@ -594,6 +665,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -683,6 +761,7 @@ export type Database = {
           expires_at: string
           id: string
           items: Json
+          message: string | null
           quote_id: string
           sent_at: string | null
           status: Database["public"]["Enums"]["supplier_order_status"]
@@ -698,6 +777,7 @@ export type Database = {
           expires_at?: string
           id?: string
           items?: Json
+          message?: string | null
           quote_id: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["supplier_order_status"]
@@ -713,6 +793,7 @@ export type Database = {
           expires_at?: string
           id?: string
           items?: Json
+          message?: string | null
           quote_id?: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["supplier_order_status"]

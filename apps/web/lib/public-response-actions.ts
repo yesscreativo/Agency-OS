@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import {
   confirmSupplierOrder,
+  createNotifications,
   createSupabaseServiceRoleClient,
   getQuoteById,
   getRecipientByToken,
   getSupplierOrderByToken,
+  resolveQuoteNotifyUserIds,
   saveRecipientResponse,
   setQuoteItemResponses,
   updateQuote,
@@ -78,6 +80,25 @@ export async function submitClientResponse(
       client_comment: input.generalComment.trim() || null,
     });
 
+    // Notificación en plataforma para quien envió + KAM vinculado.
+    try {
+      const notifyIds = await resolveQuoteNotifyUserIds(db, quote);
+      const verbo = { modified: "pidió cambios en", accepted: "aceptó", rejected: "rechazó", under_review: "revisó" }[derived];
+      await createNotifications(
+        db,
+        notifyIds.map((uid) => ({
+          organization_id: quote.organization_id,
+          user_id: uid,
+          type: "client_response",
+          quote_id: quote.id,
+          title: `${quote.client?.name ?? "El cliente"} respondió ${quote.code ?? "la cotización"}`,
+          body: `El cliente ${verbo} la cotización.`,
+        })),
+      );
+    } catch (notifyError) {
+      console.error("submitClientResponse:notify", notifyError);
+    }
+
     await emitWebhook("quote_client_response", {
       quote_id: quote.id,
       code: quote.code,
@@ -121,6 +142,27 @@ export async function confirmSupplierReception(
     });
 
     const quote = await getQuoteById(db, order.quote_id);
+
+    // Notificación en plataforma para quien envió + KAM vinculado.
+    if (quote) {
+      try {
+        const notifyIds = await resolveQuoteNotifyUserIds(db, quote);
+        await createNotifications(
+          db,
+          notifyIds.map((uid) => ({
+            organization_id: quote.organization_id,
+            user_id: uid,
+            type: "supplier_confirmed",
+            quote_id: quote.id,
+            title: `${order.supplier_name} confirmó su orden`,
+            body: `Cotización ${quote.code ?? ""}`.trim(),
+          })),
+        );
+      } catch (notifyError) {
+        console.error("confirmSupplierReception:notify", notifyError);
+      }
+    }
+
     await emitWebhook("supplier_confirmed", {
       order_id: order.id,
       quote_id: order.quote_id,

@@ -32,6 +32,11 @@ import {
 } from "@/lib/quote-actions";
 import { sendSupplierOrder } from "@/lib/supplier-order-actions";
 import type { QuoteAccess } from "@/lib/auth";
+import {
+  QUOTE_ITEM_STATUS_META,
+  summarizeClientResponse,
+  type QuoteItemStatus,
+} from "@/lib/quote-item-status";
 
 export interface QuoteFormInitial {
   id: string;
@@ -76,6 +81,8 @@ export interface QuoteVersionView {
 export interface SupplierOrderView {
   supplierName: string;
   supplierEmail: string;
+  message: string | null;
+  token: string;
   status: string;
   sentAt: string | null;
   confirmedAt: string | null;
@@ -101,10 +108,17 @@ let keySeq = 0;
 const nextKey = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `row-${++keySeq}`;
 
+/** id estable de BD para un ítem nuevo (uuid), generado en el cliente para que el
+ * upsert por id conserve la respuesta del cliente y los precios entre guardados. */
+const newItemId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${++keySeq}`;
+
 function emptyItem(isGroup = false): ItemRow {
   return {
     key: nextKey(),
-    id: undefined,
+    id: newItemId(),
     description: "",
     quantity: 1,
     clientPrice: 0,
@@ -148,12 +162,24 @@ export function QuoteForm({
   statuses = [],
   supplierOrders = [],
 }: QuoteFormProps) {
-  const { seeCost, seeClientPrice, seeMargin, canEdit, canSend, canManageInternal, priceRole } =
-    access;
+  const {
+    seeCost,
+    seeClientPrice,
+    seeMargin,
+    canEdit,
+    canSend,
+    canManageInternal,
+    canSendSupplierOrder,
+    priceRole,
+  } = access;
   const router = useRouter();
   const [quoteId, setQuoteId] = useState<string | null>(initial?.id ?? null);
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
-  const [kamId, setKamId] = useState(initial?.kamId ?? "");
+  // Si la KAM asignada ya no está entre las opciones (fue desactivada), el select
+  // arranca en "Sin asignar" y al guardar queda null.
+  const [kamId, setKamId] = useState(
+    initial?.kamId && kams.some((k) => k.id === initial.kamId) ? initial.kamId : "",
+  );
   const [quoteType, setQuoteType] = useState(initial?.quoteType ?? "");
   const [quoteName, setQuoteName] = useState(initial?.quoteName ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
@@ -186,6 +212,15 @@ export function QuoteForm({
 
   // Filtro por proveedor (solo de vista; no altera lo que se guarda).
   const [supplierFilter, setSupplierFilter] = useState("");
+  // Grupos colapsados (solo de vista): key del ítem-grupo → sus ítems ocultos.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   // Formularios de envío a proveedor (email + mensaje) por proveedor.
   const [supplierForms, setSupplierForms] = useState<
     Record<string, { email: string; message: string }>
@@ -507,6 +542,28 @@ export function QuoteForm({
   let itemCounter = 0;
   const rowNumbers = items.map((it) => (it.isGroup ? null : ++itemCounter));
 
+  // A qué grupo pertenece cada ítem (por índice) + resumen por grupo (nº ítems y
+  // subtotal con el precio que ve el rol), para colapsar y mostrar el resumen plegado.
+  const groupKeyOf: (string | null)[] = [];
+  const groupStats = new Map<string, { count: number; subtotal: number }>();
+  {
+    let current: string | null = null;
+    for (const it of items) {
+      if (it.isGroup) {
+        current = it.key;
+        if (!groupStats.has(it.key)) groupStats.set(it.key, { count: 0, subtotal: 0 });
+        groupKeyOf.push(null);
+      } else {
+        groupKeyOf.push(current);
+        if (current) {
+          const s = groupStats.get(current)!;
+          s.count += 1;
+          s.subtotal += (seeClientPrice ? it.clientPrice : it.costPrice) * it.quantity;
+        }
+      }
+    }
+  }
+
   // Proveedores presentes en los ítems (para las órdenes a proveedores).
   const supplierGroups = useMemo(() => {
     const map = new Map<string, { name: string; items: ItemRow[] }>();
@@ -519,6 +576,19 @@ export function QuoteForm({
     }
     return [...map.values()];
   }, [items]);
+
+  // Respuesta del cliente (solo lectura, tomada del snapshot del server para que
+  // no cambie mientras el equipo edita la cotización).
+  const clientResponse = useMemo(() => {
+    if (!initial) return null;
+    const realItems = initial.items.filter((it) => !it.isGroup);
+    const statuses = realItems.map((it) => (it.status ?? "pending") as QuoteItemStatus);
+    const summary = summarizeClientResponse(statuses);
+    const recipient =
+      initial.recipients.find((r) => r.viewedAt || r.clientComment) ?? null;
+    if (!summary && !recipient?.viewedAt) return null;
+    return { realItems, summary, recipient };
+  }, [initial]);
 
   // Plantilla de columnas de la grilla de ítems, dinámica según qué precios ve el
   // rol y si puede editar (arrastrar/eliminar). Se usa como estilo inline porque
@@ -542,7 +612,7 @@ export function QuoteForm({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       <div className="space-y-6">
         {/* Datos generales */}
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h2 className="text-lg font-bold tracking-tight">Datos generales</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
@@ -648,7 +718,7 @@ export function QuoteForm({
         </section>
 
         {/* Ítems */}
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold tracking-tight">Ítems</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -719,6 +789,9 @@ export function QuoteForm({
               <div className="mt-1.5 space-y-1.5">
                 {items.map((item, index) => {
                   if (!isVisible(item)) return null;
+                  const groupKey = groupKeyOf[index];
+                  if (!item.isGroup && groupKey && collapsedGroups.has(groupKey)) return null;
+                  const isCollapsed = item.isGroup && collapsedGroups.has(item.key);
                   // El subtotal usa el precio que el rol ve (cliente para admin/viewer,
                   // costo para el creador).
                   const shownPrice = seeClientPrice ? item.clientPrice : item.costPrice;
@@ -746,7 +819,15 @@ export function QuoteForm({
                         </span>
                       )}
                       {item.isGroup ? (
-                        <span className="pt-1.5 text-center text-purple">▾</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(item.key)}
+                          aria-expanded={!isCollapsed}
+                          title={isCollapsed ? "Expandir grupo" : "Colapsar grupo"}
+                          className="cursor-pointer select-none pt-1.5 text-center text-purple transition hover:text-purple/70"
+                        >
+                          {isCollapsed ? "▸" : "▾"}
+                        </button>
                       ) : (
                         <span className="mt-0.5 flex h-6 w-6 items-center justify-center justify-self-center rounded-[8px] bg-purple-soft font-mono text-[11px] font-bold text-purple">
                           {rowNumbers[index] ?? "—"}
@@ -839,7 +920,14 @@ export function QuoteForm({
                         />
                       )}
                       <span className="pt-2 text-right font-mono text-[13px] font-bold text-ink">
-                        {item.isGroup ? "" : formatMoney(rowSubtotal, currency)}
+                        {item.isGroup
+                          ? isCollapsed
+                            ? `${groupStats.get(item.key)?.count ?? 0} ít · ${formatMoney(
+                                groupStats.get(item.key)?.subtotal ?? 0,
+                                currency,
+                              )}`
+                            : ""
+                          : formatMoney(rowSubtotal, currency)}
                       </span>
                       {canEdit && (
                         <button
@@ -859,9 +947,67 @@ export function QuoteForm({
           </div>
         </section>
 
+        {/* Respuesta del cliente (solo lectura; llega del enlace público) */}
+        {clientResponse && (
+          <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
+                Respuesta del cliente
+              </h2>
+              {clientResponse.summary && (
+                <Badge
+                  tone={clientResponse.summary.tone}
+                  color={clientResponse.summary.color}
+                >
+                  {clientResponse.summary.label}
+                </Badge>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {clientResponse.realItems.map((it, i) => {
+                const meta = QUOTE_ITEM_STATUS_META[(it.status ?? "pending") as QuoteItemStatus];
+                return (
+                  <div
+                    key={i}
+                    className="rounded-[12px] border border-line bg-bg/40 px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm font-semibold">
+                        {it.description || "—"}
+                      </span>
+                      <Badge tone={meta.tone} color={meta.color}>
+                        {meta.label}
+                      </Badge>
+                    </div>
+                    {it.clientComment && (
+                      <p className="mt-1.5 text-[13px] text-muted">“{it.clientComment}”</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {(clientResponse.recipient?.clientComment ||
+              clientResponse.recipient?.viewedAt) && (
+              <div className="mt-4 border-t border-line pt-3 text-[13px] text-muted">
+                {clientResponse.recipient?.clientComment && (
+                  <p className="text-ink">“{clientResponse.recipient.clientComment}”</p>
+                )}
+                {clientResponse.recipient?.viewedAt && (
+                  <p className="mt-1">
+                    {clientResponse.recipient.name || "Cliente"} · visto el{" "}
+                    {formatDate(clientResponse.recipient.viewedAt)}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Órdenes a proveedores (solo con la cotización aceptada; gestión interna) */}
-        {quoteId && isAccepted && canManageInternal && supplierGroups.length > 0 && (
-          <section className="rounded-lg border border-line bg-surface p-6">
+        {quoteId && isAccepted && canSendSupplierOrder && supplierGroups.length > 0 && (
+          <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h2 className="text-lg font-bold tracking-tight">Órdenes a proveedores</h2>
             <p className="mt-0.5 text-[13px] text-muted">
               Envía a cada proveedor la orden con sus ítems. El proveedor recibe un correo con el
@@ -872,7 +1018,7 @@ export function QuoteForm({
                 const existing = supplierOrders.find((o) => o.supplierName === group.name);
                 const form = supplierForms[group.name] ?? {
                   email: existing?.supplierEmail ?? "",
-                  message: "",
+                  message: existing?.message ?? "",
                 };
                 const sent = existing?.status === "sent" || existing?.status === "confirmed";
                 const confirmed = existing?.status === "confirmed";
@@ -936,6 +1082,22 @@ export function QuoteForm({
                     >
                       {sent ? "Reenviar orden" : "Enviar orden"}
                     </Button>
+                    {/* Confirmada: la orden vale como orden de compra → CTA para abrirla/descargarla. */}
+                    {confirmed && existing?.token && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+                        <a
+                          href={`/proveedor/${existing.token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-pill border border-line-strong bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink transition hover:border-green"
+                        >
+                          Ver / descargar orden de compra ↗
+                        </a>
+                        <span className="text-xs text-muted">
+                          Ábrela y usa Imprimir (Cmd+P) para guardar el PDF.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -945,7 +1107,7 @@ export function QuoteForm({
 
         {/* Destinatarios (solo quien puede enviar al cliente) */}
         {canSend && (
-        <section className="rounded-lg border border-line bg-surface p-6">
+        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold tracking-tight">Destinatarios</h2>
@@ -1006,7 +1168,7 @@ export function QuoteForm({
       <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
         {/* Estado + acciones */}
         {quoteId && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Estado</h3>
               {statusMeta && (
@@ -1053,7 +1215,7 @@ export function QuoteForm({
         )}
 
         {/* Resumen */}
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Resumen</h3>
           <dl className="mt-4 space-y-2.5 text-sm">
             <div className="flex justify-between">
@@ -1135,7 +1297,7 @@ export function QuoteForm({
 
         {/* Documentos comerciales (solo aceptada; gestión interna) */}
         {quoteId && isAccepted && canManageInternal && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
               Documentos comerciales
             </h3>
@@ -1173,7 +1335,7 @@ export function QuoteForm({
 
         {/* Brief (gestión interna) */}
         {canManageInternal && (
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Brief</h3>
           {briefUrl ? (
             <p className="mt-3 truncate text-sm text-ink">
@@ -1205,7 +1367,7 @@ export function QuoteForm({
 
         {/* Guardado + envío */}
         {(canEdit || canSend) && (
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div
             className={`text-[13px] ${saveState.kind === "error" ? "text-danger" : "text-muted"}`}
             role="status"
@@ -1239,7 +1401,7 @@ export function QuoteForm({
 
         {/* PDF */}
         {quoteId && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Exportar</h3>
             <div className="mt-3 flex flex-col gap-2">
               <a
@@ -1266,7 +1428,7 @@ export function QuoteForm({
 
         {/* Historial de versiones */}
         {versions.length > 0 && (
-          <div className="rounded-lg border border-line bg-surface p-6">
+          <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
               Historial de versiones
             </h3>
@@ -1296,7 +1458,7 @@ export function QuoteForm({
 
         {/* Eliminar (gestión interna) */}
         {quoteId && canManageInternal && (
-          <div className="rounded-lg border border-danger/40 bg-surface p-6">
+          <div className="rounded-lg border border-danger/40 bg-glass p-6 backdrop-blur-xl">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Acciones</h3>
             {confirmDelete ? (
               <div className="mt-3">

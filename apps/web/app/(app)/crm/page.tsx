@@ -4,17 +4,15 @@ import {
   formatDate,
   formatMoney,
   summarizeQuoteKpis,
-  QUOTE_KPI_KEYS,
   type QuoteCalcResult,
 } from "@agency-os/domain";
 import { listKams, listQuotes, listQuoteStatsRows, type QuoteListRow } from "@agency-os/db";
-import { Avatar, Badge, KpiCard, KpiDot, Table, Td, Th } from "@agency-os/ui";
+import { Avatar, Badge, Table, Td, Th } from "@agency-os/ui";
 import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { QUOTE_KPI_LABELS, QUOTE_KPI_TONES } from "@/lib/quote-ui";
 import { getQuoteStatusMap, resolveStatus, statusOptions } from "@/lib/quote-status-catalog";
 import { QuoteFilters } from "@/components/crm/quote-filters";
-import { QUOTE_KPI_ICONS } from "@/components/crm/kpi-icons";
+import { QuoteKpiRow } from "@/components/crm/quote-kpi-row";
 
 export const dynamic = "force-dynamic";
 
@@ -152,38 +150,8 @@ export default async function QuotesListPage({
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        {QUOTE_KPI_KEYS.map((key) => {
-          const tone = QUOTE_KPI_TONES[key];
-          // Una línea por moneda (COP y USD individualizados); si no hay importe, "$ 0".
-          const currencies = Object.entries(kpis[key].amounts);
-          const lines = currencies.length > 0 ? currencies : [["COP", 0] as [string, number]];
-          return (
-            <KpiCard
-              key={key}
-              label={QUOTE_KPI_LABELS[key]}
-              value={kpis[key].count}
-              hint={
-                key === "total"
-                  ? includeClosed
-                    ? "Incluye cerradas"
-                    : "Excluye cerradas"
-                  : undefined
-              }
-              icon={QUOTE_KPI_ICONS[key]}
-              tone={tone}
-              highlight={key === "total"}
-              sub={lines.map(([currency, amount]) => (
-                <div key={currency} className="flex items-center gap-2">
-                  <KpiDot tone={tone} />
-                  <span className="truncate font-mono text-[13px] text-muted">
-                    {formatMoney(amount, currency)}
-                  </span>
-                </div>
-              ))}
-            />
-          );
-        })}
+      <div className="mt-6">
+        <QuoteKpiRow kpis={kpis} includeClosed={includeClosed} />
       </div>
 
       <div className="mt-5">

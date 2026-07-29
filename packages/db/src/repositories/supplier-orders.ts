@@ -22,6 +22,8 @@ export interface UpsertSupplierOrderInput {
   supplierEmail: string;
   /** Snapshot de los ítems del proveedor (descripción, cantidad, costo). */
   items: Json;
+  /** Mensaje opcional del equipo para el proveedor (se muestra en la vista pública). */
+  message: string | null;
   /** ISO date; se recalcula en cada envío para renovar la expiración de 30 días. */
   expiresAt: string;
 }
@@ -37,6 +39,7 @@ export async function upsertSupplierOrder(db: Db, input: UpsertSupplierOrderInpu
         supplier_name: input.supplierName,
         supplier_email: input.supplierEmail,
         items: input.items,
+        message: input.message,
         status: "sent",
         sent_at: new Date().toISOString(),
         expires_at: input.expiresAt,

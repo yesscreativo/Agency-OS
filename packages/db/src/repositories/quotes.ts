@@ -92,6 +92,47 @@ export async function listQuotes(
   return { rows: data ?? [], total: count ?? 0, page, pageSize };
 }
 
+/** Fila del tablero Kanban: cotización + cliente + KAM + ítems para el total. */
+export type PipelineQuoteRow = QuoteListRow & {
+  kam: Pick<Tables<"kams">, "id" | "name"> | null;
+};
+
+const PIPELINE_SELECT =
+  "*, client:clients(id, name, company), kam:kams(id, name), quote_items(client_price, cost_price, quantity, is_group)";
+
+/** Todas las cotizaciones no borradas para el pipeline (agrupadas por estado en
+ * la app), con los mismos filtros que la lista. Pagina internamente en bloques de
+ * 1000 (límite de PostgREST). `includeClosed` por defecto oculta las cerradas
+ * (paridad con la lista); la columna Cerrada existe igual pero sin tarjetas. */
+export async function listPipelineQuotes(
+  db: Db,
+  filters: QuoteListFilters = {},
+): Promise<PipelineQuoteRow[]> {
+  const { search, status, dateFrom, dateTo, includeClosed = false, kamId } = filters;
+  const searchConditions = search ? await buildSearchConditions(db, search) : null;
+  const pageSize = 1000;
+  const rows: PipelineQuoteRow[] = [];
+  for (let from = 0; ; from += pageSize) {
+    let query = db
+      .from("quotes")
+      .select(PIPELINE_SELECT)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (status) query = query.eq("status", status);
+    else if (!includeClosed) query = query.neq("status", "closed");
+    if (dateFrom) query = query.gte("created_at", dateFrom);
+    if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999Z`);
+    if (kamId) query = query.eq("kam_id", kamId);
+    if (searchConditions) query = query.or(searchConditions.join(","));
+    const { data, error } = await query.returns<PipelineQuoteRow[]>();
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
 /** Fila mínima para los KPIs globales de la lista (conteo + suma por estado). */
 export type QuoteStatsRow = Pick<
   Tables<"quotes">,
@@ -181,17 +222,32 @@ export async function softDeleteQuote(db: Db, id: string) {
 
 /** Reemplaza el set de ítems de una cotización (estrategia del autosave:
  * borrar+insertar mantiene el sort_order simple y atómico a nivel de fila). */
+/** Sincroniza los ítems por id ESTABLE (el cliente genera el uuid de los nuevos):
+ * borra los que ya no están, y hace upsert del resto. NO incluye status/client_comment
+ * en el payload, así el upsert conserva la respuesta del cliente de las filas existentes
+ * (y las nuevas quedan con el default `pending`). Los ids estables evitan que un
+ * reguardado/autosave pierda la respuesta o los precios preservados por rol. */
 export async function replaceQuoteItems(
   db: Db,
   quoteId: string,
-  items: Omit<TablesInsert<"quote_items">, "quote_id">[],
+  items: (Omit<TablesInsert<"quote_items">, "quote_id"> & { id: string })[],
 ) {
-  const { error: deleteError } = await db.from("quote_items").delete().eq("quote_id", quoteId);
+  if (items.length === 0) {
+    const { error } = await db.from("quote_items").delete().eq("quote_id", quoteId);
+    if (error) throw error;
+    return [];
+  }
+  const ids = items.map((i) => i.id);
+  const { error: deleteError } = await db
+    .from("quote_items")
+    .delete()
+    .eq("quote_id", quoteId)
+    .not("id", "in", `(${ids.join(",")})`);
   if (deleteError) throw deleteError;
-  if (items.length === 0) return [];
+
   const { data, error } = await db
     .from("quote_items")
-    .insert(items.map((item, i) => ({ ...item, quote_id: quoteId, sort_order: i })))
+    .upsert(items.map((item, i) => ({ ...item, quote_id: quoteId, sort_order: i })))
     .select();
   if (error) throw error;
   return data;

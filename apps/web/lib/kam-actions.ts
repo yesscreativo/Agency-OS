@@ -22,7 +22,10 @@ async function requireManager(): Promise<ManagerAuth> {
   return { organizationId };
 }
 
-export async function createKam(name: string): Promise<KamActionResult> {
+export async function createKam(
+  name: string,
+  userId?: string | null,
+): Promise<KamActionResult> {
   const auth = await requireManager();
   if (auth.error !== undefined) return { error: auth.error };
   const trimmed = name.trim();
@@ -30,12 +33,36 @@ export async function createKam(name: string): Promise<KamActionResult> {
 
   try {
     const db = await getSupabaseServerClient();
-    await createKamRepo(db, { name: trimmed, organization_id: auth.organizationId });
+    await createKamRepo(db, {
+      name: trimmed,
+      organization_id: auth.organizationId,
+      user_id: userId || null,
+    });
     revalidatePath("/crm/kams");
     return { ok: true };
   } catch (error) {
     console.error("createKam", error);
     return { error: "No se pudo crear la KAM/PM. Intenta de nuevo." };
+  }
+}
+
+/** Vincula (o desvincula) un KAM/PM con una cuenta de usuario, para poder
+ * dirigirle notificaciones en la plataforma. */
+export async function setKamUser(
+  id: string,
+  userId: string | null,
+): Promise<KamActionResult> {
+  const auth = await requireManager();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  try {
+    const db = await getSupabaseServerClient();
+    await updateKam(db, id, { user_id: userId || null });
+    revalidatePath("/crm/kams");
+    return { ok: true };
+  } catch (error) {
+    console.error("setKamUser", error);
+    return { error: "No se pudo vincular el usuario. Intenta de nuevo." };
   }
 }
 

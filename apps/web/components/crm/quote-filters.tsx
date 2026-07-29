@@ -12,9 +12,12 @@ interface QuoteFiltersProps {
   desde: string;
   hasta: string;
   cerradas: boolean;
+  /** Ruta destino del formulario GET y del "Limpiar". Por defecto la lista. */
+  action?: string;
 }
 
-/** Barra de filtros de la lista — formulario GET, el estado vive en la URL. */
+/** Barra de filtros de la lista — formulario GET, el estado vive en la URL.
+ * Reutilizable en otras vistas (Kanban) vía la prop `action`. */
 export function QuoteFilters({
   q,
   kam,
@@ -24,11 +27,12 @@ export function QuoteFilters({
   desde,
   hasta,
   cerradas,
+  action = "/crm",
 }: QuoteFiltersProps) {
   return (
     <form
       method="GET"
-      action="/crm"
+      action={action}
       className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-glass p-4 backdrop-blur-xl"
     >
       <div className="min-w-[220px] flex-1">
@@ -97,7 +101,7 @@ export function QuoteFilters({
       >
         Filtrar
       </button>
-      <a href="/crm" className="pb-2.5 text-sm text-muted transition hover:text-ink">
+      <a href={action} className="pb-2.5 text-sm text-muted transition hover:text-ink">
         Limpiar
       </a>
     </form>

@@ -126,8 +126,11 @@ export interface QuoteAccess {
   canEdit: boolean;
   /** Envía al cliente y gestiona destinatarios (quote.send). */
   canSend: boolean;
-  /** Estado, docs comerciales, brief, órdenes a proveedor y eliminar (quote.approve). */
+  /** Estado, docs comerciales, brief y eliminar (quote.approve). */
   canManageInternal: boolean;
+  /** Envía órdenes a proveedores (quote.supplier_order). Separado de canManageInternal
+   * para que Creador pueda enviar sin ganar estado/docs/brief/eliminar. */
+  canSendSupplierOrder: boolean;
   /** Qué precio es "el precio" a mostrar: cliente para admin/viewer, costo para creator. */
   priceRole: "kam" | "creator";
 }
@@ -143,6 +146,7 @@ export function quoteAccess(user: CurrentUser | null): QuoteAccess {
     canEdit: hasPermission(user, "quote.update"),
     canSend: hasPermission(user, "quote.send"),
     canManageInternal: hasPermission(user, "quote.approve"),
+    canSendSupplierOrder: hasPermission(user, "quote.supplier_order"),
     priceRole: seeClientPrice ? "kam" : "creator",
   };
 }

@@ -23,7 +23,7 @@ export function SidebarItem({ href, label, icon, active = false }: SidebarItemPr
       href={href}
       className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm transition ${
         active
-          ? "bg-surface-2 font-semibold text-ink"
+          ? "bg-green font-semibold text-green-ink"
           : "text-muted hover:bg-surface-2 hover:text-ink"
       }`}
     >

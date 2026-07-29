@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-// Credenciales del usuario de prueba (rol Administrador) leídas de env — nunca
-// hardcodeadas, este repo es público. Ver apps/web/.env.local (gitignored).
+// Credenciales del usuario de prueba leídas de env — nunca hardcodeadas, este
+// repo es público. Ver apps/web/.env.local (gitignored).
 const TEST_EMAIL = process.env.E2E_ADMIN_EMAIL;
 const TEST_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
 
@@ -21,10 +21,12 @@ test("logs in, shows the RBAC shell, and logs out", async ({ page }) => {
   await page.getByLabel("Contraseña").fill(TEST_PASSWORD!);
   await page.getByRole("button", { name: "Entrar" }).click();
 
-  await expect(page).toHaveURL(/\/crm$/);
+  // Tras el login se entra al hub (/inicio); la navegación por módulo ya no
+  // vive en la shell global (ver refactor RBAC multi-módulo). La shell muestra
+  // el nombre del usuario autenticado.
+  await expect(page).toHaveURL(/\/inicio$/);
+  await expect(page.getByRole("heading", { name: /^Hola,/ })).toBeVisible();
   await expect(page.getByText("Yesid Parra")).toBeVisible();
-  await expect(page.getByText("Administrador")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Usuarios" })).toBeVisible();
 
   await page.getByRole("button", { name: "Salir" }).click();
   await expect(page).toHaveURL(/\/login$/);
