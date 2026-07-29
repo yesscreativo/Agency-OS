@@ -87,6 +87,18 @@ async function assertStatusInOrg(
   return data.project_id;
 }
 
+/** Confirma que el cliente pertenece a la organización del usuario antes de
+ * usarlo (misma defensa en profundidad que `assertWorkItemInOrg`). */
+async function assertClientInOrg(db: Db, id: string, organizationId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from("clients")
+    .select("organization_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data && data.organization_id === organizationId;
+}
+
 // ---------- Proyecto ----------
 
 export interface CreateProjectInput {
@@ -108,6 +120,11 @@ export async function createProjectAction(input: CreateProjectInput): Promise<Id
 
   try {
     const db = await getSupabaseServerClient();
+
+    if (!(await assertClientInOrg(db, input.clientId, auth.organizationId))) {
+      return { error: "El cliente no existe o no pertenece a tu organización." };
+    }
+
     const id = await createProject(db, {
       orgId: auth.organizationId,
       clientId: input.clientId,
@@ -155,9 +172,19 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
     const db = await getSupabaseServerClient();
     let id = input.id;
 
+    let revalidateProjectId: string;
+
     if (id) {
       const projectId = await assertWorkItemInOrg(db, id, auth.organizationId);
       if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+
+      if (input.statusId) {
+        const statusProjectId = await assertStatusInOrg(db, input.statusId, auth.organizationId);
+        if (!statusProjectId || statusProjectId !== projectId) {
+          return { error: "El estado no pertenece a este proyecto." };
+        }
+      }
+
       await updateWorkItem(db, id, {
         title,
         description: input.description?.trim() || null,
@@ -166,7 +193,17 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         start_date: input.startDate || null,
         due_date: input.dueDate || null,
       });
+      revalidateProjectId = projectId;
     } else {
+      if (input.parentId) {
+        const parentProjectId = await assertWorkItemInOrg(db, input.parentId, auth.organizationId);
+        if (!parentProjectId) {
+          return { error: "La tarea padre no existe o no pertenece a tu organización." };
+        }
+      }
+      const projectId = await assertWorkItemInOrg(db, input.projectId, auth.organizationId);
+      if (!projectId) return { error: "El proyecto no existe o no pertenece a tu organización." };
+
       id = await createWorkItem(db, {
         orgId: auth.organizationId,
         projectId: input.projectId,
@@ -185,10 +222,11 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
           start_date: input.startDate || null,
         });
       }
+      revalidateProjectId = projectId;
     }
 
     revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${input.projectId}`);
+    revalidatePath(`/proyectos/${revalidateProjectId}`);
     return { id };
   } catch (error) {
     console.error("saveWorkItem", error);
