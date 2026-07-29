@@ -6,9 +6,10 @@ import { ModuleIcon } from "@/components/module-icons";
 
 export const dynamic = "force-dynamic";
 
-/** Ruta a la que entra cada módulo operativo (solo CRM por ahora). */
+/** Ruta a la que entra cada módulo operativo. */
 const MODULE_HREFS: Record<string, string> = {
   crm: "/crm",
+  proyectos: "/proyectos",
 };
 
 export default async function InicioPage() {
