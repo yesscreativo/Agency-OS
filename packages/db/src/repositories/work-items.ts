@@ -82,7 +82,7 @@ async function countProjectTasks(
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await db
       .from("work_items")
-      .select("project_id, status:work_item_statuses(is_done)")
+      .select("project_id, status:work_item_statuses!work_items_status_fk(is_done)")
       .eq("type", "task")
       .is("deleted_at", null)
       .in("project_id", projectIds)
@@ -117,8 +117,12 @@ export type ProjectDetail = Tables<"work_items"> & {
   tasks: ProjectTaskRow[];
 };
 
+// El embed de status DEBE desambiguarse con `!work_items_status_fk`: hay dos
+// relaciones work_items↔work_item_statuses (status_id→statuses.id, la que
+// queremos, y statuses.project_id→work_items.id, la inversa). Sin el nombre del
+// FK, PostgREST responde 300 (PGRST201) y la consulta lanza. Igual en countProjectTasks.
 const TASKS_SELECT =
-  "*, status:work_item_statuses(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email)))";
+  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email)))";
 
 /** Proyecto + sus columnas del tablero (`work_item_statuses`, ordenadas por
  * sort_order) + sus tareas/subtareas con assignees embebidos. Las tareas se
