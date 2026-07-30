@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import {
   Badge,
   Button,
-  Chip,
   FieldError,
   Input,
   Label,
@@ -152,6 +151,7 @@ export function WorkItemEditor({
       onClose={onClose}
       title={modalTitle}
       description={modalDescription}
+      size="lg"
       footer={
         <>
           {task && canManage && (
@@ -257,19 +257,12 @@ export function WorkItemEditor({
           {orgUsers.length === 0 ? (
             <p className="text-sm text-muted">No hay usuarios en la organización.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {orgUsers.map((u) => (
-                <Chip
-                  key={u.id}
-                  type="button"
-                  active={assigneeIds.includes(u.id)}
-                  onClick={() => canAssign && toggleAssignee(u.id)}
-                  disabled={!canAssign}
-                >
-                  {u.name}
-                </Chip>
-              ))}
-            </div>
+            <AssigneeMultiSelect
+              users={orgUsers}
+              selectedIds={assigneeIds}
+              onToggle={toggleAssignee}
+              disabled={!canAssign}
+            />
           )}
         </div>
 
@@ -310,5 +303,95 @@ export function WorkItemEditor({
         {error && <FieldError>{error}</FieldError>}
       </div>
     </Modal>
+  );
+}
+
+/** Selector de asignados con buscador: muestra los ya asignados como chips
+ * removibles y un input que filtra el resto de la organización en vivo. Reemplaza
+ * la lista completa de Chips (inviable con muchos usuarios). La lista de
+ * coincidencias se renderiza inline (no en overlay absoluto) para no recortarse
+ * dentro del cuerpo scrolleable del Modal. */
+function AssigneeMultiSelect({
+  users,
+  selectedIds,
+  onToggle,
+  disabled,
+}: {
+  users: BoardOrgUser[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  disabled: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const selected = users.filter((u) => selectedIds.includes(u.id));
+  const q = query.trim().toLowerCase();
+  const matches = users.filter(
+    (u) => !selectedIds.includes(u.id) && (q === "" || u.name.toLowerCase().includes(q)),
+  );
+
+  return (
+    <div className="space-y-2">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((u) => (
+            <span
+              key={u.id}
+              className="inline-flex items-center gap-1.5 rounded-pill border border-line-strong bg-glass px-2.5 py-1 text-sm text-ink"
+            >
+              {u.name}
+              {!disabled && (
+                <button
+                  type="button"
+                  aria-label={`Quitar a ${u.name}`}
+                  onClick={() => onToggle(u.id)}
+                  className="leading-none text-muted transition hover:text-ink"
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {!disabled && (
+        <div>
+          <Input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder="Buscar persona…"
+          />
+          {open && (
+            <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-line bg-glass backdrop-blur-xl">
+              {matches.length > 0 ? (
+                matches.map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      onToggle(u.id);
+                      setQuery("");
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-2"
+                  >
+                    {u.name}
+                  </button>
+                ))
+              ) : (
+                <p className="px-3 py-2 text-sm text-muted">
+                  {q === "" ? "Todos ya están asignados." : "Sin resultados."}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
