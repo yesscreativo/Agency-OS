@@ -6,6 +6,7 @@ import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
 import { formatDate, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
 import { WorkItemEditor } from "./work-item-editor";
+import { ProjectStatusManager } from "./project-status-manager";
 
 export interface BoardStatus {
   id: string;
@@ -91,7 +92,7 @@ export function ProjectBoard({
   canAssign: boolean;
 }) {
   const router = useRouter();
-  const [view, setView] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "list" | "statuses">("board");
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -213,8 +214,13 @@ export function ProjectBoard({
           <Chip active={view === "list"} onClick={() => setView("list")}>
             Lista
           </Chip>
+          {canManage && (
+            <Chip active={view === "statuses"} onClick={() => setView("statuses")}>
+              Estados
+            </Chip>
+          )}
         </div>
-        {canManage && (
+        {canManage && view !== "statuses" && (
           <Button
             variant="primary"
             size="sm"
@@ -225,7 +231,9 @@ export function ProjectBoard({
         )}
       </div>
 
-      {view === "board" ? (
+      {view === "statuses" ? (
+        <ProjectStatusManager projectId={projectId} statuses={statuses} />
+      ) : view === "board" ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {statuses.map((col) => {
             const colTasks = grouped[col.id] ?? [];
