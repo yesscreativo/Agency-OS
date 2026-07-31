@@ -427,6 +427,18 @@ export async function reorderProjectStatuses(
 const ATTACHMENT_BUCKET = "work-item-files";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB (paridad con el bucket, ver 019)
 
+/** Neutraliza tipos "activos" que el navegador ejecutaría inline (XSS almacenado):
+ * un `.html` o `.svg` servido con su MIME real correría scripts al abrir la URL
+ * firmada. Se fuerzan a `application/octet-stream` (el navegador los descarga en
+ * vez de renderizarlos). El resto (imágenes raster, PDF, etc.) conserva su MIME. */
+function safeStorageContentType(mime: string): string {
+  const m = mime.toLowerCase();
+  if (m === "text/html" || m === "application/xhtml+xml" || m.startsWith("image/svg")) {
+    return "application/octet-stream";
+  }
+  return mime;
+}
+
 export interface WorkItemAttachment {
   id: string;
   filename: string;
@@ -476,11 +488,14 @@ export async function uploadWorkItemAttachment(
     const projectId = await assertWorkItemInOrg(db, workItemId, auth.organizationId);
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
+    // Ruta prefijada por organización: <org_id>/<work_item_id>/<uuid>-<archivo>.
+    // El primer segmento es lo que las políticas RLS del bucket (020) cotejan
+    // contra current_user_organization_ids() para aislar por tenant.
     const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-    const path = `${workItemId}/${crypto.randomUUID()}-${safeName}`;
+    const path = `${auth.organizationId}/${workItemId}/${crypto.randomUUID()}-${safeName}`;
 
     const { error: uploadError } = await db.storage.from(ATTACHMENT_BUCKET).upload(path, file, {
-      contentType: file.type || "application/octet-stream",
+      contentType: file.type ? safeStorageContentType(file.type) : "application/octet-stream",
       upsert: false,
     });
     if (uploadError) {

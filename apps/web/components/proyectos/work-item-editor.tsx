@@ -438,7 +438,9 @@ export function WorkItemEditor({
 }
 
 function isImage(mime: string | null): boolean {
-  return !!mime && mime.startsWith("image/");
+  // Excluye SVG: aunque en <img> no ejecuta scripts, se sube como
+  // application/octet-stream (ver safeStorageContentType) y no debe previsualizarse.
+  return !!mime && mime.startsWith("image/") && !mime.startsWith("image/svg");
 }
 
 /** Tarjeta de un adjunto ya subido: preview de imagen o icono genérico, con
