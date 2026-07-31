@@ -5,12 +5,17 @@ import {
   createProject,
   createStatus,
   createWorkItem,
+  deleteAttachmentRow,
   deleteStatus,
+  getAttachment,
+  insertAttachment,
+  listAttachments,
   reorderStatuses,
   setAssignees,
   softDeleteWorkItem,
   updateStatus,
   updateWorkItem,
+  type AttachmentRow,
   type Db,
   type Enums,
 } from "@agency-os/db";
@@ -414,5 +419,140 @@ export async function reorderProjectStatuses(
   } catch (error) {
     console.error("reorderProjectStatuses", error);
     return { error: "No se pudo reordenar los estados. Intenta de nuevo." };
+  }
+}
+
+// ---------- Adjuntos ----------
+
+const ATTACHMENT_BUCKET = "work-item-files";
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB (paridad con el bucket, ver 019)
+
+export interface WorkItemAttachment {
+  id: string;
+  filename: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  /** URL firmada temporal (1 h) para descargar/previsualizar. */
+  url: string | null;
+}
+
+export type AttachmentResult =
+  | { attachment: WorkItemAttachment; error?: never }
+  | { attachment?: never; error: string };
+export type AttachmentListResult =
+  | { attachments: WorkItemAttachment[]; error?: never }
+  | { attachments?: never; error: string };
+
+async function signedAttachmentUrl(db: Db, path: string): Promise<string | null> {
+  const { data } = await db.storage.from(ATTACHMENT_BUCKET).createSignedUrl(path, 60 * 60);
+  return data?.signedUrl ?? null;
+}
+
+function toAttachment(row: AttachmentRow, url: string | null): WorkItemAttachment {
+  return {
+    id: row.id,
+    filename: row.filename,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    url,
+  };
+}
+
+/** Sube un archivo al bucket privado y registra la fila. La tarea ya debe existir
+ * (al crear, la UI guarda primero y sube después con el id devuelto). */
+export async function uploadWorkItemAttachment(
+  workItemId: string,
+  formData: FormData,
+): Promise<AttachmentResult> {
+  const auth = await requireProjectManager();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Selecciona un archivo." };
+  if (file.size > MAX_ATTACHMENT_BYTES) return { error: "El archivo supera el límite de 10 MB." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const projectId = await assertWorkItemInOrg(db, workItemId, auth.organizationId);
+    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${workItemId}/${crypto.randomUUID()}-${safeName}`;
+
+    const { error: uploadError } = await db.storage.from(ATTACHMENT_BUCKET).upload(path, file, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
+    });
+    if (uploadError) {
+      console.error("uploadWorkItemAttachment:storage", uploadError);
+      return { error: "No se pudo subir el archivo." };
+    }
+
+    const row = await insertAttachment(db, {
+      work_item_id: workItemId,
+      organization_id: auth.organizationId,
+      path,
+      filename: file.name,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      created_by: auth.userId,
+    });
+
+    revalidatePath(`/proyectos/${projectId}`);
+    return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
+  } catch (error) {
+    console.error("uploadWorkItemAttachment", error);
+    return { error: "No se pudo subir el archivo. Intenta de nuevo." };
+  }
+}
+
+/** Lista los adjuntos de una tarea con URLs firmadas. Gate `project.view`. */
+export async function listWorkItemAttachments(workItemId: string): Promise<AttachmentListResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) return { error: "No tienes permiso." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const projectId = await assertWorkItemInOrg(db, workItemId, organizationId);
+    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+
+    const rows = await listAttachments(db, workItemId);
+    const attachments = await Promise.all(
+      rows.map(async (r) => toAttachment(r, await signedAttachmentUrl(db, r.path))),
+    );
+    return { attachments };
+  } catch (error) {
+    console.error("listWorkItemAttachments", error);
+    return { error: "No se pudieron cargar los adjuntos." };
+  }
+}
+
+/** Borra el binario del bucket y la fila. Gate `project.manage`. */
+export async function deleteWorkItemAttachment(id: string): Promise<ActionResult> {
+  const auth = await requireProjectManager();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const attachment = await getAttachment(db, id);
+    if (!attachment || attachment.organization_id !== auth.organizationId) {
+      return { error: "El adjunto no existe o no pertenece a tu organización." };
+    }
+
+    const { error: rmError } = await db.storage.from(ATTACHMENT_BUCKET).remove([attachment.path]);
+    // Si el objeto ya no está en el bucket igual limpiamos la fila (no bloqueamos).
+    if (rmError) console.error("deleteWorkItemAttachment:storage", rmError);
+
+    await deleteAttachmentRow(db, id);
+
+    const projectId = await assertWorkItemInOrg(db, attachment.work_item_id, auth.organizationId);
+    if (projectId) revalidatePath(`/proyectos/${projectId}`);
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteWorkItemAttachment", error);
+    return { error: "No se pudo eliminar el adjunto. Intenta de nuevo." };
   }
 }

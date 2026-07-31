@@ -931,6 +931,64 @@ export type Database = {
           },
         ]
       }
+      work_item_attachments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          filename: string
+          id: string
+          mime_type: string | null
+          organization_id: string
+          path: string
+          size_bytes: number | null
+          work_item_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          filename: string
+          id?: string
+          mime_type?: string | null
+          organization_id: string
+          path: string
+          size_bytes?: number | null
+          work_item_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          filename?: string
+          id?: string
+          mime_type?: string | null
+          organization_id?: string
+          path?: string
+          size_bytes?: number | null
+          work_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_item_attachments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_attachments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_attachments_work_item_id_fkey"
+            columns: ["work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_item_statuses: {
         Row: {
           color: string

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Badge,
   Button,
@@ -12,7 +12,17 @@ import {
   Textarea,
 } from "@agency-os/ui";
 import { WORK_ITEM_PRIORITIES, type WorkItemPriority } from "@agency-os/domain";
-import { deleteWorkItem, saveWorkItem, setWorkItemAssignees } from "@/lib/project-actions";
+import {
+  deleteWorkItem,
+  deleteWorkItemAttachment,
+  listWorkItemAttachments,
+  saveWorkItem,
+  setWorkItemAssignees,
+  uploadWorkItemAttachment,
+  type WorkItemAttachment,
+} from "@/lib/project-actions";
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 import type { BoardOrgUser, BoardStatus, BoardTask } from "./project-board";
 
 const PRIORITY_LABEL: Record<WorkItemPriority, string> = {
@@ -74,6 +84,70 @@ export function WorkItemEditor({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  // Adjuntos: los de una tarea existente se cargan al abrir; los elegidos al
+  // crear (aún sin id) se bufferean en `pendingFiles` y se suben tras guardar.
+  const [attachments, setAttachments] = useState<WorkItemAttachment[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!task?.id) return;
+    let active = true;
+    listWorkItemAttachments(task.id).then((res) => {
+      if (active && "attachments" in res && res.attachments) setAttachments(res.attachments);
+    });
+    return () => {
+      active = false;
+    };
+  }, [task?.id]);
+
+  const onFilesSelected = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setAttachmentError(null);
+    const list = Array.from(files);
+    const tooBig = list.find((f) => f.size > MAX_ATTACHMENT_BYTES);
+    if (tooBig) {
+      setAttachmentError(`"${tooBig.name}" supera el límite de 10 MB.`);
+    } else if (task?.id) {
+      // Tarea existente: subir de inmediato.
+      const targetId = task.id;
+      setAttachmentBusy(true);
+      startTransition(async () => {
+        for (const file of list) {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await uploadWorkItemAttachment(targetId, fd);
+          if (res.error || !res.attachment) {
+            setAttachmentError(res.error ?? "No se pudo subir el archivo.");
+            break;
+          }
+          const uploaded = res.attachment;
+          setAttachments((prev) => [...prev, uploaded]);
+        }
+        setAttachmentBusy(false);
+      });
+    } else {
+      // Creando: bufferear hasta que la tarea exista.
+      setPendingFiles((prev) => [...prev, ...list]);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachmentError(null);
+    startTransition(async () => {
+      const res = await deleteWorkItemAttachment(id);
+      if (res.error) setAttachmentError(res.error);
+      else setAttachments((prev) => prev.filter((a) => a.id !== id));
+    });
+  };
+
+  const removePending = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const canSubmit = Boolean(title.trim());
   const modalTitle = task
     ? task.type === "subtask"
@@ -121,6 +195,18 @@ export function WorkItemEditor({
         if (assignRes.error) {
           setError(assignRes.error);
           return;
+        }
+      }
+      // Sube los adjuntos que se eligieron mientras la tarea aún no existía.
+      if (canManage && savedId && pendingFiles.length > 0) {
+        for (const file of pendingFiles) {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await uploadWorkItemAttachment(savedId, fd);
+          if (res.error) {
+            setError(res.error);
+            return;
+          }
         }
       }
       onSaved();
@@ -266,6 +352,51 @@ export function WorkItemEditor({
           )}
         </div>
 
+        <div>
+          <Label>Adjuntos</Label>
+          {attachments.length > 0 || pendingFiles.length > 0 ? (
+            <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {attachments.map((a) => (
+                <AttachmentCard
+                  key={a.id}
+                  attachment={a}
+                  onRemove={canManage ? () => removeAttachment(a.id) : undefined}
+                />
+              ))}
+              {pendingFiles.map((f, i) => (
+                <PendingFileCard
+                  key={`${f.name}-${i}`}
+                  file={f}
+                  onRemove={canManage ? () => removePending(i) : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-faint">Sin archivos.</p>
+          )}
+          {canManage && (
+            <div className="mt-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => onFilesSelected(e.target.files)}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={attachmentBusy}
+              >
+                {attachmentBusy ? "Subiendo…" : "+ Agregar archivo"}
+              </Button>
+            </div>
+          )}
+          {attachmentError && <p className="mt-1 text-sm text-danger">{attachmentError}</p>}
+        </div>
+
         {task && task.type === "task" && (
           <div>
             <div className="flex items-center justify-between">
@@ -303,6 +434,79 @@ export function WorkItemEditor({
         {error && <FieldError>{error}</FieldError>}
       </div>
     </Modal>
+  );
+}
+
+function isImage(mime: string | null): boolean {
+  return !!mime && mime.startsWith("image/");
+}
+
+/** Tarjeta de un adjunto ya subido: preview de imagen o icono genérico, con
+ * enlace a la URL firmada y (si hay permiso) botón para quitarlo. */
+function AttachmentCard({
+  attachment,
+  onRemove,
+}: {
+  attachment: WorkItemAttachment;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="relative rounded-md border border-line bg-glass p-2">
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`Quitar ${attachment.filename}`}
+          onClick={onRemove}
+          className="absolute right-1 top-1 z-10 rounded-pill bg-black/60 px-1.5 text-xs leading-5 text-white transition hover:bg-black/80"
+        >
+          ✕
+        </button>
+      )}
+      <a
+        href={attachment.url ?? undefined}
+        target="_blank"
+        rel="noreferrer"
+        className="block"
+        title={attachment.filename}
+      >
+        {isImage(attachment.mimeType) && attachment.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={attachment.url}
+            alt={attachment.filename}
+            className="h-24 w-full rounded object-cover"
+          />
+        ) : (
+          <div className="flex h-24 items-center justify-center rounded bg-surface-2 text-3xl">📄</div>
+        )}
+        <div className="mt-1 truncate text-xs text-muted">{attachment.filename}</div>
+      </a>
+    </div>
+  );
+}
+
+/** Tarjeta de un archivo elegido al crear la tarea (aún no subido). */
+function PendingFileCard({ file, onRemove }: { file: File; onRemove?: () => void }) {
+  return (
+    <div className="relative rounded-md border border-dashed border-line bg-glass p-2">
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`Quitar ${file.name}`}
+          onClick={onRemove}
+          className="absolute right-1 top-1 z-10 rounded-pill bg-black/60 px-1.5 text-xs leading-5 text-white transition hover:bg-black/80"
+        >
+          ✕
+        </button>
+      )}
+      <div className="flex h-24 items-center justify-center rounded bg-surface-2 text-3xl">
+        {file.type.startsWith("image/") ? "🖼️" : "📄"}
+      </div>
+      <div className="mt-1 truncate text-xs text-muted" title={file.name}>
+        {file.name}
+      </div>
+      <div className="text-[11px] text-faint">Se subirá al guardar</div>
+    </div>
   );
 }
 
