@@ -161,6 +161,54 @@ export async function getProject(db: Db, id: string): Promise<ProjectDetail | nu
   };
 }
 
+/** Una tarea/subtarea con su status y asignados embebidos, más el proyecto al
+ * que pertenece (id/título, para el breadcrumb) y sus subtareas. Alimenta la
+ * vista de tarea a pantalla completa (`/proyectos/[id]/tareas/[taskId]`). El
+ * proyecto y las subtareas se traen en queries aparte por el mismo motivo que en
+ * `getProject`: `work_items.project_id`/`parent_id` no permiten un embed
+ * jerárquico por el lado del proyecto. */
+export type WorkItemDetail = ProjectTaskRow & {
+  project: Pick<Tables<"work_items">, "id" | "title"> | null;
+  subtasks: ProjectTaskRow[];
+};
+
+export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | null> {
+  const { data, error } = await db
+    .from("work_items")
+    .select(TASKS_SELECT)
+    .eq("id", id)
+    .in("type", ["task", "subtask"])
+    .is("deleted_at", null)
+    .maybeSingle<ProjectTaskRow>();
+  if (error) throw error;
+  if (!data) return null;
+
+  const [projectResult, subtasksResult] = await Promise.all([
+    db
+      .from("work_items")
+      .select("id, title")
+      .eq("id", data.project_id)
+      .is("deleted_at", null)
+      .maybeSingle<Pick<Tables<"work_items">, "id" | "title">>(),
+    db
+      .from("work_items")
+      .select(TASKS_SELECT)
+      .eq("parent_id", id)
+      .eq("type", "subtask")
+      .is("deleted_at", null)
+      .order("sort_order")
+      .returns<ProjectTaskRow[]>(),
+  ]);
+  if (projectResult.error) throw projectResult.error;
+  if (subtasksResult.error) throw subtasksResult.error;
+
+  return {
+    ...data,
+    project: projectResult.data ?? null,
+    subtasks: subtasksResult.data ?? [],
+  };
+}
+
 export interface CreateProjectInput {
   orgId: string;
   clientId: string;
@@ -240,6 +288,7 @@ export type WorkItemPatch = Partial<
     | "status_id"
     | "start_date"
     | "due_date"
+    | "estimated_minutes"
     | "sort_order"
     | "project_state"
   >

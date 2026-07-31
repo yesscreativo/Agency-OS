@@ -8,3 +8,4 @@ export * from "./quote-status";
 export * from "./quote-validation";
 export * from "./token-expiry";
 export * from "./work-item";
+export * from "./work-item-duration";

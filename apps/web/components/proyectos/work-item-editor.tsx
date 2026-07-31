@@ -11,7 +11,7 @@ import {
   Select,
   Textarea,
 } from "@agency-os/ui";
-import { WORK_ITEM_PRIORITIES, type WorkItemPriority } from "@agency-os/domain";
+import { parseDuration, WORK_ITEM_PRIORITIES, type WorkItemPriority } from "@agency-os/domain";
 import {
   deleteWorkItem,
   deleteWorkItemAttachment,
@@ -21,16 +21,14 @@ import {
   uploadWorkItemAttachment,
   type WorkItemAttachment,
 } from "@/lib/project-actions";
-
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 import type { BoardOrgUser, BoardStatus, BoardTask } from "./project-board";
-
-const PRIORITY_LABEL: Record<WorkItemPriority, string> = {
-  low: "Baja",
-  normal: "Normal",
-  high: "Alta",
-  urgent: "Urgente",
-};
+import {
+  AssigneeMultiSelect,
+  AttachmentCard,
+  MAX_ATTACHMENT_BYTES,
+  PendingFileCard,
+  PRIORITY_LABEL,
+} from "./work-item-fields";
 
 export function WorkItemEditor({
   open,
@@ -79,6 +77,7 @@ export function WorkItemEditor({
   const [statusId, setStatusId] = useState(task?.statusId ?? defaultStatusId ?? "");
   const [startDate, setStartDate] = useState(task?.startDate ?? "");
   const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
+  const [estimated, setEstimated] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task?.assignees.map((a) => a.id) ?? []);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -165,6 +164,11 @@ export function WorkItemEditor({
   const onSave = () => {
     if (!canSubmit) return;
     setError(null);
+    const parsedEstimate = parseDuration(estimated);
+    if (parsedEstimate.error) {
+      setError(parsedEstimate.error);
+      return;
+    }
     startTransition(async () => {
       // `saveWorkItem` (project.manage) y `setWorkItemAssignees` (project.assign)
       // son permisos independientes en el servidor: un usuario con solo
@@ -183,6 +187,7 @@ export function WorkItemEditor({
           priority,
           startDate: startDate || null,
           dueDate: dueDate || null,
+          estimatedMinutes: parsedEstimate.minutes,
         });
         if (res.error || !res.id) {
           setError(res.error ?? "No se pudo guardar la tarea. Intenta de nuevo.");
@@ -339,6 +344,17 @@ export function WorkItemEditor({
         </div>
 
         <div>
+          <Label htmlFor="wi-estimate">Duración estimada</Label>
+          <Input
+            id="wi-estimate"
+            value={estimated}
+            onChange={(e) => setEstimated(e.target.value)}
+            placeholder="p. ej. 2h, 90m, 1h 30m"
+            disabled={!canManage}
+          />
+        </div>
+
+        <div>
           <Label>Asignados</Label>
           {orgUsers.length === 0 ? (
             <p className="text-sm text-muted">No hay usuarios en la organización.</p>
@@ -434,170 +450,5 @@ export function WorkItemEditor({
         {error && <FieldError>{error}</FieldError>}
       </div>
     </Modal>
-  );
-}
-
-function isImage(mime: string | null): boolean {
-  // Excluye SVG: aunque en <img> no ejecuta scripts, se sube como
-  // application/octet-stream (ver safeStorageContentType) y no debe previsualizarse.
-  return !!mime && mime.startsWith("image/") && !mime.startsWith("image/svg");
-}
-
-/** Tarjeta de un adjunto ya subido: preview de imagen o icono genérico, con
- * enlace a la URL firmada y (si hay permiso) botón para quitarlo. */
-function AttachmentCard({
-  attachment,
-  onRemove,
-}: {
-  attachment: WorkItemAttachment;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="relative rounded-md border border-line bg-glass p-2">
-      {onRemove && (
-        <button
-          type="button"
-          aria-label={`Quitar ${attachment.filename}`}
-          onClick={onRemove}
-          className="absolute right-1 top-1 z-10 rounded-pill bg-black/60 px-1.5 text-xs leading-5 text-white transition hover:bg-black/80"
-        >
-          ✕
-        </button>
-      )}
-      <a
-        href={attachment.url ?? undefined}
-        target="_blank"
-        rel="noreferrer"
-        className="block"
-        title={attachment.filename}
-      >
-        {isImage(attachment.mimeType) && attachment.url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={attachment.url}
-            alt={attachment.filename}
-            className="h-24 w-full rounded object-cover"
-          />
-        ) : (
-          <div className="flex h-24 items-center justify-center rounded bg-surface-2 text-3xl">📄</div>
-        )}
-        <div className="mt-1 truncate text-xs text-muted">{attachment.filename}</div>
-      </a>
-    </div>
-  );
-}
-
-/** Tarjeta de un archivo elegido al crear la tarea (aún no subido). */
-function PendingFileCard({ file, onRemove }: { file: File; onRemove?: () => void }) {
-  return (
-    <div className="relative rounded-md border border-dashed border-line bg-glass p-2">
-      {onRemove && (
-        <button
-          type="button"
-          aria-label={`Quitar ${file.name}`}
-          onClick={onRemove}
-          className="absolute right-1 top-1 z-10 rounded-pill bg-black/60 px-1.5 text-xs leading-5 text-white transition hover:bg-black/80"
-        >
-          ✕
-        </button>
-      )}
-      <div className="flex h-24 items-center justify-center rounded bg-surface-2 text-3xl">
-        {file.type.startsWith("image/") ? "🖼️" : "📄"}
-      </div>
-      <div className="mt-1 truncate text-xs text-muted" title={file.name}>
-        {file.name}
-      </div>
-      <div className="text-[11px] text-faint">Se subirá al guardar</div>
-    </div>
-  );
-}
-
-/** Selector de asignados con buscador: muestra los ya asignados como chips
- * removibles y un input que filtra el resto de la organización en vivo. Reemplaza
- * la lista completa de Chips (inviable con muchos usuarios). La lista de
- * coincidencias se renderiza inline (no en overlay absoluto) para no recortarse
- * dentro del cuerpo scrolleable del Modal. */
-function AssigneeMultiSelect({
-  users,
-  selectedIds,
-  onToggle,
-  disabled,
-}: {
-  users: BoardOrgUser[];
-  selectedIds: string[];
-  onToggle: (id: string) => void;
-  disabled: boolean;
-}) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-
-  const selected = users.filter((u) => selectedIds.includes(u.id));
-  const q = query.trim().toLowerCase();
-  const matches = users.filter(
-    (u) => !selectedIds.includes(u.id) && (q === "" || u.name.toLowerCase().includes(q)),
-  );
-
-  return (
-    <div className="space-y-2">
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map((u) => (
-            <span
-              key={u.id}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-line-strong bg-glass px-2.5 py-1 text-sm text-ink"
-            >
-              {u.name}
-              {!disabled && (
-                <button
-                  type="button"
-                  aria-label={`Quitar a ${u.name}`}
-                  onClick={() => onToggle(u.id)}
-                  className="leading-none text-muted transition hover:text-ink"
-                >
-                  ✕
-                </button>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {!disabled && (
-        <div>
-          <Input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            placeholder="Buscar persona…"
-          />
-          {open && (
-            <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-line bg-glass backdrop-blur-xl">
-              {matches.length > 0 ? (
-                matches.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => {
-                      onToggle(u.id);
-                      setQuery("");
-                    }}
-                    className="block w-full px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-2"
-                  >
-                    {u.name}
-                  </button>
-                ))
-              ) : (
-                <p className="px-3 py-2 text-sm text-muted">
-                  {q === "" ? "Todos ya están asignados." : "Sin resultados."}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   );
 }

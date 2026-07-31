@@ -161,6 +161,8 @@ export interface WorkItemInput {
   priority?: Enums<"work_item_priority">;
   startDate?: string | null;
   dueDate?: string | null;
+  /** Duración estimada en minutos (null limpia la estimación). */
+  estimatedMinutes?: number | null;
 }
 
 /** Crea o actualiza una tarea/subtarea. */
@@ -197,6 +199,7 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         status_id: input.statusId ?? null,
         start_date: input.startDate || null,
         due_date: input.dueDate || null,
+        estimated_minutes: input.estimatedMinutes ?? null,
       });
       revalidateProjectId = projectId;
     } else {
@@ -219,12 +222,14 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         priority: input.priority,
         dueDate: input.dueDate,
       });
-      // `createWorkItem` no admite description/start_date; se completan con un
-      // segundo update solo si vinieron en el input (evita una escritura extra).
-      if (input.description?.trim() || input.startDate) {
+      // `createWorkItem` no admite description/start_date/estimated_minutes; se
+      // completan con un segundo update solo si vinieron en el input (evita una
+      // escritura extra).
+      if (input.description?.trim() || input.startDate || input.estimatedMinutes != null) {
         await updateWorkItem(db, id, {
           description: input.description?.trim() || null,
           start_date: input.startDate || null,
+          estimated_minutes: input.estimatedMinutes ?? null,
         });
       }
       revalidateProjectId = projectId;

@@ -1045,6 +1045,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           due_date: string | null
+          estimated_minutes: number | null
           id: string
           organization_id: string
           parent_id: string | null
@@ -1066,6 +1067,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
+          estimated_minutes?: number | null
           id?: string
           organization_id: string
           parent_id?: string | null
@@ -1087,6 +1089,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
+          estimated_minutes?: number | null
           id?: string
           organization_id?: string
           parent_id?: string | null
