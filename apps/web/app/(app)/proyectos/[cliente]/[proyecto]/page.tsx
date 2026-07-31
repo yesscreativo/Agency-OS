@@ -1,8 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { getProject, listOrgUsers } from "@agency-os/db";
+import { extractShortId, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { projectHref } from "@/lib/project-paths";
 import {
   ProjectBoard,
   type BoardOrgUser,
@@ -18,17 +20,49 @@ const PROJECT_STATE_BADGE = {
   archived: { label: "Archivado", tone: "neutral" as const },
 };
 
-export default async function ProjectDetailPage({ params }: { params: { id: string } }) {
+/** Resuelve el id del proyecto a partir del código corto del segmento de URL,
+ * dentro de la organización del usuario. `work_items.id` es uuid: no se puede
+ * filtrar por prefijo vía PostgREST, así que se traen los ids de proyectos de la
+ * org (pocos) y se cotejan en memoria con `matchesShortId`. */
+async function resolveProjectId(
+  db: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  orgId: string,
+  code: string,
+): Promise<string | null> {
+  const { data } = await db
+    .from("work_items")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("type", "project")
+    .is("deleted_at", null);
+  return (data ?? []).find((r) => matchesShortId(r.id, code))?.id ?? null;
+}
+
+export default async function ProjectDetailPage({
+  params,
+}: {
+  params: { cliente: string; proyecto: string };
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccessModule(user, "proyectos")) redirect("/inicio");
   if (!hasPermission(user, "project.view")) redirect("/inicio");
 
+  const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();
-  const project = await getProject(db, params.id);
+
+  const projectId = organizationId
+    ? await resolveProjectId(db, organizationId, extractShortId(params.proyecto))
+    : null;
+  if (!projectId) notFound();
+
+  const project = await getProject(db, projectId);
   if (!project) notFound();
 
-  const organizationId = user.organizationIds[0];
+  // Ruta canónica; si la URL trae un slug viejo (renombre) redirige a la actual.
+  const canonical = projectHref(project.client?.name, project);
+  if (`/proyectos/${params.cliente}/${params.proyecto}` !== canonical) redirect(canonical);
+
   const orgUserRows = organizationId ? await listOrgUsers(db, organizationId) : [];
 
   const statuses: BoardStatus[] = project.statuses.map((s) => ({
@@ -82,6 +116,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
       </div>
       <ProjectBoard
         projectId={project.id}
+        basePath={canonical}
         statuses={statuses}
         tasks={tasks}
         orgUsers={orgUsers}

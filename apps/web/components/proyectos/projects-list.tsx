@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, FieldError, Input, Label, Modal, Select, Table, Td, Th } from "@agency-os/ui";
 import { createProjectAction } from "@/lib/project-actions";
+import { projectHref } from "@/lib/project-paths";
 
 export type ProjectState = "active" | "completed" | "archived";
 
@@ -114,7 +115,7 @@ export function ProjectsList({
                   <tr key={p.id} className="transition hover:bg-surface-2">
                     <Td>
                       <a
-                        href={`/proyectos/${p.id}`}
+                        href={projectHref(p.clientName, { id: p.id, title: p.title })}
                         className="max-w-[32ch] truncate whitespace-nowrap font-semibold text-ink hover:text-green"
                       >
                         {p.title}
@@ -185,10 +186,11 @@ function NewProjectModal({
   const onCreate = () => {
     if (!canSubmit) return;
     setError(null);
+    const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
     startTransition(async () => {
       const res = await createProjectAction({ clientId, title });
       if (res.error) setError(res.error);
-      else router.push(`/proyectos/${res.id}`);
+      else if (res.id) router.push(projectHref(clientName, { id: res.id, title: title.trim() }));
     });
   };
 

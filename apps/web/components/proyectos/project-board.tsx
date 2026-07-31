@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
 import { formatDate, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
+import { taskHref } from "@/lib/project-paths";
 import { WorkItemEditor } from "./work-item-editor";
 import { ProjectStatusManager } from "./project-status-manager";
 
@@ -68,16 +69,14 @@ function AssigneeAvatars({ assignees }: { assignees: BoardAssignee[] }) {
   );
 }
 
-/** Estado del modal de edición/creación (`WorkItemEditor` se remonta con `key`
- * al cambiar de objetivo, así que el propio componente no necesita sincronizar
- * su estado interno con props que cambian). */
-type EditorTarget =
-  | { mode: "create"; statusId: string | null }
-  | { mode: "create-subtask"; parentId: string; parentTitle: string }
-  | { mode: "edit"; taskId: string };
+/** Objetivo del modal de creación rápida (`WorkItemEditor`). Editar una tarea ya
+ * NO usa el modal: navega a la ruta full-screen /proyectos/[cliente]/[proyecto]/tareas/[tarea]
+ * (`work-item-detail.tsx`), donde también se crean las subtareas. */
+type CreateTarget = { statusId: string | null };
 
 export function ProjectBoard({
   projectId,
+  basePath,
   statuses,
   tasks,
   orgUsers,
@@ -85,6 +84,9 @@ export function ProjectBoard({
   canAssign,
 }: {
   projectId: string;
+  /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
+   * navegar a la vista de cada tarea. */
+  basePath: string;
   statuses: BoardStatus[];
   tasks: BoardTask[];
   orgUsers: BoardOrgUser[];
@@ -93,8 +95,10 @@ export function ProjectBoard({
 }) {
   const router = useRouter();
   const [view, setView] = useState<"board" | "list" | "statuses">("board");
-  const [editor, setEditor] = useState<EditorTarget | null>(null);
+  const [creating, setCreating] = useState<CreateTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const openTask = (task: { id: string; title: string }) => router.push(taskHref(basePath, task));
 
   // Overlay optimista *transitorio*: solo contiene entradas para tareas con un
   // drag en curso (o recién confirmado, hasta que `tasks` refleje el cambio).
@@ -175,28 +179,13 @@ export function ProjectBoard({
     }
   };
 
-  const closeEditor = () => setEditor(null);
+  const closeEditor = () => setCreating(null);
   const onSaved = () => {
     router.refresh();
-    setEditor(null);
-  };
-  const onDeleted = () => {
-    router.refresh();
-    setEditor(null);
+    setCreating(null);
   };
 
-  const editingTask = editor?.mode === "edit" ? (tasksById.get(editor.taskId) ?? null) : null;
-  const editorSubtasks =
-    editingTask && editingTask.type === "task" ? (childrenByParent.get(editingTask.id) ?? []) : [];
-
-  const editorKey =
-    editor === null
-      ? "closed"
-      : editor.mode === "create"
-        ? `create:${editor.statusId ?? ""}`
-        : editor.mode === "create-subtask"
-          ? `create-subtask:${editor.parentId}`
-          : `edit:${editor.taskId}`;
+  const editorKey = creating === null ? "closed" : `create:${creating.statusId ?? ""}`;
 
   return (
     <div>
@@ -224,7 +213,7 @@ export function ProjectBoard({
           <Button
             variant="primary"
             size="sm"
-            onClick={() => setEditor({ mode: "create", statusId: statuses[0]?.id ?? null })}
+            onClick={() => setCreating({ statusId: statuses[0]?.id ?? null })}
           >
             + Nueva tarea
           </Button>
@@ -276,7 +265,7 @@ export function ProjectBoard({
                           setDragId(null);
                           setOverCol(null);
                         }}
-                        onClick={() => setEditor({ mode: "edit", taskId: t.id })}
+                        onClick={() => openTask(t)}
                         className={`rounded-md border border-line bg-glass-strong p-3 text-left backdrop-blur-xl transition hover:border-line-strong ${
                           canManage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
                         } ${dragId === t.id ? "opacity-50" : ""}`}
@@ -316,37 +305,23 @@ export function ProjectBoard({
           statuses={statuses}
           topTasks={topTasks}
           childrenByParent={childrenByParent}
-          onOpen={(id) => setEditor({ mode: "edit", taskId: id })}
+          onOpen={openTask}
         />
       )}
 
       <WorkItemEditor
         key={editorKey}
-        open={editor !== null}
+        open={creating !== null}
         onClose={closeEditor}
         projectId={projectId}
         statuses={statuses}
         orgUsers={orgUsers}
         canManage={canManage}
         canAssign={canAssign}
-        task={editingTask}
-        parentId={editor?.mode === "create-subtask" ? editor.parentId : null}
-        parentTitle={editor?.mode === "create-subtask" ? editor.parentTitle : null}
-        defaultStatusId={editor?.mode === "create" ? editor.statusId : null}
-        subtasks={editorSubtasks}
+        task={null}
+        defaultStatusId={creating?.statusId ?? null}
         onSaved={onSaved}
-        onDeleted={onDeleted}
-        onOpenSubtask={(id) => setEditor({ mode: "edit", taskId: id })}
-        onAddSubtask={
-          editingTask
-            ? () =>
-                setEditor({
-                  mode: "create-subtask",
-                  parentId: editingTask.id,
-                  parentTitle: editingTask.title,
-                })
-            : undefined
-        }
+        onDeleted={onSaved}
       />
     </div>
   );
@@ -361,7 +336,7 @@ function ListView({
   statuses: BoardStatus[];
   topTasks: BoardTask[];
   childrenByParent: Map<string, BoardTask[]>;
-  onOpen: (id: string) => void;
+  onOpen: (task: { id: string; title: string }) => void;
 }) {
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
@@ -386,7 +361,7 @@ function ListView({
           <div key={t.id} className="border-b border-line last:border-b-0">
             <button
               type="button"
-              onClick={() => onOpen(t.id)}
+              onClick={() => onOpen(t)}
               className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-surface-2"
             >
               <span className="font-semibold text-ink">{t.title}</span>
@@ -406,7 +381,7 @@ function ListView({
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => onOpen(c.id)}
+                  onClick={() => onOpen(c)}
                   className="flex w-full flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2 pl-10 text-left text-sm transition hover:bg-surface-2"
                 >
                   <span className="text-muted">↳ {c.title}</span>
