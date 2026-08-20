@@ -7,6 +7,7 @@
 - Desarrollo Core
 - Desarrollo CRM
 - Desarrollo Work Items
+- ClickUp Parity Operacional (comentarios, adjuntos, checklists, participantes, activity timeline, filtros, custom fields mínimos)
 
 ## Media
 - IA

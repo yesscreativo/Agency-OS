@@ -5,5 +5,8 @@ export * from "./quote-calc";
 export * from "./quote-item-margin";
 export * from "./quote-stats";
 export * from "./quote-status";
+export * from "./slug";
 export * from "./quote-validation";
 export * from "./token-expiry";
+export * from "./work-item";
+export * from "./work-item-duration";
