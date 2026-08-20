@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, formatDate, formatMoney } from "./format";
+import { escapeHtml, formatDate, formatMoney, formatRelative, initialsOf } from "./format";
 
 // Los montos formateados incluyen un espacio irrompible (NBSP,  ) entre el
 // símbolo y el número — se compara contra el propio `Intl.NumberFormat` en vez de
@@ -44,6 +44,54 @@ describe("formatDate", () => {
   it("returns '--' for falsy input", () => {
     expect(formatDate(null)).toBe("--");
     expect(formatDate(undefined)).toBe("--");
+  });
+});
+
+describe("formatRelative", () => {
+  const now = new Date("2026-08-20T12:00:00Z");
+
+  it("muestra 'hace un momento' para <1 min", () => {
+    expect(formatRelative("2026-08-20T11:59:30Z", now)).toBe("hace un momento");
+  });
+
+  it("muestra minutos", () => {
+    expect(formatRelative("2026-08-20T11:45:00Z", now)).toBe("hace 15 min");
+  });
+
+  it("muestra horas", () => {
+    expect(formatRelative("2026-08-20T09:00:00Z", now)).toBe("hace 3 h");
+  });
+
+  it("muestra días hasta 7", () => {
+    expect(formatRelative("2026-08-18T12:00:00Z", now)).toBe("hace 2 d");
+  });
+
+  it("cae a fecha absoluta para >7 días", () => {
+    const iso = "2026-08-01T12:00:00Z";
+    expect(formatRelative(iso, now)).toBe(formatDate(iso));
+  });
+
+  it("devuelve '--' para input vacío", () => {
+    expect(formatRelative(null, now)).toBe("--");
+  });
+});
+
+describe("initialsOf", () => {
+  it("toma la inicial del primer y último nombre", () => {
+    expect(initialsOf("Yesid Parra")).toBe("YP");
+  });
+
+  it("con un solo nombre usa una inicial", () => {
+    expect(initialsOf("Ana")).toBe("A");
+  });
+
+  it("ignora espacios extra y usa primera+última palabra", () => {
+    expect(initialsOf("  José  de la  Cruz ")).toBe("JC");
+  });
+
+  it("devuelve '?' para vacío", () => {
+    expect(initialsOf("")).toBe("?");
+    expect(initialsOf("   ")).toBe("?");
   });
 });
 

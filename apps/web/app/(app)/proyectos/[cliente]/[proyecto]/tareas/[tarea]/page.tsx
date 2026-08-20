@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { getWorkItem, listOrgUsers } from "@agency-os/db";
+import { getWorkItem, listActivity, listComments, listOrgUsers } from "@agency-os/db";
 import { extractShortId, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
@@ -110,6 +110,28 @@ export default async function WorkItemDetailPage({
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName }));
   const currentStatus = boardStatuses.find((s) => s.id === task.status_id) ?? null;
 
+  // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
+  const [commentRows, activityRows] = await Promise.all([
+    listComments(db, taskId),
+    listActivity(db, taskId),
+  ]);
+  const comments = commentRows.map((c) => ({
+    id: c.id,
+    parentId: c.parent_comment_id,
+    authorId: c.author_user_id,
+    authorName: c.author?.full_name ?? "—",
+    body: c.body,
+    createdAt: c.created_at,
+    editedAt: c.edited_at,
+  }));
+  const activity = activityRows.map((a) => ({
+    id: a.id,
+    eventType: a.event_type,
+    actorName: a.actor?.full_name ?? null,
+    payload: (a.payload ?? {}) as Record<string, unknown>,
+    createdAt: a.created_at,
+  }));
+
   // Base canónica del proyecto: se reusa el segmento tal cual vino en la URL
   // (cosmético + código); breadcrumb y subtareas cuelgan de aquí.
   const projectPath = `/proyectos/${params.cliente}/${params.proyecto}`;
@@ -137,6 +159,9 @@ export default async function WorkItemDetailPage({
         canManage={hasPermission(user, "project.manage")}
         canAssign={hasPermission(user, "project.assign")}
         initialAttachments={attachments}
+        currentUserId={user.id}
+        comments={comments}
+        activity={activity}
       />
     </div>
   );

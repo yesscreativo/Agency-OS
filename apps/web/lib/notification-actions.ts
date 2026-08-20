@@ -11,6 +11,8 @@ export interface NotificationState {
     title: string;
     body: string | null;
     quoteId: string | null;
+    workItemId: string | null;
+    link: string | null;
     readAt: string | null;
     createdAt: string;
   }[];
@@ -34,6 +36,8 @@ export async function fetchNotificationState(): Promise<NotificationState | null
       title: n.title,
       body: n.body,
       quoteId: n.quote_id,
+      workItemId: n.work_item_id,
+      link: n.link,
       readAt: n.read_at,
       createdAt: n.created_at,
     })),

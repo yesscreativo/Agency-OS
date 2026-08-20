@@ -33,6 +33,11 @@ import {
   PRIORITY_LABEL,
   PriorityBadge,
 } from "./work-item-fields";
+import {
+  WorkItemActivityPanel,
+  type PanelActivity,
+  type PanelComment,
+} from "./work-item-activity-panel";
 
 export interface DetailAssignee {
   id: string;
@@ -69,6 +74,9 @@ export function WorkItemDetail({
   canManage,
   canAssign,
   initialAttachments,
+  currentUserId,
+  comments,
+  activity,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -81,6 +89,9 @@ export function WorkItemDetail({
   canManage: boolean;
   canAssign: boolean;
   initialAttachments: WorkItemAttachment[];
+  currentUserId: string;
+  comments: PanelComment[];
+  activity: PanelActivity[];
 }) {
   const router = useRouter();
 
@@ -411,13 +422,14 @@ export function WorkItemDetail({
         </div>
       </div>
 
-      {/* Panel de actividad y comentarios (se llena en los Slices 2–3). */}
-      <aside className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
-        <h2 className="font-semibold text-ink">Actividad y comentarios</h2>
-        <p className="mt-2 text-sm text-faint">
-          Los comentarios, menciones y el registro de actividad llegan en las próximas fases.
-        </p>
-      </aside>
+      {/* Panel de comentarios + actividad (ClickUp Parity Fase B, Slice 1). */}
+      <WorkItemActivityPanel
+        workItemId={task.id}
+        currentUserId={currentUserId}
+        orgUsers={orgUsers}
+        comments={comments}
+        activity={activity}
+      />
 
       {task.type === "task" && (
         <WorkItemEditor

@@ -156,34 +156,40 @@ export type Database = {
           body: string | null
           created_at: string
           id: string
+          link: string | null
           organization_id: string
           quote_id: string | null
           read_at: string | null
           title: string
           type: string
           user_id: string
+          work_item_id: string | null
         }
         Insert: {
           body?: string | null
           created_at?: string
           id?: string
+          link?: string | null
           organization_id: string
           quote_id?: string | null
           read_at?: string | null
           title: string
           type: string
           user_id: string
+          work_item_id?: string | null
         }
         Update: {
           body?: string | null
           created_at?: string
           id?: string
+          link?: string | null
           organization_id?: string
           quote_id?: string | null
           read_at?: string | null
           title?: string
           type?: string
           user_id?: string
+          work_item_id?: string | null
         }
         Relationships: [
           {
@@ -205,6 +211,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_work_item_id_fkey"
+            columns: ["work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
             referencedColumns: ["id"]
           },
         ]
@@ -894,6 +907,58 @@ export type Database = {
           },
         ]
       }
+      work_item_activity: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          organization_id: string
+          payload: Json
+          work_item_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          organization_id: string
+          payload?: Json
+          work_item_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          organization_id?: string
+          payload?: Json
+          work_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_item_activity_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_activity_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_activity_work_item_id_fkey"
+            columns: ["work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_item_assignees: {
         Row: {
           organization_id: string
@@ -985,6 +1050,80 @@ export type Database = {
           },
           {
             foreignKeyName: "work_item_attachments_work_item_id_fkey"
+            columns: ["work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_item_comments: {
+        Row: {
+          author_user_id: string
+          body: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          mentioned_user_ids: string[]
+          organization_id: string
+          parent_comment_id: string | null
+          updated_at: string
+          visibility: string
+          work_item_id: string
+        }
+        Insert: {
+          author_user_id: string
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          mentioned_user_ids?: string[]
+          organization_id: string
+          parent_comment_id?: string | null
+          updated_at?: string
+          visibility?: string
+          work_item_id: string
+        }
+        Update: {
+          author_user_id?: string
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          mentioned_user_ids?: string[]
+          organization_id?: string
+          parent_comment_id?: string | null
+          updated_at?: string
+          visibility?: string
+          work_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_item_comments_author_user_id_fkey"
+            columns: ["author_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_comments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "work_item_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_item_comments_work_item_id_fkey"
             columns: ["work_item_id"]
             isOneToOne: false
             referencedRelation: "work_items"

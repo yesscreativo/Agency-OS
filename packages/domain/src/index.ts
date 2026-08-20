@@ -1,5 +1,6 @@
 export * from "./email-domain";
 export * from "./format";
+export * from "./mentions";
 export * from "./quote-code";
 export * from "./quote-calc";
 export * from "./quote-item-margin";

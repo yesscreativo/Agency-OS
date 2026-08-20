@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import type {
   InputHTMLAttributes,
   LabelHTMLAttributes,
@@ -21,12 +22,11 @@ export function Input({ invalid = false, className = "", ...props }: InputProps)
   );
 }
 
-export function Textarea({
-  className = "",
-  ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={`${FIELD_CLASSES} resize-y ${className}`} {...props} />;
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className = "", ...props }, ref) {
+    return <textarea ref={ref} className={`${FIELD_CLASSES} resize-y ${className}`} {...props} />;
+  },
+);
 
 export function Select({ className = "", ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={`${FIELD_CLASSES} ${className}`} {...props} />;

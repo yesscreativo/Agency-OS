@@ -61,6 +61,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 title: n.title,
                 body: n.body,
                 quoteId: n.quote_id,
+                workItemId: n.work_item_id,
+                link: n.link,
                 readAt: n.read_at,
                 createdAt: n.created_at,
               }))}

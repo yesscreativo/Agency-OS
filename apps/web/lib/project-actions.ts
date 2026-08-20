@@ -10,6 +10,7 @@ import {
   getAttachment,
   insertAttachment,
   listAttachments,
+  recordActivity,
   reorderStatuses,
   setAssignees,
   softDeleteWorkItem,
@@ -18,6 +19,7 @@ import {
   type AttachmentRow,
   type Db,
   type Enums,
+  type Json,
 } from "@agency-os/db";
 import { validateWorkItemTitle } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
@@ -102,6 +104,38 @@ async function assertClientInOrg(db: Db, id: string, organizationId: string): Pr
     .maybeSingle();
   if (error) throw error;
   return !!data && data.organization_id === organizationId;
+}
+
+/** Registra un evento en el activity timeline del work item. La actividad es
+ * secundaria: nunca debe tumbar la mutación principal, por eso va en try/catch. */
+async function safeActivity(
+  db: Db,
+  input: {
+    orgId: string;
+    workItemId: string;
+    actorUserId: string;
+    eventType: string;
+    payload?: Json;
+  },
+): Promise<void> {
+  try {
+    await recordActivity(db, {
+      orgId: input.orgId,
+      workItemId: input.workItemId,
+      actorUserId: input.actorUserId,
+      eventType: input.eventType,
+      payload: input.payload,
+    });
+  } catch (error) {
+    console.error("recordActivity", error);
+  }
+}
+
+/** Etiqueta de una columna del tablero (para el payload de status_changed). */
+async function statusLabel(db: Db, id: string | null): Promise<string | null> {
+  if (!id) return null;
+  const { data } = await db.from("work_item_statuses").select("label").eq("id", id).maybeSingle();
+  return data?.label ?? null;
 }
 
 // ---------- Proyecto ----------
@@ -192,15 +226,64 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         }
       }
 
+      // Estado previo para diffear el activity timeline.
+      const { data: prev } = await db
+        .from("work_items")
+        .select("title, description, status_id, priority")
+        .eq("id", id)
+        .maybeSingle();
+
+      const newDescription = input.description?.trim() || null;
+      const newStatusId = input.statusId ?? null;
+
       await updateWorkItem(db, id, {
         title,
-        description: input.description?.trim() || null,
+        description: newDescription,
         priority: input.priority,
-        status_id: input.statusId ?? null,
+        status_id: newStatusId,
         start_date: input.startDate || null,
         due_date: input.dueDate || null,
         estimated_minutes: input.estimatedMinutes ?? null,
       });
+
+      if (prev) {
+        if (prev.title !== title) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "title_edited",
+            payload: { from: prev.title, to: title },
+          });
+        }
+        if ((prev.description ?? null) !== newDescription) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "description_edited",
+            payload: {},
+          });
+        }
+        if (input.priority && prev.priority !== input.priority) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "priority_changed",
+            payload: { from: prev.priority, to: input.priority },
+          });
+        }
+        if ((prev.status_id ?? null) !== newStatusId) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "status_changed",
+            payload: { from: prev.status_id ?? null, to: newStatusId, label: await statusLabel(db, newStatusId) },
+          });
+        }
+      }
       revalidateProjectId = projectId;
     } else {
       if (input.parentId) {
@@ -232,6 +315,13 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
           estimated_minutes: input.estimatedMinutes ?? null,
         });
       }
+      await safeActivity(db, {
+        orgId: auth.organizationId,
+        workItemId: id,
+        actorUserId: auth.userId,
+        eventType: "created",
+        payload: { title, type: input.type ?? "task" },
+      });
       revalidateProjectId = projectId;
     }
 
@@ -282,7 +372,23 @@ export async function moveWorkItem(id: string, statusId: string): Promise<Action
       return { error: "El estado no pertenece a este proyecto." };
     }
 
+    const { data: prev } = await db
+      .from("work_items")
+      .select("status_id")
+      .eq("id", id)
+      .maybeSingle();
+
     await updateWorkItem(db, id, { status_id: statusId });
+
+    if (!prev || prev.status_id !== statusId) {
+      await safeActivity(db, {
+        orgId: auth.organizationId,
+        workItemId: id,
+        actorUserId: auth.userId,
+        eventType: "status_changed",
+        payload: { from: prev?.status_id ?? null, to: statusId, label: await statusLabel(db, statusId) },
+      });
+    }
 
     revalidatePath("/proyectos");
     revalidatePath(`/proyectos/${projectId}`);
@@ -303,7 +409,38 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
     const projectId = await assertWorkItemInOrg(db, id, auth.organizationId);
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
+    // Set previo para diffear altas/bajas en el activity timeline.
+    const { data: prevRows } = await db
+      .from("work_item_assignees")
+      .select("user_id")
+      .eq("work_item_id", id);
+    const prevIds = new Set((prevRows ?? []).map((r) => r.user_id));
+    const nextIds = new Set(userIds);
+
     await setAssignees(db, id, auth.organizationId, userIds);
+
+    for (const uid of nextIds) {
+      if (!prevIds.has(uid)) {
+        await safeActivity(db, {
+          orgId: auth.organizationId,
+          workItemId: id,
+          actorUserId: auth.userId,
+          eventType: "assignee_added",
+          payload: { userId: uid },
+        });
+      }
+    }
+    for (const uid of prevIds) {
+      if (!nextIds.has(uid)) {
+        await safeActivity(db, {
+          orgId: auth.organizationId,
+          workItemId: id,
+          actorUserId: auth.userId,
+          eventType: "assignee_removed",
+          payload: { userId: uid },
+        });
+      }
+    }
 
     revalidatePath(`/proyectos/${projectId}`);
     return { ok: true };

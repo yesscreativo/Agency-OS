@@ -10,6 +10,8 @@ export interface NotificationItem {
   title: string;
   body: string | null;
   quoteId: string | null;
+  /** Ruta ya construida (menciones en work items); tiene prioridad sobre quoteId. */
+  link: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -18,7 +20,8 @@ export interface NotificationItem {
  * abierta. Sin push: es un polling ligero, no realtime. */
 const POLL_MS = 25_000;
 
-const hrefFor = (n: NotificationItem) => (n.quoteId ? `/crm/${n.quoteId}` : "/notificaciones");
+const hrefFor = (n: NotificationItem) =>
+  n.link ?? (n.quoteId ? `/crm/${n.quoteId}` : "/notificaciones");
 
 /** "Ding" corto sintetizado con Web Audio API (dos tonos), para no depender de
  * un archivo de audio. Silencioso ante cualquier error o bloqueo de autoplay. */
