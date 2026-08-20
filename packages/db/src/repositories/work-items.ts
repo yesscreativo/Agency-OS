@@ -24,6 +24,7 @@ const PROJECT_LIST_SELECT = "*, client:clients(id, name, company)";
 
 export interface ListProjectsOpts {
   search?: string;
+  clientId?: string;
 }
 
 export async function listProjects(
@@ -41,6 +42,9 @@ export async function listProjects(
 
   if (opts.search) {
     query = query.ilike("title", `%${opts.search}%`);
+  }
+  if (opts.clientId) {
+    query = query.eq("client_id", opts.clientId);
   }
 
   const { data, error } = await query.returns<ProjectListDbRow[]>();
@@ -245,6 +249,82 @@ export async function createProject(db: Db, input: CreateProjectInput): Promise<
   if (seedError) throw seedError;
 
   return id;
+}
+
+/** Fila del sidebar de Spaces: un cliente con proyectos + conteos y si es "mío"
+ * (soy creador de algún proyecto suyo o estoy asignado a alguna de sus tareas). */
+export interface ClientSpaceRow {
+  id: string;
+  name: string;
+  company: string | null;
+  /** URL pública del logo (bucket `client-logos`), o null si no tiene. */
+  logoUrl: string | null;
+  projectCount: number;
+  activeCount: number;
+  mine: boolean;
+}
+
+type SpaceClient = Pick<Tables<"clients">, "id" | "name" | "company" | "logo_path">;
+
+type ProjectSpaceDbRow = {
+  id: string;
+  project_state: Enums<"project_state"> | null;
+  created_by: string | null;
+  client: SpaceClient | null;
+};
+
+/** Clientes que tienen al menos un proyecto en la organización, con el conteo de
+ * proyectos (total y activos) y el flag `mine`. Ordenados por nombre. Alimenta el
+ * sidebar del módulo Proyectos (Spaces). */
+export async function listClientSpaces(
+  db: Db,
+  orgId: string,
+  userId: string,
+): Promise<ClientSpaceRow[]> {
+  const { data: projects, error } = await db
+    .from("work_items")
+    .select("id, project_state, created_by, client:clients(id, name, company, logo_path)")
+    .eq("organization_id", orgId)
+    .eq("type", "project")
+    .is("deleted_at", null)
+    .returns<ProjectSpaceDbRow[]>();
+  if (error) throw error;
+
+  // Proyectos donde el usuario está asignado a alguna tarea (para el flag `mine`).
+  const { data: assigned, error: aErr } = await db
+    .from("work_item_assignees")
+    .select("work_item:work_items!inner(project_id)")
+    .eq("user_id", userId)
+    .eq("organization_id", orgId)
+    .returns<{ work_item: { project_id: string } | null }[]>();
+  if (aErr) throw aErr;
+  const myProjectIds = new Set(
+    (assigned ?? []).map((r) => r.work_item?.project_id).filter((x): x is string => Boolean(x)),
+  );
+
+  const byClient = new Map<string, ClientSpaceRow>();
+  for (const p of projects ?? []) {
+    if (!p.client) continue;
+    let row = byClient.get(p.client.id);
+    if (!row) {
+      row = {
+        id: p.client.id,
+        name: p.client.name,
+        company: p.client.company,
+        logoUrl: p.client.logo_path
+          ? (db.storage.from("client-logos").getPublicUrl(p.client.logo_path).data.publicUrl ?? null)
+          : null,
+        projectCount: 0,
+        activeCount: 0,
+        mine: false,
+      };
+      byClient.set(p.client.id, row);
+    }
+    row.projectCount += 1;
+    if (p.project_state === "active") row.activeCount += 1;
+    if (p.created_by === userId || myProjectIds.has(p.id)) row.mine = true;
+  }
+  return Array.from(byClient.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
 export interface CreateWorkItemInput {

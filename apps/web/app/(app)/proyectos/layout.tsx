@@ -1,26 +1,26 @@
 import { redirect } from "next/navigation";
+import { listClientSpaces } from "@agency-os/db";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
-import { MainNav } from "@/components/main-nav";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { ProjectsSidebar } from "@/components/proyectos/projects-sidebar";
 
-const PROJECTS_NAV_ITEMS: { href: string; label: string; permission?: string }[] = [
-  { href: "/proyectos", label: "Proyectos", permission: "project.view" },
-];
-
-// Navegación propia del módulo Proyectos: cada módulo arma la suya, distinta de
-// la del hub (/inicio, /usuarios, /perfil). Ver crm/layout.tsx para el mismo patrón.
+// Layout del módulo Proyectos con navegación tipo "Spaces": sidebar de clientes a
+// la izquierda (patrón flex-row del hub). Cada cliente es un espacio con sus
+// proyectos. Ver projects-sidebar.tsx.
 export default async function ProyectosLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccessModule(user, "proyectos")) redirect("/inicio");
+  if (!hasPermission(user, "project.view")) redirect("/inicio");
 
-  const visibleItems = PROJECTS_NAV_ITEMS.filter(
-    (item) => !item.permission || hasPermission(user, item.permission),
-  );
+  const organizationId = user.organizationIds[0];
+  const db = await getSupabaseServerClient();
+  const clients = organizationId ? await listClientSpaces(db, organizationId, user.id) : [];
 
   return (
-    <div>
-      <MainNav items={visibleItems} />
-      <div className="mt-6">{children}</div>
+    <div className="flex flex-col gap-8 sm:flex-row">
+      <ProjectsSidebar clients={clients} />
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

@@ -40,6 +40,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
   const rows: ProjectListRow[] = projects.map((p) => ({
     id: p.id,
     title: p.title,
+    clientId: p.client?.id ?? null,
     clientName: p.client?.name ?? "—",
     clientCompany: p.client?.company ?? null,
     tasksCount: p.tasks_count,

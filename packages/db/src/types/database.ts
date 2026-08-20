@@ -25,6 +25,7 @@ export type Database = {
           deleted_at: string | null
           email: string
           id: string
+          logo_path: string | null
           name: string
           nit: string | null
           organization_id: string
@@ -39,6 +40,7 @@ export type Database = {
           deleted_at?: string | null
           email: string
           id?: string
+          logo_path?: string | null
           name: string
           nit?: string | null
           organization_id: string
@@ -53,6 +55,7 @@ export type Database = {
           deleted_at?: string | null
           email?: string
           id?: string
+          logo_path?: string | null
           name?: string
           nit?: string | null
           organization_id?: string

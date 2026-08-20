@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Badge, Button, FieldError, Input, Label, Modal, Select, Table, Td, Th } from "@agency-os/ui";
 import { createProjectAction } from "@/lib/project-actions";
 import { projectHref } from "@/lib/project-paths";
@@ -11,6 +11,7 @@ export type ProjectState = "active" | "completed" | "archived";
 export interface ProjectListRow {
   id: string;
   title: string;
+  clientId: string | null;
   clientName: string;
   clientCompany: string | null;
   tasksCount: number;
@@ -35,12 +36,24 @@ export function ProjectsList({
   rows,
   q,
   clients,
+  heading = "Proyectos",
+  subtitle = "Gestiona los proyectos y sus tareas",
+  hideHeading = false,
+  lockedClient,
 }: {
   rows: ProjectListRow[];
   q: string;
   clients: ClientOption[];
+  /** Título de la vista (en el space de un cliente = su nombre). */
+  heading?: string;
+  subtitle?: string;
+  /** Oculta el bloque de título (cuando el contenedor ya muestra su propio header). */
+  hideHeading?: boolean;
+  /** Cliente fijo del space: prefija y bloquea el select del modal de alta. */
+  lockedClient?: ClientOption;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [search, setSearch] = useState(q);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -49,16 +62,20 @@ export function ProjectsList({
     const sp = new URLSearchParams();
     if (search.trim()) sp.set("q", search.trim());
     const qs = sp.toString();
-    router.push(qs ? `/proyectos?${qs}` : "/proyectos");
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Proyectos</h1>
-          <p className="mt-1 text-sm text-muted">Gestiona los proyectos y sus tareas</p>
-        </div>
+        {hideHeading ? (
+          <div />
+        ) : (
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{heading}</h1>
+            <p className="mt-1 text-sm text-muted">{subtitle}</p>
+          </div>
+        )}
         <Button variant="primary" onClick={() => setModalOpen(true)}>
           + Nuevo proyecto
         </Button>
@@ -77,7 +94,7 @@ export function ProjectsList({
         </Button>
         {q && (
           <a
-            href="/proyectos"
+            href={pathname}
             className="self-center text-sm font-semibold text-green hover:underline"
           >
             Limpiar
@@ -115,7 +132,10 @@ export function ProjectsList({
                   <tr key={p.id} className="transition hover:bg-surface-2">
                     <Td>
                       <a
-                        href={projectHref(p.clientName, { id: p.id, title: p.title })}
+                        href={projectHref(
+                          p.clientId ? { id: p.clientId, name: p.clientName } : null,
+                          { id: p.id, title: p.title },
+                        )}
                         className="max-w-[32ch] truncate whitespace-nowrap font-semibold text-ink hover:text-green"
                       >
                         {p.title}
@@ -152,7 +172,12 @@ export function ProjectsList({
         )}
       </div>
 
-      <NewProjectModal open={modalOpen} onClose={() => setModalOpen(false)} clients={clients} />
+      <NewProjectModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        clients={clients}
+        lockedClient={lockedClient}
+      />
     </div>
   );
 }
@@ -163,13 +188,15 @@ function NewProjectModal({
   open,
   onClose,
   clients,
+  lockedClient,
 }: {
   open: boolean;
   onClose: () => void;
   clients: ClientOption[];
+  lockedClient?: ClientOption;
 }) {
   const router = useRouter();
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId] = useState(lockedClient?.id ?? "");
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -178,7 +205,7 @@ function NewProjectModal({
 
   const close = () => {
     onClose();
-    setClientId("");
+    setClientId(lockedClient?.id ?? "");
     setTitle("");
     setError(null);
   };
@@ -190,7 +217,8 @@ function NewProjectModal({
     startTransition(async () => {
       const res = await createProjectAction({ clientId, title });
       if (res.error) setError(res.error);
-      else if (res.id) router.push(projectHref(clientName, { id: res.id, title: title.trim() }));
+      else if (res.id)
+        router.push(projectHref({ id: clientId, name: clientName }, { id: res.id, title: title.trim() }));
     });
   };
 
@@ -218,6 +246,7 @@ function NewProjectModal({
             id="np-client"
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
+            disabled={Boolean(lockedClient)}
           >
             <option value="">Selecciona…</option>
             {clients.map((c) => (

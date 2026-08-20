@@ -60,7 +60,7 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   // Ruta canónica; si la URL trae un slug viejo (renombre) redirige a la actual.
-  const canonical = projectHref(project.client?.name, project);
+  const canonical = projectHref(project.client, project);
   if (`/proyectos/${params.cliente}/${params.proyecto}` !== canonical) redirect(canonical);
 
   const orgUserRows = organizationId ? await listOrgUsers(db, organizationId) : [];
