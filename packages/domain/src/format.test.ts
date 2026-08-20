@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, formatDate, formatMoney, formatRelative, initialsOf } from "./format";
+import {
+  dateRangeLabel,
+  escapeHtml,
+  formatDate,
+  formatDateShort,
+  formatMoney,
+  formatRelative,
+  initialsOf,
+} from "./format";
 
 // Los montos formateados incluyen un espacio irrompible (NBSP,  ) entre el
 // símbolo y el número — se compara contra el propio `Intl.NumberFormat` en vez de
@@ -73,6 +81,40 @@ describe("formatRelative", () => {
 
   it("devuelve '--' para input vacío", () => {
     expect(formatRelative(null, now)).toBe("--");
+  });
+});
+
+describe("formatDateShort", () => {
+  it("formatea día/mes sin año, sin correr por timezone", () => {
+    expect(formatDateShort("2026-08-10")).toBe("10/8");
+    expect(formatDateShort("2026-12-01")).toBe("1/12");
+  });
+
+  it("devuelve '--' para vacío", () => {
+    expect(formatDateShort(null)).toBe("--");
+    expect(formatDateShort(undefined)).toBe("--");
+  });
+});
+
+describe("dateRangeLabel", () => {
+  it("muestra rango con conteo de días inclusivo", () => {
+    expect(dateRangeLabel("2026-08-10", "2026-08-12")).toBe("10/8 → 12/8 (3d)");
+  });
+
+  it("un solo día muestra (1d)", () => {
+    expect(dateRangeLabel("2026-08-10", "2026-08-10")).toBe("10/8 → 10/8 (1d)");
+  });
+
+  it("solo fecha de vencimiento", () => {
+    expect(dateRangeLabel(null, "2026-08-12")).toBe("12/8");
+  });
+
+  it("solo fecha de inicio", () => {
+    expect(dateRangeLabel("2026-08-10", null)).toBe("10/8");
+  });
+
+  it("sin fechas devuelve cadena vacía", () => {
+    expect(dateRangeLabel(null, null)).toBe("");
   });
 });
 

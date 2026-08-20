@@ -52,6 +52,42 @@ export function initialsOf(name: string): string {
   return (first.charAt(0) + (last?.charAt(0) ?? "")).toUpperCase();
 }
 
+/** Parte una fecha en {y,m,d} sin sesgo de timezone. Las fechas de work_items
+ * son columnas `date` ("2026-08-10"); `new Date(str)` las interpretaría como UTC
+ * y podría correr un día en zonas negativas, así que las leemos por componentes. */
+function dateParts(date: string | Date): { y: number; m: number; d: number } {
+  if (typeof date === "string") {
+    const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+  }
+  const dt = new Date(date);
+  return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+}
+
+/** Fecha corta día/mes sin año ("10/8"), estilo ClickUp. `--` si vacía. */
+export function formatDateShort(date: string | Date | null | undefined): string {
+  if (!date) return "--";
+  const { m, d } = dateParts(date);
+  return `${d}/${m}`;
+}
+
+/** Rango de fechas compacto: "10/8 → 12/8 (3d)" (conteo de días inclusivo). Si
+ * solo hay una fecha, muestra esa; sin fechas, cadena vacía. */
+export function dateRangeLabel(
+  start: string | Date | null | undefined,
+  due: string | Date | null | undefined,
+): string {
+  if (!start && !due) return "";
+  if (start && !due) return formatDateShort(start);
+  if (!start && due) return formatDateShort(due);
+  const a = dateParts(start!);
+  const b = dateParts(due!);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const days =
+    Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / msPerDay) + 1;
+  return `${formatDateShort(start!)} → ${formatDateShort(due!)} (${days}d)`;
+}
+
 export function escapeHtml(value: string | null | undefined): string {
   if (!value) return "";
   return String(value)
