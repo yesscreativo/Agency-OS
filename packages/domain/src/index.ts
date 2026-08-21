@@ -11,3 +11,4 @@ export * from "./quote-validation";
 export * from "./token-expiry";
 export * from "./work-item";
 export * from "./work-item-duration";
+export * from "./work-item-time";
