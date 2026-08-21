@@ -1189,6 +1189,48 @@ export type Database = {
           },
         ]
       }
+      work_item_time_entries: {
+        Row: {
+          created_at: string
+          id: string
+          minutes: number
+          note: string | null
+          organization_id: string
+          project_id: string
+          source: string
+          spent_on: string
+          updated_at: string
+          user_id: string
+          work_item_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          minutes: number
+          note?: string | null
+          organization_id: string
+          project_id: string
+          source?: string
+          spent_on?: string
+          updated_at?: string
+          user_id: string
+          work_item_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          minutes?: number
+          note?: string | null
+          organization_id?: string
+          project_id?: string
+          source?: string
+          spent_on?: string
+          updated_at?: string
+          user_id?: string
+          work_item_id?: string
+        }
+        Relationships: []
+      }
       work_items: {
         Row: {
           client_id: string | null
