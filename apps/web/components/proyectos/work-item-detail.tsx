@@ -8,7 +8,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, Button, FieldError, Input, Label, Textarea } from "@agency-os/ui";
+import { Badge, Button, FieldError, Label, Textarea } from "@agency-os/ui";
 import type { WorkItemPriority } from "@agency-os/domain";
 import {
   deleteWorkItem,
@@ -190,14 +190,16 @@ export function WorkItemDetail({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       {/* Columna principal */}
       <div className="space-y-6">
-        <Input
+        {/* input nativo (no el DS Input) para que su `text-sm` base no le gane al
+            tamaño de encabezado; se ve como el título del tablero (text-3xl). */}
+        <input
           id="wi-title"
           aria-label="Título de la tarea"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => title.trim() !== task.title && onSave()}
           disabled={!canManage}
-          className="border-0 bg-transparent px-0 py-0 text-3xl font-bold tracking-tight focus:shadow-none disabled:opacity-100"
+          className="w-full border-0 bg-transparent p-0 text-3xl font-bold tracking-tight text-ink outline-none placeholder:text-faint disabled:opacity-100"
         />
 
         {/* Campos compactos estilo ClickUp: edición inline + auto-guardado. */}

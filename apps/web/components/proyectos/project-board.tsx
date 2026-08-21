@@ -240,7 +240,7 @@ export function ProjectBoard({
       {view === "statuses" ? (
         <ProjectStatusManager projectId={projectId} statuses={statuses} />
       ) : view === "board" ? (
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="ds-scroll flex gap-4 overflow-x-auto pb-4">
           {statuses.map((col) => {
             const colTasks = grouped[col.id] ?? [];
             return (
@@ -268,7 +268,7 @@ export function ProjectBoard({
                   <span className="font-mono text-xs font-bold text-muted">{colTasks.length}</span>
                 </div>
 
-                <div className="flex max-h-[calc(100vh-360px)] min-h-[80px] flex-col gap-2 overflow-y-auto pr-1">
+                <div className="ds-scroll flex max-h-[calc(100vh-360px)] min-h-[80px] flex-col gap-2 overflow-y-auto pr-1">
                   {colTasks.map((t) => {
                     const priority = PRIORITY_BADGE[t.priority];
                     const subCount = childrenByParent.get(t.id)?.length ?? 0;
@@ -372,13 +372,16 @@ function ListView({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-glass backdrop-blur-xl">
+    <div className="space-y-2">
       {topTasks.map((t) => {
         const status = t.statusId ? statusById.get(t.statusId) : null;
         const priority = PRIORITY_BADGE[t.priority];
         const children = childrenByParent.get(t.id) ?? [];
         return (
-          <div key={t.id} className="border-b border-line last:border-b-0">
+          <div
+            key={t.id}
+            className="overflow-hidden rounded-lg border border-line bg-glass backdrop-blur-xl transition hover:border-line-strong"
+          >
             <button
               type="button"
               onClick={() => onOpen(t)}

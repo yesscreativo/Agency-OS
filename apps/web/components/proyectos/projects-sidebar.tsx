@@ -91,7 +91,7 @@ export function ProjectsSidebar({
         Clientes · {filtered.length}
       </div>
 
-      <div className="mt-1 max-h-[calc(100vh-360px)] space-y-0.5 overflow-y-auto pr-1">
+      <div className="ds-scroll mt-1 max-h-[calc(100vh-360px)] space-y-0.5 overflow-y-auto pr-1">
         {filtered.length === 0 ? (
           <p className="px-3.5 py-2 text-sm text-faint">
             {clients.length === 0 ? "Aún no hay clientes con proyectos." : "Sin resultados."}

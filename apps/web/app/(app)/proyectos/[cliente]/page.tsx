@@ -10,6 +10,7 @@ import {
   type ProjectListRow,
 } from "@/components/proyectos/projects-list";
 import { ClientLogoUploader } from "@/components/proyectos/client-logo";
+import { ClientKpis } from "@/components/proyectos/client-kpis";
 import { NoAccessPanel } from "@/components/no-access-panel";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,17 @@ export default async function ClienteSpacePage({
     clientId: client.id,
   });
 
+  // KPIs del cliente = sobre TODOS sus proyectos (no el subconjunto filtrado por
+  // búsqueda). Si no hay búsqueda, reutilizamos `projects` para no consultar dos veces.
+  const allClientProjects = searchParams.q
+    ? await listProjects(db, organizationId, { clientId: client.id })
+    : projects;
+  const tasksTotal = allClientProjects.reduce((n, p) => n + p.tasks_count, 0);
+  const tasksDone = allClientProjects.reduce((n, p) => n + p.tasks_done_count, 0);
+  const activeCount = allClientProjects.filter(
+    (p) => (p.project_state ?? "active") === "active",
+  ).length;
+
   const rows: ProjectListRow[] = projects.map((p) => ({
     id: p.id,
     title: p.title,
@@ -108,6 +120,13 @@ export default async function ClienteSpacePage({
         company={client.company}
         initialLogoUrl={logoUrl}
         canManage={hasPermission(user, "project.manage")}
+      />
+      <ClientKpis
+        projectCount={allClientProjects.length}
+        activeCount={activeCount}
+        tasksTotal={tasksTotal}
+        tasksDone={tasksDone}
+        tasksInProgress={tasksTotal - tasksDone}
       />
       <ProjectsList
         rows={rows}
