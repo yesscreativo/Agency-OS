@@ -108,7 +108,6 @@ export default async function WorkItemDetailPage({
   }));
 
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName }));
-  const currentStatus = boardStatuses.find((s) => s.id === task.status_id) ?? null;
 
   // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
   const [commentRows, activityRows] = await Promise.all([
@@ -138,15 +137,15 @@ export default async function WorkItemDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-4">
         <Link href={projectPath} className="text-sm text-muted transition hover:text-ink">
           ← {task.project?.title ?? "Proyecto"}
         </Link>
-        <div className="mt-1 flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">{task.title}</h1>
-          {detailTask.type === "subtask" && <Badge tone="neutral">Subtarea</Badge>}
-          {currentStatus && <Badge color={currentStatus.color}>{currentStatus.label}</Badge>}
-        </div>
+        {detailTask.type === "subtask" && (
+          <Badge tone="neutral" className="ml-3 align-middle">
+            Subtarea
+          </Badge>
+        )}
       </div>
 
       <WorkItemDetail

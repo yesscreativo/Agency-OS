@@ -188,16 +188,15 @@ export function WorkItemDetail({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       {/* Columna principal */}
       <div className="space-y-6">
-        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
-          <Input
-            id="wi-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => title.trim() !== task.title && onSave()}
-            disabled={!canManage}
-            className="border-0 bg-transparent px-0 text-2xl font-bold tracking-tight focus:shadow-none"
-          />
-        </section>
+        <Input
+          id="wi-title"
+          aria-label="Título de la tarea"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => title.trim() !== task.title && onSave()}
+          disabled={!canManage}
+          className="border-0 bg-transparent px-0 py-0 text-3xl font-bold tracking-tight focus:shadow-none disabled:opacity-100"
+        />
 
         {/* Campos compactos estilo ClickUp: edición inline + auto-guardado. */}
         <WorkItemFieldsPanel

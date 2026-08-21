@@ -325,12 +325,12 @@ export function WorkItemActivityPanel({
 
   return (
     <aside className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
-      <div className="mb-4 flex gap-1 rounded-pill border border-line bg-surface p-1 text-sm">
+      <div className="mb-4 flex gap-1 rounded-pill border border-line bg-glass p-1 text-sm backdrop-blur-xl">
         <button
           type="button"
           onClick={() => setTab("comments")}
           className={`flex-1 rounded-pill px-3 py-1.5 font-semibold transition ${
-            tab === "comments" ? "bg-glass text-ink" : "text-muted hover:text-ink"
+            tab === "comments" ? "bg-glass-strong text-ink shadow-overlay" : "text-muted hover:text-ink"
           }`}
         >
           Comentarios {comments.length > 0 && `(${comments.length})`}
@@ -339,7 +339,7 @@ export function WorkItemActivityPanel({
           type="button"
           onClick={() => setTab("activity")}
           className={`flex-1 rounded-pill px-3 py-1.5 font-semibold transition ${
-            tab === "activity" ? "bg-glass text-ink" : "text-muted hover:text-ink"
+            tab === "activity" ? "bg-glass-strong text-ink shadow-overlay" : "text-muted hover:text-ink"
           }`}
         >
           Actividad

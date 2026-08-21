@@ -131,24 +131,32 @@ export function WorkItemFieldsPanel({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Estado local para edición de duración (input libre) y asignados.
+  // Estado local para edición de duración (input libre), asignados y los campos
+  // que se editan por popover (estado/prioridad). Estos últimos se pintan de
+  // forma OPTIMISTA: al elegir se ven al instante, sin esperar al `router.refresh`.
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignees.map((a) => a.id));
   const [estimateInput, setEstimateInput] = useState(formatDuration(task.estimatedMinutes));
+  const [statusIdLocal, setStatusIdLocal] = useState(task.statusId);
+  const [priorityLocal, setPriorityLocal] = useState(task.priority);
 
   // Re-sincroniza si el server manda datos nuevos tras un refresh.
   useEffect(() => {
     setAssigneeIds(task.assignees.map((a) => a.id));
     setEstimateInput(formatDuration(task.estimatedMinutes));
-  }, [task.assignees, task.estimatedMinutes]);
+    setStatusIdLocal(task.statusId);
+    setPriorityLocal(task.priority);
+  }, [task.assignees, task.estimatedMinutes, task.statusId, task.priority]);
 
   const statusById = new Map(statuses.map((s) => [s.id, s]));
-  const currentStatus = task.statusId ? statusById.get(task.statusId) : null;
+  const currentStatus = statusIdLocal ? statusById.get(statusIdLocal) : null;
 
-  /** Guarda reenviando el estado completo + los overrides del campo editado. */
+  /** Guarda reenviando el estado completo + los overrides del campo editado.
+   * Parte de los valores LOCALES (estado/prioridad optimistas) para que dos
+   * ediciones rápidas seguidas no se pisen con un `task` aún sin refrescar. */
   const save = (overrides: Partial<FieldsPanelTask>, onDone?: () => void) => {
     setError(null);
     startTransition(async () => {
-      const merged = { ...task, ...overrides };
+      const merged = { ...task, statusId: statusIdLocal, priority: priorityLocal, ...overrides };
       const res = await saveWorkItem({
         id: task.id,
         projectId,
@@ -189,7 +197,7 @@ export function WorkItemFieldsPanel({
 
   return (
     <section
-      className="rounded-lg border border-line bg-glass px-6 py-3 backdrop-blur-xl"
+      className="relative z-30 rounded-lg border border-line bg-glass px-6 py-3 backdrop-blur-xl"
       aria-busy={isPending}
     >
       <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
@@ -212,6 +220,8 @@ export function WorkItemFieldsPanel({
                     key={s.id}
                     type="button"
                     onClick={() => {
+                      if (s.id === statusIdLocal) return close();
+                      setStatusIdLocal(s.id);
                       close();
                       save({ statusId: s.id });
                     }}
@@ -227,7 +237,7 @@ export function WorkItemFieldsPanel({
 
         {/* Prioridad */}
         <Row icon={<IconFlag />} label="Prioridad">
-          <InlineEdit editable={canManage} display={<PriorityBadge priority={task.priority} />}>
+          <InlineEdit editable={canManage} display={<PriorityBadge priority={priorityLocal} />}>
             {(close) => (
               <div className="flex flex-col gap-1">
                 {WORK_ITEM_PRIORITIES.map((p) => (
@@ -235,6 +245,8 @@ export function WorkItemFieldsPanel({
                     key={p}
                     type="button"
                     onClick={() => {
+                      if (p === priorityLocal) return close();
+                      setPriorityLocal(p);
                       close();
                       save({ priority: p });
                     }}
