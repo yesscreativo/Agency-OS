@@ -9,7 +9,8 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Button, FieldError, Label, Textarea } from "@agency-os/ui";
-import type { WorkItemPriority } from "@agency-os/domain";
+import { sumMinutes, type WorkItemPriority } from "@agency-os/domain";
+import type { TimeEntryDTO } from "@/lib/time-tracking-actions";
 import {
   deleteWorkItem,
   deleteWorkItemAttachment,
@@ -27,6 +28,7 @@ import {
   type PanelActivity,
   type PanelComment,
 } from "./work-item-activity-panel";
+import { TimeTrackingPanel } from "./time-tracking-panel";
 
 export interface DetailAssignee {
   id: string;
@@ -68,6 +70,7 @@ export function WorkItemDetail({
   currentUserId,
   comments,
   activity,
+  timeEntries,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -83,8 +86,10 @@ export function WorkItemDetail({
   currentUserId: string;
   comments: PanelComment[];
   activity: PanelActivity[];
+  timeEntries: TimeEntryDTO[];
 }) {
   const router = useRouter();
+  const loggedMinutes = sumMinutes(timeEntries);
 
   // Título y descripción se editan aquí; el resto de campos (estado, prioridad,
   // fechas, duración, asignados) los maneja WorkItemFieldsPanel inline.
@@ -220,6 +225,15 @@ export function WorkItemDetail({
           orgUsers={orgUsers}
           canManage={canManage}
           canAssign={canAssign}
+          loggedMinutes={loggedMinutes}
+        />
+
+        <TimeTrackingPanel
+          workItemId={task.id}
+          currentUserId={currentUserId}
+          canManage={canManage}
+          entries={timeEntries}
+          orgUsers={orgUsers}
         />
 
         <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">

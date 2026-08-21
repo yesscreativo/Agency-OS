@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { getWorkItem, listActivity, listComments, listOrgUsers } from "@agency-os/db";
+import { getWorkItem, listActivity, listComments, listOrgUsers, listTimeEntries } from "@agency-os/db";
 import { extractShortId, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
@@ -120,10 +120,11 @@ export default async function WorkItemDetailPage({
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
 
   // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
-  const [commentRows, activityRows, commentAttachmentsResult] = await Promise.all([
+  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows] = await Promise.all([
     listComments(db, taskId),
     listActivity(db, taskId),
     listCommentAttachmentsForWorkItem(taskId),
+    listTimeEntries(db, taskId),
   ]);
   const commentAttachments =
     "attachments" in commentAttachmentsResult && commentAttachmentsResult.attachments
@@ -151,6 +152,16 @@ export default async function WorkItemDetailPage({
     actorName: a.actor?.full_name ?? null,
     payload: (a.payload ?? {}) as Record<string, unknown>,
     createdAt: a.created_at,
+  }));
+  const timeEntries = timeEntryRows.map((e) => ({
+    id: e.id,
+    userId: e.user_id,
+    userName: e.user?.full_name ?? "—",
+    userAvatarUrl: e.user?.avatar_url ?? null,
+    minutes: e.minutes,
+    spentOn: e.spent_on,
+    note: e.note,
+    source: e.source,
   }));
 
   // Base canónica del proyecto: se reusa el segmento tal cual vino en la URL
@@ -183,6 +194,7 @@ export default async function WorkItemDetailPage({
         currentUserId={user.id}
         comments={comments}
         activity={activity}
+        timeEntries={timeEntries}
       />
     </div>
   );

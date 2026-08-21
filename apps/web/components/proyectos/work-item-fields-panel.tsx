@@ -123,6 +123,7 @@ export function WorkItemFieldsPanel({
   orgUsers,
   canManage,
   canAssign,
+  loggedMinutes = 0,
 }: {
   projectId: string;
   task: FieldsPanelTask;
@@ -130,6 +131,9 @@ export function WorkItemFieldsPanel({
   orgUsers: FieldsPanelAssignee[];
   canManage: boolean;
   canAssign: boolean;
+  /** Total de minutos ya registrados (para la fila "Registrar el tiempo"). El
+   * alta/edición de entradas la maneja `TimeTrackingPanel` en su sección propia. */
+  loggedMinutes?: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -383,9 +387,14 @@ export function WorkItemFieldsPanel({
           <span className="text-sm text-faint">Vacío</span>
         </Row>
 
-        {/* Registrar el tiempo (placeholder para slice de time tracking) */}
+        {/* Registrar el tiempo: total registrado. El alta/edición vive en la
+            sección `TimeTrackingPanel`, bajo el grid de campos. */}
         <Row icon={<IconTimer />} label="Registrar el tiempo">
-          <span className="text-sm text-faint">Vacío</span>
+          {loggedMinutes > 0 ? (
+            <span className="text-sm text-ink">{formatDuration(loggedMinutes)}</span>
+          ) : (
+            <span className="text-sm text-faint">Vacío</span>
+          )}
         </Row>
       </div>
       {error && <p className="mt-1 text-sm text-danger">{error}</p>}
