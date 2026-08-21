@@ -273,8 +273,8 @@ export function WorkItemFieldsPanel({
             editable={canManage}
             display={
               task.startDate || task.dueDate ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className={overdue ? "text-danger" : undefined}>
+                <span className="flex flex-col items-start gap-1">
+                  <span className={`whitespace-nowrap ${overdue ? "text-danger" : ""}`}>
                     {dateRangeLabel(task.startDate, task.dueDate)}
                   </span>
                   {overdue && (
