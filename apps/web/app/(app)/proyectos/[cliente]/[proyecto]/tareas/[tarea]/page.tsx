@@ -6,6 +6,7 @@ import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { listWorkItemAttachments } from "@/lib/project-actions";
+import { NoAccessPanel } from "@/components/no-access-panel";
 import {
   WorkItemDetail,
   type DetailSubtask,
@@ -28,8 +29,17 @@ export default async function WorkItemDetailPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessModule(user, "proyectos")) redirect("/inicio");
-  if (!hasPermission(user, "project.view")) redirect("/inicio");
+  // Sin acceso: mensaje claro (mismo panel que el layout) en vez de rebotar. Esto
+  // hace que el enlace de una notificación de mención muestre un motivo, no un
+  // redirect silencioso a /inicio.
+  if (!canAccessModule(user, "proyectos") || !hasPermission(user, "project.view")) {
+    return (
+      <NoAccessPanel
+        title="No tienes acceso a esta tarea"
+        message="Tu rol no tiene permiso para ver Proyectos. Si crees que deberías poder abrir esta tarea, pídele a un administrador que te habilite el acceso."
+      />
+    );
+  }
 
   const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();

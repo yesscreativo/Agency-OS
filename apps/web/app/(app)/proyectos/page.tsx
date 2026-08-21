@@ -4,6 +4,7 @@ import { listClients, listProjects, type ProjectRow } from "@agency-os/db";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectsList, type ClientOption, type ProjectListRow } from "@/components/proyectos/projects-list";
+import { NoAccessPanel } from "@/components/no-access-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +25,14 @@ function progressOf(row: ProjectRow): number {
 export default async function ProjectsPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessModule(user, "proyectos")) redirect("/inicio");
-  if (!hasPermission(user, "project.view")) redirect("/inicio");
+  if (!canAccessModule(user, "proyectos") || !hasPermission(user, "project.view")) {
+    return (
+      <NoAccessPanel
+        title="No tienes acceso a Proyectos"
+        message="Tu rol no tiene permiso para ver este módulo. Si crees que deberías tener acceso, pídele a un administrador que te lo habilite."
+      />
+    );
+  }
 
   const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();

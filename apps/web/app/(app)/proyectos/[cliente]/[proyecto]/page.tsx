@@ -11,6 +11,7 @@ import {
   type BoardStatus,
   type BoardTask,
 } from "@/components/proyectos/project-board";
+import { NoAccessPanel } from "@/components/no-access-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,14 @@ export default async function ProjectDetailPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessModule(user, "proyectos")) redirect("/inicio");
-  if (!hasPermission(user, "project.view")) redirect("/inicio");
+  if (!canAccessModule(user, "proyectos") || !hasPermission(user, "project.view")) {
+    return (
+      <NoAccessPanel
+        title="No tienes acceso a Proyectos"
+        message="Tu rol no tiene permiso para ver este módulo. Si crees que deberías tener acceso, pídele a un administrador que te lo habilite."
+      />
+    );
+  }
 
   const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();
