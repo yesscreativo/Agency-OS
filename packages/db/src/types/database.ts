@@ -1001,6 +1001,7 @@ export type Database = {
       }
       work_item_attachments: {
         Row: {
+          comment_id: string | null
           created_at: string
           created_by: string | null
           filename: string
@@ -1012,6 +1013,7 @@ export type Database = {
           work_item_id: string
         }
         Insert: {
+          comment_id?: string | null
           created_at?: string
           created_by?: string | null
           filename: string
@@ -1023,6 +1025,7 @@ export type Database = {
           work_item_id: string
         }
         Update: {
+          comment_id?: string | null
           created_at?: string
           created_by?: string | null
           filename?: string
@@ -1034,6 +1037,13 @@ export type Database = {
           work_item_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "work_item_attachments_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "work_item_comments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "work_item_attachments_created_by_fkey"
             columns: ["created_by"]

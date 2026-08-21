@@ -5,7 +5,7 @@ import { extractShortId, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { listWorkItemAttachments } from "@/lib/project-actions";
+import { listCommentAttachmentsForWorkItem, listWorkItemAttachments } from "@/lib/project-actions";
 import { NoAccessPanel } from "@/components/no-access-panel";
 import {
   WorkItemDetail,
@@ -120,10 +120,21 @@ export default async function WorkItemDetailPage({
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
 
   // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
-  const [commentRows, activityRows] = await Promise.all([
+  const [commentRows, activityRows, commentAttachmentsResult] = await Promise.all([
     listComments(db, taskId),
     listActivity(db, taskId),
+    listCommentAttachmentsForWorkItem(taskId),
   ]);
+  const commentAttachments =
+    "attachments" in commentAttachmentsResult && commentAttachmentsResult.attachments
+      ? commentAttachmentsResult.attachments
+      : [];
+  const attachmentsByComment = new Map<string, typeof commentAttachments>();
+  for (const a of commentAttachments) {
+    const list = attachmentsByComment.get(a.commentId) ?? [];
+    list.push(a);
+    attachmentsByComment.set(a.commentId, list);
+  }
   const comments = commentRows.map((c) => ({
     id: c.id,
     parentId: c.parent_comment_id,
@@ -132,6 +143,7 @@ export default async function WorkItemDetailPage({
     body: c.body,
     createdAt: c.created_at,
     editedAt: c.edited_at,
+    attachments: attachmentsByComment.get(c.id) ?? [],
   }));
   const activity = activityRows.map((a) => ({
     id: a.id,

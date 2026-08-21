@@ -8,8 +8,10 @@ import {
   deleteAttachmentRow,
   deleteStatus,
   getAttachment,
+  getComment,
   insertAttachment,
   listAttachments,
+  listCommentAttachments,
   recordActivity,
   reorderStatuses,
   setAssignees,
@@ -710,6 +712,134 @@ export async function deleteWorkItemAttachment(id: string): Promise<ActionResult
     return { ok: true };
   } catch (error) {
     console.error("deleteWorkItemAttachment", error);
+    return { error: "No se pudo eliminar el adjunto. Intenta de nuevo." };
+  }
+}
+
+// ---------- Adjuntos de comentarios ----------
+
+/** Sube un archivo asociado a un COMENTARIO. Gate `project.view` + ser autor del
+ * comentario (comentar no exige `project.manage`; la policy de INSERT del bucket
+ * se relajó a miembro de la org en 025). */
+export async function uploadCommentAttachment(
+  commentId: string,
+  formData: FormData,
+): Promise<AttachmentResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) return { error: "No tienes permiso." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Selecciona un archivo." };
+  if (file.size > MAX_ATTACHMENT_BYTES) return { error: "El archivo supera el límite de 10 MB." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const comment = await getComment(db, commentId);
+    if (!comment || comment.organization_id !== organizationId) {
+      return { error: "El comentario no existe o no pertenece a tu organización." };
+    }
+    if (comment.author_user_id !== user.id) {
+      return { error: "Solo puedes adjuntar archivos a tus propios comentarios." };
+    }
+
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${organizationId}/${comment.work_item_id}/${crypto.randomUUID()}-${safeName}`;
+
+    const { error: uploadError } = await db.storage.from(ATTACHMENT_BUCKET).upload(path, file, {
+      contentType: file.type ? safeStorageContentType(file.type) : "application/octet-stream",
+      upsert: false,
+    });
+    if (uploadError) {
+      console.error("uploadCommentAttachment:storage", uploadError);
+      return { error: "No se pudo subir el archivo." };
+    }
+
+    const row = await insertAttachment(db, {
+      work_item_id: comment.work_item_id,
+      comment_id: commentId,
+      organization_id: organizationId,
+      path,
+      filename: file.name,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      created_by: user.id,
+    });
+
+    revalidatePath("/proyectos");
+    return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
+  } catch (error) {
+    console.error("uploadCommentAttachment", error);
+    return { error: "No se pudo subir el archivo. Intenta de nuevo." };
+  }
+}
+
+export interface CommentAttachment extends WorkItemAttachment {
+  commentId: string;
+}
+export type CommentAttachmentsResult =
+  | { attachments: CommentAttachment[]; error?: never }
+  | { attachments?: never; error: string };
+
+/** Adjuntos de los comentarios de una tarea (URLs firmadas), para agruparlos por
+ * comentario en el hilo. Gate `project.view`. */
+export async function listCommentAttachmentsForWorkItem(
+  workItemId: string,
+): Promise<CommentAttachmentsResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) return { error: "No tienes permiso." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const projectId = await assertWorkItemInOrg(db, workItemId, organizationId);
+    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+
+    const rows = await listCommentAttachments(db, workItemId);
+    const attachments = await Promise.all(
+      rows.map(async (r) => ({
+        ...toAttachment(r, await signedAttachmentUrl(db, r.path)),
+        commentId: r.comment_id as string,
+      })),
+    );
+    return { attachments };
+  } catch (error) {
+    console.error("listCommentAttachmentsForWorkItem", error);
+    return { error: "No se pudieron cargar los adjuntos." };
+  }
+}
+
+/** Borra un adjunto de comentario: autor del comentario o `project.manage`. */
+export async function deleteCommentAttachment(id: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const attachment = await getAttachment(db, id);
+    if (!attachment || attachment.organization_id !== organizationId || !attachment.comment_id) {
+      return { error: "El adjunto no existe o no pertenece a tu organización." };
+    }
+    const comment = await getComment(db, attachment.comment_id);
+    const isAuthor = comment?.author_user_id === user.id;
+    if (!isAuthor && !hasPermission(user, "project.manage")) {
+      return { error: "No puedes eliminar este adjunto." };
+    }
+
+    const { error: rmError } = await db.storage.from(ATTACHMENT_BUCKET).remove([attachment.path]);
+    if (rmError) console.error("deleteCommentAttachment:storage", rmError);
+    await deleteAttachmentRow(db, id);
+
+    revalidatePath("/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteCommentAttachment", error);
     return { error: "No se pudo eliminar el adjunto. Intenta de nuevo." };
   }
 }

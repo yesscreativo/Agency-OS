@@ -13,6 +13,12 @@ import {
   deleteComment,
   editComment,
 } from "@/lib/work-item-comment-actions";
+import {
+  deleteCommentAttachment,
+  uploadCommentAttachment,
+  type WorkItemAttachment,
+} from "@/lib/project-actions";
+import { AttachmentCard, MAX_ATTACHMENT_BYTES, PendingFileCard } from "./work-item-fields";
 
 export interface PanelUser {
   id: string;
@@ -28,6 +34,7 @@ export interface PanelComment {
   body: string;
   createdAt: string;
   editedAt: string | null;
+  attachments: WorkItemAttachment[];
 }
 
 export interface PanelActivity {
@@ -81,6 +88,7 @@ function CommentComposer({
   placeholder = "Escribe un comentario… usa @ para mencionar",
   submitLabel = "Comentar",
   autoFocus = false,
+  allowFiles = true,
   onSubmit,
   onCancel,
 }: {
@@ -89,13 +97,31 @@ function CommentComposer({
   placeholder?: string;
   submitLabel?: string;
   autoFocus?: boolean;
-  onSubmit: (body: string) => void;
+  /** Habilita adjuntar archivos (drag & drop / botón). Desactivado al editar. */
+  allowFiles?: boolean;
+  onSubmit: (body: string, files: File[]) => void;
   onCancel?: () => void;
 }) {
   const [body, setBody] = useState(initialBody);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setFileError(null);
+    const picked = Array.from(list);
+    const tooBig = picked.find((f) => f.size > MAX_ATTACHMENT_BYTES);
+    if (tooBig) {
+      setFileError(`"${tooBig.name}" supera el límite de 10 MB.`);
+      return;
+    }
+    setFiles((prev) => [...prev, ...picked]);
+  };
 
   // Detecta un token @... pegado al cursor para abrir el autocompletado.
   const syncMention = (value: string, caret: number) => {
@@ -135,10 +161,38 @@ function CommentComposer({
     ? users.filter((u) => mentionQuery === "" || u.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
     : [];
 
-  const canSubmit = body.trim().length > 0;
+  const canSubmit = body.trim().length > 0 || files.length > 0;
+
+  const submit = () => {
+    if (!canSubmit) return;
+    onSubmit(body.trim(), files);
+    setBody("");
+    setFiles([]);
+    setFileError(null);
+  };
 
   return (
-    <div className="relative">
+    <div
+      className={`relative rounded-md ${dragOver ? "ring-2 ring-green" : ""}`}
+      onDragOver={
+        allowFiles
+          ? (e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }
+          : undefined
+      }
+      onDragLeave={allowFiles ? () => setDragOver(false) : undefined}
+      onDrop={
+        allowFiles
+          ? (e) => {
+              e.preventDefault();
+              setDragOver(false);
+              addFiles(e.dataTransfer.files);
+            }
+          : undefined
+      }
+    >
       <Textarea
         ref={ref}
         value={body}
@@ -162,19 +216,44 @@ function CommentComposer({
           ))}
         </div>
       )}
+      {files.length > 0 && (
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {files.map((f, i) => (
+            <PendingFileCard
+              key={`${f.name}-${i}`}
+              file={f}
+              onRemove={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+            />
+          ))}
+        </div>
+      )}
+      {fileError && <p className="mt-1 text-sm text-danger">{fileError}</p>}
       <div className="mt-2 flex items-center gap-2">
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={!canSubmit}
-          onClick={() => {
-            if (!canSubmit) return;
-            onSubmit(body.trim());
-            setBody("");
-          }}
-        >
+        <Button variant="primary" size="sm" disabled={!canSubmit} onClick={submit}>
           {submitLabel}
         </Button>
+        {allowFiles && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Adjuntar
+            </Button>
+          </>
+        )}
         {onCancel && (
           <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancelar
@@ -224,6 +303,13 @@ function CommentRow({
     });
   };
 
+  const removeAttachment = (id: string) => {
+    startTransition(async () => {
+      const res = await deleteCommentAttachment(id);
+      if (!res.error) router.refresh();
+    });
+  };
+
   const authorAvatar = users.find((u) => u.id === comment.authorId)?.avatarUrl ?? null;
 
   return (
@@ -247,12 +333,28 @@ function CommentRow({
               initialBody={comment.body}
               submitLabel="Guardar"
               autoFocus
+              allowFiles={false}
               onSubmit={doEdit}
               onCancel={() => setEditing(false)}
             />
           </div>
         ) : (
-          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-ink">{comment.body}</p>
+          <>
+            {comment.body && (
+              <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-ink">{comment.body}</p>
+            )}
+            {comment.attachments.length > 0 && (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {comment.attachments.map((a) => (
+                  <AttachmentCard
+                    key={a.id}
+                    attachment={a}
+                    onRemove={isMine ? () => removeAttachment(a.id) : undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
         {!editing && (
           <div className="mt-1 flex items-center gap-3 text-xs text-muted">
@@ -319,15 +421,27 @@ export function WorkItemActivityPanel({
     }
   }
 
-  const submitComment = (body: string, parentCommentId: string | null) => {
+  const submitComment = (body: string, files: File[], parentCommentId: string | null) => {
     setError(null);
     startTransition(async () => {
       const res = await createComment({ workItemId, body, parentCommentId });
-      if (res.error) setError(res.error);
-      else {
-        setReplyTo(null);
-        router.refresh();
+      if (res.error || !res.comment) {
+        setError(res.error ?? "No se pudo publicar el comentario.");
+        return;
       }
+      const commentId = res.comment.id;
+      // Sube los adjuntos ya asociados al comentario recién creado.
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const up = await uploadCommentAttachment(commentId, fd);
+        if (up.error) {
+          setError(up.error);
+          break;
+        }
+      }
+      setReplyTo(null);
+      router.refresh();
     });
   };
 
@@ -356,7 +470,7 @@ export function WorkItemActivityPanel({
 
       {tab === "comments" ? (
         <div className="space-y-4">
-          <CommentComposer users={orgUsers} onSubmit={(b) => submitComment(b, null)} />
+          <CommentComposer users={orgUsers} onSubmit={(b, files) => submitComment(b, files, null)} />
           {error && <p className="text-sm text-danger">{error}</p>}
 
           {roots.length === 0 ? (
@@ -389,7 +503,7 @@ export function WorkItemActivityPanel({
                         placeholder="Responder…"
                         submitLabel="Responder"
                         autoFocus
-                        onSubmit={(b) => submitComment(b, root.id)}
+                        onSubmit={(b, files) => submitComment(b, files, root.id)}
                         onCancel={() => setReplyTo(null)}
                       />
                     </div>
