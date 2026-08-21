@@ -40,10 +40,10 @@ export interface BoardOrgUser {
   avatarUrl?: string | null;
 }
 
-const PRIORITY_BADGE: Record<WorkItemPriority, { label: string; tone: "success" | "info" | "danger" | "neutral"; variant?: "soft" | "solid" }> = {
+const PRIORITY_BADGE: Record<WorkItemPriority, { label: string; tone: "success" | "info" | "warn" | "danger" | "neutral"; variant?: "soft" | "solid" }> = {
   low: { label: "Baja", tone: "neutral" },
   normal: { label: "Normal", tone: "info" },
-  high: { label: "Alta", tone: "danger" },
+  high: { label: "Alta", tone: "warn" },
   urgent: { label: "Urgente", tone: "danger", variant: "solid" },
 };
 
@@ -283,7 +283,7 @@ export function ProjectBoard({
                           setOverCol(null);
                         }}
                         onClick={() => openTask(t)}
-                        className={`rounded-md border border-line bg-glass-strong p-3 text-left backdrop-blur-xl transition hover:border-line-strong ${
+                        className={`rounded-md border border-line bg-glass p-3 text-left backdrop-blur-xl transition hover:border-line-strong ${
                           canManage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
                         } ${dragId === t.id ? "opacity-50" : ""}`}
                       >
