@@ -16,6 +16,8 @@ import {
   dateRangeLabel,
   formatDuration,
   initialsOf,
+  isOverdue,
+  overdueLabel,
   parseDuration,
   WORK_ITEM_PRIORITIES,
   type WorkItemPriority,
@@ -152,6 +154,7 @@ export function WorkItemFieldsPanel({
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const currentStatus = statusIdLocal ? statusById.get(statusIdLocal) : null;
   const avatarByUserId = new Map(orgUsers.map((u) => [u.id, u.avatarUrl ?? null]));
+  const overdue = isOverdue(task.dueDate, currentStatus?.isDone ?? false);
 
   /** Guarda reenviando el estado completo + los overrides del campo editado.
    * Parte de los valores LOCALES (estado/prioridad optimistas) para que dos
@@ -270,7 +273,14 @@ export function WorkItemFieldsPanel({
             editable={canManage}
             display={
               task.startDate || task.dueDate ? (
-                <span>{dateRangeLabel(task.startDate, task.dueDate)}</span>
+                <span className="inline-flex items-center gap-2">
+                  <span className={overdue ? "text-danger" : undefined}>
+                    {dateRangeLabel(task.startDate, task.dueDate)}
+                  </span>
+                  {overdue && (
+                    <Badge tone="danger">{overdueLabel(task.dueDate) || "Retrasada"}</Badge>
+                  )}
+                </span>
               ) : (
                 EMPTY
               )

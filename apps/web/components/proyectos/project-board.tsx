@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
-import { formatDate, type WorkItemPriority } from "@agency-os/domain";
+import { formatDate, isOverdue, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
 import { taskHref } from "@/lib/project-paths";
 import { WorkItemEditor } from "./work-item-editor";
@@ -272,6 +272,7 @@ export function ProjectBoard({
                   {colTasks.map((t) => {
                     const priority = PRIORITY_BADGE[t.priority];
                     const subCount = childrenByParent.get(t.id)?.length ?? 0;
+                    const overdue = isOverdue(t.dueDate, col.isDone);
                     return (
                       <button
                         key={t.id}
@@ -295,7 +296,17 @@ export function ProjectBoard({
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 text-[12px] text-muted">
-                            {t.dueDate && <span>{formatDate(t.dueDate)}</span>}
+                            {t.dueDate && (
+                              <span
+                                className={
+                                  overdue ? "font-semibold text-danger" : undefined
+                                }
+                                title={overdue ? "Retrasada" : undefined}
+                              >
+                                {overdue && "⚠ "}
+                                {formatDate(t.dueDate)}
+                              </span>
+                            )}
                             {subCount > 0 && (
                               <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
                                 {subCount} subtarea{subCount === 1 ? "" : "s"}
@@ -377,6 +388,7 @@ function ListView({
         const status = t.statusId ? statusById.get(t.statusId) : null;
         const priority = PRIORITY_BADGE[t.priority];
         const children = childrenByParent.get(t.id) ?? [];
+        const overdue = isOverdue(t.dueDate, status?.isDone ?? false);
         return (
           <div
             key={t.id}
@@ -393,13 +405,21 @@ function ListView({
                 <Badge tone={priority.tone} variant={priority.variant}>
                   {priority.label}
                 </Badge>
-                {t.dueDate && <span className="text-[12px] text-muted">{formatDate(t.dueDate)}</span>}
+                {overdue && <Badge tone="danger">Retrasada</Badge>}
+                {t.dueDate && (
+                  <span
+                    className={`text-[12px] ${overdue ? "font-semibold text-danger" : "text-muted"}`}
+                  >
+                    {formatDate(t.dueDate)}
+                  </span>
+                )}
                 <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
               </div>
             </button>
             {children.map((c) => {
               const cStatus = c.statusId ? statusById.get(c.statusId) : null;
               const cPriority = PRIORITY_BADGE[c.priority];
+              const cOverdue = isOverdue(c.dueDate, cStatus?.isDone ?? false);
               return (
                 <button
                   key={c.id}
@@ -413,7 +433,14 @@ function ListView({
                     <Badge tone={cPriority.tone} variant={cPriority.variant}>
                       {cPriority.label}
                     </Badge>
-                    {c.dueDate && <span className="text-[12px] text-muted">{formatDate(c.dueDate)}</span>}
+                    {cOverdue && <Badge tone="danger">Retrasada</Badge>}
+                    {c.dueDate && (
+                      <span
+                        className={`text-[12px] ${cOverdue ? "font-semibold text-danger" : "text-muted"}`}
+                      >
+                        {formatDate(c.dueDate)}
+                      </span>
+                    )}
                     <AssigneeAvatars assignees={c.assignees} avatarByUserId={avatarByUserId} />
                   </div>
                 </button>

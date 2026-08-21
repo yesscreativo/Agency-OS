@@ -88,6 +88,43 @@ export function dateRangeLabel(
   return `${formatDateShort(start!)} → ${formatDateShort(due!)} (${days}d)`;
 }
 
+/** Días de retraso: cuántos días hace que pasó `due` respecto a `today` (solo
+ * fecha, sin hora). 0 si no hay fecha o aún no vence. */
+export function daysOverdue(
+  due: string | Date | null | undefined,
+  today: Date = new Date(),
+): number {
+  if (!due) return 0;
+  const d = dateParts(due);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const diff = Math.round(
+    (Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) -
+      Date.UTC(d.y, d.m - 1, d.d)) /
+      msPerDay,
+  );
+  return diff > 0 ? diff : 0;
+}
+
+/** ¿La tarea está retrasada? Vence antes de hoy y NO está en un estado "hecho". */
+export function isOverdue(
+  due: string | Date | null | undefined,
+  isDone: boolean,
+  today: Date = new Date(),
+): boolean {
+  if (isDone) return false;
+  return daysOverdue(due, today) > 0;
+}
+
+/** Etiqueta legible del retraso ("Retrasada 3 días"); "" si no está retrasada. */
+export function overdueLabel(
+  due: string | Date | null | undefined,
+  today: Date = new Date(),
+): string {
+  const n = daysOverdue(due, today);
+  if (n <= 0) return "";
+  return n === 1 ? "Retrasada 1 día" : `Retrasada ${n} días`;
+}
+
 export function escapeHtml(value: string | null | undefined): string {
   if (!value) return "";
   return String(value)

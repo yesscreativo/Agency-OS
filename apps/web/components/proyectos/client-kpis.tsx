@@ -38,6 +38,13 @@ const ClockIcon = () => (
     <path d="M12 7.5V12l3 2" />
   </svg>
 );
+const AlertIcon = () => (
+  <svg {...ICON_PROPS}>
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
+    <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+  </svg>
+);
 
 export function ClientKpis({
   projectCount,
@@ -45,17 +52,19 @@ export function ClientKpis({
   tasksTotal,
   tasksDone,
   tasksInProgress,
+  overdueCount,
 }: {
   projectCount: number;
   activeCount: number;
   tasksTotal: number;
   tasksDone: number;
   tasksInProgress: number;
+  overdueCount: number;
 }) {
   const pct = tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
       <KpiCard
         label="Proyectos"
         value={projectCount}
@@ -80,6 +89,14 @@ export function ClientKpis({
         }
       />
       <KpiCard label="En curso" value={tasksInProgress} icon={<ClockIcon />} tone="warn" />
+      <KpiCard
+        label="Retrasadas"
+        value={overdueCount}
+        icon={<AlertIcon />}
+        tone="danger"
+        highlight={overdueCount > 0}
+        hint={overdueCount > 0 ? "Requieren atención" : undefined}
+      />
     </div>
   );
 }

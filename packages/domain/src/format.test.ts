@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   dateRangeLabel,
+  daysOverdue,
   escapeHtml,
   formatDate,
   formatDateShort,
   formatMoney,
   formatRelative,
   initialsOf,
+  isOverdue,
+  overdueLabel,
 } from "./format";
 
 // Los montos formateados incluyen un espacio irrompible (NBSP,  ) entre el
@@ -134,6 +137,35 @@ describe("initialsOf", () => {
   it("devuelve '?' para vacío", () => {
     expect(initialsOf("")).toBe("?");
     expect(initialsOf("   ")).toBe("?");
+  });
+});
+
+describe("isOverdue / daysOverdue / overdueLabel", () => {
+  const today = new Date(2026, 7, 21); // 21 ago 2026 (mes 0-index)
+
+  it("no está retrasada sin fecha de vencimiento", () => {
+    expect(isOverdue(null, false, today)).toBe(false);
+    expect(daysOverdue(null, today)).toBe(0);
+  });
+
+  it("no está retrasada si vence hoy o en el futuro", () => {
+    expect(isOverdue("2026-08-21", false, today)).toBe(false);
+    expect(isOverdue("2026-08-25", false, today)).toBe(false);
+  });
+
+  it("está retrasada si venció antes de hoy y no está hecha", () => {
+    expect(isOverdue("2026-08-20", false, today)).toBe(true);
+    expect(daysOverdue("2026-08-18", today)).toBe(3);
+  });
+
+  it("nunca está retrasada si la tarea está hecha", () => {
+    expect(isOverdue("2026-08-01", true, today)).toBe(false);
+  });
+
+  it("overdueLabel usa singular/plural", () => {
+    expect(overdueLabel("2026-08-20", today)).toBe("Retrasada 1 día");
+    expect(overdueLabel("2026-08-18", today)).toBe("Retrasada 3 días");
+    expect(overdueLabel("2026-08-21", today)).toBe("");
   });
 });
 

@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { getProject, listProjects, type ProjectRow } from "@agency-os/db";
+import {
+  countOverdueTasksInProjects,
+  getProject,
+  listProjects,
+  type ProjectRow,
+} from "@agency-os/db";
 import { matchesShortId, extractShortId, projectProgress } from "@agency-os/domain";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -88,6 +93,16 @@ export default async function ClienteSpacePage({
     (p) => (p.project_state ?? "active") === "active",
   ).length;
 
+  // Tareas retrasadas del cliente (vencidas y no "hechas"). `today` en hora local
+  // del server como YYYY-MM-DD, igual criterio que el job diario de pg_cron.
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const overdueCount = await countOverdueTasksInProjects(
+    db,
+    allClientProjects.map((p) => p.id),
+    todayIso,
+  );
+
   const rows: ProjectListRow[] = projects.map((p) => ({
     id: p.id,
     title: p.title,
@@ -127,6 +142,7 @@ export default async function ClienteSpacePage({
         tasksTotal={tasksTotal}
         tasksDone={tasksDone}
         tasksInProgress={tasksTotal - tasksDone}
+        overdueCount={overdueCount}
       />
       <ProjectsList
         rows={rows}

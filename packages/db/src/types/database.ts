@@ -1200,6 +1200,7 @@ export type Database = {
           estimated_minutes: number | null
           id: string
           organization_id: string
+          overdue_notified_at: string | null
           parent_id: string | null
           priority: Database["public"]["Enums"]["work_item_priority"]
           project_id: string
@@ -1222,6 +1223,7 @@ export type Database = {
           estimated_minutes?: number | null
           id?: string
           organization_id: string
+          overdue_notified_at?: string | null
           parent_id?: string | null
           priority?: Database["public"]["Enums"]["work_item_priority"]
           project_id: string
@@ -1244,6 +1246,7 @@ export type Database = {
           estimated_minutes?: number | null
           id?: string
           organization_id?: string
+          overdue_notified_at?: string | null
           parent_id?: string | null
           priority?: Database["public"]["Enums"]["work_item_priority"]
           project_id?: string
