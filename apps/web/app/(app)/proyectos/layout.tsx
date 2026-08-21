@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
-import { listClientSpaces } from "@agency-os/db";
+import { listClientSpaces, listClients } from "@agency-os/db";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectsSidebar } from "@/components/proyectos/projects-sidebar";
+import type { ClientOption } from "@/components/proyectos/new-project-modal";
 import { NoAccessPanel } from "@/components/no-access-panel";
 
 // Layout del módulo Proyectos con navegación tipo "Spaces": sidebar de clientes a
@@ -28,11 +29,20 @@ export default async function ProyectosLayout({ children }: { children: React.Re
 
   const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();
-  const clients = organizationId ? await listClientSpaces(db, organizationId, user.id) : [];
+  const canManage = hasPermission(user, "project.manage");
+  const [clients, clientsPage] = await Promise.all([
+    organizationId ? listClientSpaces(db, organizationId, user.id) : Promise.resolve([]),
+    canManage ? listClients(db, { pageSize: 200 }) : Promise.resolve({ rows: [] }),
+  ]);
+  const clientsForCreate: ClientOption[] = clientsPage.rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    company: c.company,
+  }));
 
   return (
     <div className="flex flex-col gap-8 sm:flex-row">
-      <ProjectsSidebar clients={clients} />
+      <ProjectsSidebar clients={clients} clientsForCreate={clientsForCreate} canManage={canManage} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

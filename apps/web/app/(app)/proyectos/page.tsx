@@ -61,5 +61,12 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
     company: c.company,
   }));
 
-  return <ProjectsList rows={rows} q={searchParams.q ?? ""} clients={clients} />;
+  return (
+    <ProjectsList
+      rows={rows}
+      q={searchParams.q ?? ""}
+      clients={clients}
+      canManage={hasPermission(user, "project.manage")}
+    />
+  );
 }

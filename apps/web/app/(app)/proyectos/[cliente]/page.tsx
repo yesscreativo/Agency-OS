@@ -87,11 +87,18 @@ export default async function ClienteSpacePage({
     projectState: p.project_state ?? "active",
   }));
 
-  const lockedClient: ClientOption = {
+  const defaultClient: ClientOption = {
     id: client.id,
     name: client.name,
     company: client.company,
   };
+  // Todos los clientes de la org: el modal de alta preselecciona este cliente
+  // pero permite crear a cualquier otro (selector editable, ya no bloqueado).
+  const allClients: ClientOption[] = (clientRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    company: c.company,
+  }));
 
   return (
     <div className="space-y-6">
@@ -105,8 +112,9 @@ export default async function ClienteSpacePage({
       <ProjectsList
         rows={rows}
         q={searchParams.q ?? ""}
-        clients={[lockedClient]}
-        lockedClient={lockedClient}
+        clients={allClients}
+        defaultClient={defaultClient}
+        canManage={hasPermission(user, "project.manage")}
         hideHeading
       />
     </div>
