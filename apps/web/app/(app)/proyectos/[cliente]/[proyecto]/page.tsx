@@ -98,7 +98,11 @@ export default async function ProjectDetailPage({
       })),
   }));
 
-  const orgUsers: BoardOrgUser[] = orgUserRows.map((u) => ({ id: u.id, name: u.fullName }));
+  const orgUsers: BoardOrgUser[] = orgUserRows.map((u) => ({
+    id: u.id,
+    name: u.fullName,
+    avatarUrl: u.avatarUrl,
+  }));
 
   const state = PROJECT_STATE_BADGE[project.project_state ?? "active"] ?? PROJECT_STATE_BADGE.active;
 

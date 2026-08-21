@@ -68,7 +68,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               }))}
             />
             <div className="flex items-center gap-2.5">
-              <Avatar initials={initialsOf(user.fullName)} tone="purple" size="md" />
+              <Avatar initials={initialsOf(user.fullName)} src={user.avatarUrl} tone="purple" size="md" />
               <div className="leading-tight">
                 <div className="font-semibold">{user.fullName}</div>
                 {user.roles.length > 0 && (

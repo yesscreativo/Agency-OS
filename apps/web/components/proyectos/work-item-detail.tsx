@@ -31,6 +31,8 @@ import {
 export interface DetailAssignee {
   id: string;
   name: string;
+  /** Solo presente en la lista de orgUsers; los asignados de la tarea usan iniciales. */
+  avatarUrl?: string | null;
 }
 
 export interface DetailTask {

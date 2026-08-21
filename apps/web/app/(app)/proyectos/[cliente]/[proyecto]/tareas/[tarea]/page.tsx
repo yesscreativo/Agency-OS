@@ -117,7 +117,7 @@ export default async function WorkItemDetailPage({
     statusId: st.status_id,
   }));
 
-  const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName }));
+  const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
 
   // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
   const [commentRows, activityRows] = await Promise.all([

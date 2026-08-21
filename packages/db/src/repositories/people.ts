@@ -21,3 +21,20 @@ export async function updatePersonName(db: Db, id: string, fullName: string): Pr
   if (error) throw error;
   return data;
 }
+
+/** Guarda (o limpia con null) la RUTA del avatar del propio usuario en el bucket
+ * público user-avatars. Misma policy people_self_update. */
+export async function updatePersonAvatar(
+  db: Db,
+  id: string,
+  avatarPath: string | null,
+): Promise<PersonRow> {
+  const { data, error } = await db
+    .from("people")
+    .update({ avatar_url: avatarPath })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}

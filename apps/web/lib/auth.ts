@@ -7,6 +7,8 @@ export interface CurrentUser {
   fullName: string;
   /** id de la fila people, para "Mi perfil". */
   personId: string | null;
+  /** URL pública del avatar (bucket user-avatars) o null si usa iniciales. */
+  avatarUrl: string | null;
   organizationIds: string[];
   roles: { code: string; name: string }[];
   permissionCodes: Set<string>;
@@ -36,7 +38,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const { data: appUser } = await supabase
     .from("users")
-    .select("id, person_id, people(full_name)")
+    .select("id, person_id, people(full_name, avatar_url)")
     .eq("id", user.id)
     .single();
 
@@ -84,14 +86,20 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   }
 
   const typedAppUser = appUser as
-    | { person_id: string; people: { full_name: string } | null }
+    | { person_id: string; people: { full_name: string; avatar_url: string | null } | null }
     | null;
+
+  const avatarPath = typedAppUser?.people?.avatar_url ?? null;
+  const avatarUrl = avatarPath
+    ? (supabase.storage.from("user-avatars").getPublicUrl(avatarPath).data.publicUrl ?? null)
+    : null;
 
   return {
     id: user.id,
     email: user.email ?? "",
     fullName: typedAppUser?.people?.full_name ?? user.email ?? "",
     personId: typedAppUser?.person_id ?? null,
+    avatarUrl,
     organizationIds,
     roles,
     permissionCodes,

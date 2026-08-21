@@ -17,6 +17,7 @@ import {
 export interface PanelUser {
   id: string;
   name: string;
+  avatarUrl?: string | null;
 }
 
 export interface PanelComment {
@@ -155,7 +156,7 @@ function CommentComposer({
               onClick={() => pickMention(u.name)}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-2"
             >
-              <Avatar initials={initialsOf(u.name)} size="xs" />
+              <Avatar initials={initialsOf(u.name)} src={u.avatarUrl} size="xs" />
               {u.name}
             </button>
           ))}
@@ -223,9 +224,16 @@ function CommentRow({
     });
   };
 
+  const authorAvatar = users.find((u) => u.id === comment.authorId)?.avatarUrl ?? null;
+
   return (
     <div className="flex gap-2.5">
-      <Avatar initials={initialsOf(comment.authorName)} size="sm" tone="neutral" />
+      <Avatar
+        initials={initialsOf(comment.authorName)}
+        src={authorAvatar}
+        size="sm"
+        tone="neutral"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-sm">
           <span className="font-semibold text-ink">{comment.authorName}</span>

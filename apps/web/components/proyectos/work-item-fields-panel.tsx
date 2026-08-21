@@ -27,6 +27,8 @@ import { AssigneeMultiSelect, PRIORITY_LABEL, PriorityBadge } from "./work-item-
 export interface FieldsPanelAssignee {
   id: string;
   name: string;
+  /** Solo en la lista orgUsers; los asignados de la tarea caen a iniciales. */
+  avatarUrl?: string | null;
 }
 
 export interface FieldsPanelTask {
@@ -149,6 +151,7 @@ export function WorkItemFieldsPanel({
 
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const currentStatus = statusIdLocal ? statusById.get(statusIdLocal) : null;
+  const avatarByUserId = new Map(orgUsers.map((u) => [u.id, u.avatarUrl ?? null]));
 
   /** Guarda reenviando el estado completo + los overrides del campo editado.
    * Parte de los valores LOCALES (estado/prioridad optimistas) para que dos
@@ -307,7 +310,13 @@ export function WorkItemFieldsPanel({
               task.assignees.length > 0 ? (
                 <AvatarGroup more={task.assignees.length > 3 ? task.assignees.length - 3 : undefined}>
                   {task.assignees.slice(0, 3).map((a) => (
-                    <Avatar key={a.id} initials={initialsOf(a.name)} size="xs" title={a.name} />
+                    <Avatar
+                      key={a.id}
+                      initials={initialsOf(a.name)}
+                      src={avatarByUserId.get(a.id) ?? null}
+                      size="xs"
+                      title={a.name}
+                    />
                   ))}
                 </AvatarGroup>
               ) : (

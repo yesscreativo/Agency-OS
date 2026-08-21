@@ -37,6 +37,7 @@ export interface BoardTask {
 export interface BoardOrgUser {
   id: string;
   name: string;
+  avatarUrl?: string | null;
 }
 
 const PRIORITY_BADGE: Record<WorkItemPriority, { label: string; tone: "success" | "info" | "danger" | "neutral"; variant?: "soft" | "solid" }> = {
@@ -56,14 +57,26 @@ function initialsOf(name: string): string {
   return (first.charAt(0) + last.charAt(0)).toUpperCase();
 }
 
-function AssigneeAvatars({ assignees }: { assignees: BoardAssignee[] }) {
+function AssigneeAvatars({
+  assignees,
+  avatarByUserId,
+}: {
+  assignees: BoardAssignee[];
+  avatarByUserId?: Map<string, string | null>;
+}) {
   if (assignees.length === 0) return null;
   const shown = assignees.slice(0, 3);
   const rest = assignees.length - shown.length;
   return (
     <AvatarGroup more={rest > 0 ? rest : undefined}>
       {shown.map((a) => (
-        <Avatar key={a.id} initials={initialsOf(a.name)} size="xs" title={a.name} />
+        <Avatar
+          key={a.id}
+          initials={initialsOf(a.name)}
+          src={avatarByUserId?.get(a.id) ?? null}
+          size="xs"
+          title={a.name}
+        />
       ))}
     </AvatarGroup>
   );
@@ -99,6 +112,10 @@ export function ProjectBoard({
   const [error, setError] = useState<string | null>(null);
 
   const openTask = (task: { id: string; title: string }) => router.push(taskHref(basePath, task));
+  const avatarByUserId = useMemo(
+    () => new Map(orgUsers.map((u) => [u.id, u.avatarUrl ?? null])),
+    [orgUsers],
+  );
 
   // Overlay optimista *transitorio*: solo contiene entradas para tareas con un
   // drag en curso (o recién confirmado, hasta que `tasks` refleje el cambio).
@@ -285,7 +302,7 @@ export function ProjectBoard({
                               </span>
                             )}
                           </div>
-                          <AssigneeAvatars assignees={t.assignees} />
+                          <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
                         </div>
                       </button>
                     );
@@ -306,6 +323,7 @@ export function ProjectBoard({
           topTasks={topTasks}
           childrenByParent={childrenByParent}
           onOpen={openTask}
+          avatarByUserId={avatarByUserId}
         />
       )}
 
@@ -332,11 +350,13 @@ function ListView({
   topTasks,
   childrenByParent,
   onOpen,
+  avatarByUserId,
 }: {
   statuses: BoardStatus[];
   topTasks: BoardTask[];
   childrenByParent: Map<string, BoardTask[]>;
   onOpen: (task: { id: string; title: string }) => void;
+  avatarByUserId?: Map<string, string | null>;
 }) {
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
@@ -371,7 +391,7 @@ function ListView({
                   {priority.label}
                 </Badge>
                 {t.dueDate && <span className="text-[12px] text-muted">{formatDate(t.dueDate)}</span>}
-                <AssigneeAvatars assignees={t.assignees} />
+                <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
               </div>
             </button>
             {children.map((c) => {
@@ -391,7 +411,7 @@ function ListView({
                       {cPriority.label}
                     </Badge>
                     {c.dueDate && <span className="text-[12px] text-muted">{formatDate(c.dueDate)}</span>}
-                    <AssigneeAvatars assignees={c.assignees} />
+                    <AssigneeAvatars assignees={c.assignees} avatarByUserId={avatarByUserId} />
                   </div>
                 </button>
               );
