@@ -7,7 +7,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, Button, Textarea } from "@agency-os/ui";
-import { formatRelative, initialsOf } from "@agency-os/domain";
+import { formatDuration, formatRelative, initialsOf } from "@agency-os/domain";
 import {
   createComment,
   deleteComment,
@@ -74,6 +74,10 @@ function activityText(a: PanelActivity, usersById: Map<string, string>): string 
       return "comentó";
     case "comment_reply":
       return "respondió un comentario";
+    case "time_logged": {
+      const mins = Number(p.minutes ?? 0);
+      return mins > 0 ? `registró ${formatDuration(mins)}` : "registró tiempo";
+    }
     default:
       return a.eventType;
   }
