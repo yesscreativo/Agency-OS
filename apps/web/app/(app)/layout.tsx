@@ -62,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               unread={unread}
               initial={notifs.map((n) => ({
                 id: n.id,
+                type: n.type,
                 title: n.title,
                 body: n.body,
                 quoteId: n.quote_id,
