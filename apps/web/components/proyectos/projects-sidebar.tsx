@@ -24,12 +24,15 @@ export function ProjectsSidebar({
   clients,
   clientsForCreate,
   canManage = false,
+  canManageAccess = false,
 }: {
   clients: ClientSpaceRow[];
   /** Todos los clientes de la org para el modal global de alta de proyecto. */
   clientsForCreate: ClientOption[];
   /** Solo con project.manage se muestra el botón global de "Nuevo proyecto". */
   canManage?: boolean;
+  /** Solo con project.manage_access se muestra el link "Accesos". */
+  canManageAccess?: boolean;
 }) {
   const pathname = usePathname();
   const [query, setQuery] = useState("");
@@ -126,6 +129,18 @@ export function ProjectsSidebar({
       </div>
 
       <div className="mt-5 space-y-0.5 border-t border-line pt-4">
+        {canManageAccess && (
+          <a
+            href="/proyectos/usuarios"
+            className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
+              pathname === "/proyectos/usuarios"
+                ? "bg-green font-semibold text-green-ink"
+                : "text-muted hover:bg-surface-2 hover:text-ink"
+            }`}
+          >
+            Accesos
+          </a>
+        )}
         <SidebarPlaceholder label="Carga del equipo" />
         <SidebarPlaceholder label="Mis tiempos" />
       </div>

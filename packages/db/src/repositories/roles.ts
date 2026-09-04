@@ -15,3 +15,15 @@ export async function listAssignableRoles(db: Db): Promise<RoleRow[]> {
   if (error) throw error;
   return data ?? [];
 }
+
+/** Roles delegables de un módulo específico (ej. 'proyectos'), para la página de
+ * gestión de accesos propia del módulo. Nunca incluye roles is_super. */
+export async function listRolesByModule(db: Db, moduleCode: string): Promise<RoleRow[]> {
+  const { data, error } = await db
+    .from("roles")
+    .select("*")
+    .eq("module_code", moduleCode)
+    .order("name");
+  if (error) throw error;
+  return data ?? [];
+}
