@@ -9,7 +9,7 @@
 // `addTimeEntry`/`editTimeEntry` recibe minutos ya numéricos. Tras cada mutación
 // se hace `router.refresh()` para recargar las entradas del server.
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, Button, Input, Textarea } from "@agency-os/ui";
 import { formatDuration, groupMinutesByUser, initialsOf, parseDuration, sumMinutes } from "@agency-os/domain";
@@ -17,6 +17,9 @@ import {
   addTimeEntry,
   deleteTimeEntryAction,
   editTimeEntry,
+  startTimer,
+  stopTimer,
+  type ActiveTimerDTO,
   type TimeEntryDTO,
 } from "@/lib/time-tracking-actions";
 
@@ -33,21 +36,80 @@ function formatDay(iso: string): string {
   return d.toLocaleDateString("es", { day: "numeric", month: "short" });
 }
 
+/** mm:ss (o h:mm:ss pasada la hora) de un cronómetro corriendo. Texto plano,
+ * actualizado por intervalo — no es una animación CSS (prefers-reduced-motion
+ * no aplica aquí). */
+function formatElapsed(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/** Segundos transcurridos desde `startedAt`, recalculados cada segundo mientras
+ * `startedAt` esté presente (null cuando no hay timer corriendo aquí). */
+function useElapsedSeconds(startedAt: string | null): number {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startedAt) {
+      setElapsed(0);
+      return;
+    }
+    const startedMs = new Date(startedAt).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startedMs) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  return elapsed;
+}
+
 export function TimeTrackingPanel({
   workItemId,
   currentUserId,
   canManage,
   entries,
   orgUsers,
+  activeTimer,
 }: {
   workItemId: string;
   currentUserId: string;
   canManage: boolean;
   entries: TimeEntryDTO[];
   orgUsers?: { id: string; name: string; avatarUrl?: string | null }[];
+  /** Timer activo del usuario (en esta tarea u otra), para hidratar el contador. */
+  activeTimer?: ActiveTimerDTO | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [timerError, setTimerError] = useState<string | null>(null);
+  const runningHere = activeTimer?.workItemId === workItemId;
+  const elapsed = useElapsedSeconds(runningHere ? (activeTimer?.startedAt ?? null) : null);
+
+  const onStart = () => {
+    setTimerError(null);
+    startTransition(async () => {
+      const res = await startTimer(workItemId);
+      if (res.error) {
+        setTimerError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const onStop = () => {
+    setTimerError(null);
+    startTransition(async () => {
+      const res = await stopTimer();
+      if (res.error) {
+        setTimerError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
 
   // Formulario de alta.
   const [durationInput, setDurationInput] = useState("");
@@ -157,6 +219,28 @@ export function TimeTrackingPanel({
           {totalMinutes > 0 ? formatDuration(totalMinutes) : "0m"}
         </span>
       </div>
+
+      {/* Cronómetro en vivo */}
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-line bg-glass px-3 py-2">
+        {runningHere ? (
+          <>
+            <span className="font-mono text-sm tabular-nums text-ink">{formatElapsed(elapsed)}</span>
+            <Button variant="outline" size="sm" onClick={onStop} disabled={isPending}>
+              ⏹ Detener
+            </Button>
+          </>
+        ) : (
+          <>
+            {activeTimer && (
+              <span className="text-xs text-muted">Tienes un cronómetro corriendo en otra tarea.</span>
+            )}
+            <Button variant="outline" size="sm" onClick={onStart} disabled={isPending}>
+              ▷ {activeTimer ? "Mover aquí" : "Iniciar"}
+            </Button>
+          </>
+        )}
+      </div>
+      {timerError && <p className="mt-1 text-sm text-danger">{timerError}</p>}
 
       {/* Desglose por colaborador */}
       {byUser.length > 0 && (

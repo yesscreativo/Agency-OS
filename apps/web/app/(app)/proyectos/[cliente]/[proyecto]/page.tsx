@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { getProject, listOrgUsers } from "@agency-os/db";
-import { extractShortId, matchesShortId } from "@agency-os/domain";
+import { getProject, listOrgUsers, sumMinutesByProject, sumMinutesByTask } from "@agency-os/db";
+import { extractShortId, formatDuration, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -70,7 +70,11 @@ export default async function ProjectDetailPage({
   const canonical = projectHref(project.client, project);
   if (`/proyectos/${params.cliente}/${params.proyecto}` !== canonical) redirect(canonical);
 
-  const orgUserRows = organizationId ? await listOrgUsers(db, organizationId) : [];
+  const [orgUserRows, projectMinutes, minutesByTask] = await Promise.all([
+    organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
+    sumMinutesByProject(db, projectId),
+    sumMinutesByTask(db, projectId),
+  ]);
 
   const statuses: BoardStatus[] = project.statuses.map((s) => ({
     id: s.id,
@@ -116,6 +120,9 @@ export default async function ProjectDetailPage({
           <div className="mt-1 flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{project.title}</h1>
             <Badge tone={state.tone}>{state.label}</Badge>
+            {projectMinutes > 0 && (
+              <span className="text-sm text-muted">{formatDuration(projectMinutes)} registradas</span>
+            )}
           </div>
           {project.client && (
             <p className="mt-1 text-sm text-muted">
@@ -133,6 +140,7 @@ export default async function ProjectDetailPage({
         orgUsers={orgUsers}
         canManage={hasPermission(user, "project.manage")}
         canAssign={hasPermission(user, "project.assign")}
+        minutesByTask={minutesByTask}
       />
     </div>
   );

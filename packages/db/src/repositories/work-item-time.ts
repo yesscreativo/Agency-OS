@@ -70,19 +70,83 @@ export async function listTimeEntries(db: Db, workItemId: string): Promise<TimeE
   return (data ?? []).map(toEntry);
 }
 
+const SELECT_WITH_USER_AND_TASK =
+  "*, user:users!work_item_time_entries_user_id_fkey(id, person:people(full_name, avatar_url)), task:work_items!work_item_time_entries_work_item_id_fkey(id, title)";
+
+type ReportSelectRow = SelectRow & { task: { id: string; title: string } | null };
+
+export type TimeEntryForReport = TimeEntryWithUser & { taskTitle: string };
+
+function toReportEntry(row: ReportSelectRow): TimeEntryForReport {
+  return { ...toEntry(row), taskTitle: row.task?.title ?? "—" };
+}
+
 export async function reportEntries(
   db: Db,
   opts: { organizationId: string; userId?: string; projectId?: string; from?: string; to?: string },
-): Promise<TimeEntryWithUser[]> {
+): Promise<TimeEntryForReport[]> {
   let q = db
     .from("work_item_time_entries")
-    .select(SELECT_WITH_USER)
+    .select(SELECT_WITH_USER_AND_TASK)
     .eq("organization_id", opts.organizationId);
   if (opts.userId) q = q.eq("user_id", opts.userId);
   if (opts.projectId) q = q.eq("project_id", opts.projectId);
   if (opts.from) q = q.gte("spent_on", opts.from);
   if (opts.to) q = q.lte("spent_on", opts.to);
-  const { data, error } = await q.order("spent_on", { ascending: false }).returns<SelectRow[]>();
+  const { data, error } = await q.order("spent_on", { ascending: false }).returns<ReportSelectRow[]>();
   if (error) throw error;
-  return (data ?? []).map(toEntry);
+  return (data ?? []).map(toReportEntry);
+}
+
+export type ActiveTimerRow = Tables<"work_item_active_timers">;
+
+export async function getActiveTimer(db: Db, userId: string): Promise<ActiveTimerRow | null> {
+  const { data, error } = await db
+    .from("work_item_active_timers")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertActiveTimer(
+  db: Db,
+  values: { user_id: string; organization_id: string; work_item_id: string },
+): Promise<ActiveTimerRow> {
+  const { data, error } = await db
+    .from("work_item_active_timers")
+    .upsert({ ...values, started_at: new Date().toISOString() }, { onConflict: "user_id" })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteActiveTimer(db: Db, userId: string): Promise<void> {
+  const { error } = await db.from("work_item_active_timers").delete().eq("user_id", userId);
+  if (error) throw error;
+}
+
+/** Minutos registrados por tarea dentro de un proyecto (para la columna de
+ * tiempo en la vista Lista). */
+export async function sumMinutesByTask(db: Db, projectId: string): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const { data, error } = await db
+    .from("work_item_time_entries")
+    .select("work_item_id, minutes")
+    .eq("project_id", projectId);
+  if (error) throw error;
+  for (const r of data ?? []) out[r.work_item_id] = (out[r.work_item_id] ?? 0) + r.minutes;
+  return out;
+}
+
+/** Minutos totales registrados en un proyecto (para la cabecera). */
+export async function sumMinutesByProject(db: Db, projectId: string): Promise<number> {
+  const { data, error } = await db
+    .from("work_item_time_entries")
+    .select("minutes")
+    .eq("project_id", projectId);
+  if (error) throw error;
+  return (data ?? []).reduce((n, r) => n + r.minutes, 0);
 }

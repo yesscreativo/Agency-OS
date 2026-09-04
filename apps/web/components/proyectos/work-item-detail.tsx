@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Button, FieldError, Label, Modal, Textarea } from "@agency-os/ui";
 import { sumMinutes, type WorkItemPriority } from "@agency-os/domain";
-import type { TimeEntryDTO } from "@/lib/time-tracking-actions";
+import type { ActiveTimerDTO, TimeEntryDTO } from "@/lib/time-tracking-actions";
 import {
   deleteWorkItem,
   deleteWorkItemAttachment,
@@ -71,6 +71,7 @@ export function WorkItemDetail({
   comments,
   activity,
   timeEntries,
+  activeTimer,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -87,6 +88,8 @@ export function WorkItemDetail({
   comments: PanelComment[];
   activity: PanelActivity[];
   timeEntries: TimeEntryDTO[];
+  /** Timer activo del usuario (en esta tarea u otra), para el cronómetro. */
+  activeTimer?: ActiveTimerDTO | null;
 }) {
   const router = useRouter();
   const loggedMinutes = sumMinutes(timeEntries);
@@ -242,6 +245,7 @@ export function WorkItemDetail({
             canManage={canManage}
             entries={timeEntries}
             orgUsers={orgUsers}
+            activeTimer={activeTimer}
           />
         </Modal>
 

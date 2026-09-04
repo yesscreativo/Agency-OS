@@ -907,6 +907,27 @@ export type Database = {
           },
         ]
       }
+      work_item_active_timers: {
+        Row: {
+          organization_id: string
+          started_at: string
+          user_id: string
+          work_item_id: string
+        }
+        Insert: {
+          organization_id: string
+          started_at?: string
+          user_id: string
+          work_item_id: string
+        }
+        Update: {
+          organization_id?: string
+          started_at?: string
+          user_id?: string
+          work_item_id?: string
+        }
+        Relationships: []
+      }
       work_item_activity: {
         Row: {
           actor_user_id: string | null

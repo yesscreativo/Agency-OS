@@ -6,6 +6,7 @@ import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { listCommentAttachmentsForWorkItem, listWorkItemAttachments } from "@/lib/project-actions";
+import { getActiveTimerAction } from "@/lib/time-tracking-actions";
 import { NoAccessPanel } from "@/components/no-access-panel";
 import {
   WorkItemDetail,
@@ -120,12 +121,14 @@ export default async function WorkItemDetailPage({
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
 
   // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
-  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows] = await Promise.all([
-    listComments(db, taskId),
-    listActivity(db, taskId),
-    listCommentAttachmentsForWorkItem(taskId),
-    listTimeEntries(db, taskId),
-  ]);
+  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows, activeTimer] =
+    await Promise.all([
+      listComments(db, taskId),
+      listActivity(db, taskId),
+      listCommentAttachmentsForWorkItem(taskId),
+      listTimeEntries(db, taskId),
+      getActiveTimerAction(),
+    ]);
   const commentAttachments =
     "attachments" in commentAttachmentsResult && commentAttachmentsResult.attachments
       ? commentAttachmentsResult.attachments
@@ -199,6 +202,7 @@ export default async function WorkItemDetailPage({
         comments={comments}
         activity={activity}
         timeEntries={timeEntries}
+        activeTimer={activeTimer}
       />
     </div>
   );

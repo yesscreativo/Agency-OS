@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button, Chip, Input } from "@agency-os/ui";
 import type { ClientSpaceRow } from "@agency-os/db";
 import { clientHref } from "@/lib/project-paths";
@@ -35,6 +35,7 @@ export function ProjectsSidebar({
   canManageAccess?: boolean;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("todos");
   const [createOpen, setCreateOpen] = useState(false);
@@ -141,8 +142,28 @@ export function ProjectsSidebar({
             Accesos
           </a>
         )}
-        <SidebarPlaceholder label="Carga del equipo" />
-        <SidebarPlaceholder label="Mis tiempos" />
+        {canManage && (
+          <a
+            href="/proyectos/tiempos?scope=team"
+            className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
+              pathname === "/proyectos/tiempos" && searchParams.get("scope") === "team"
+                ? "bg-green font-semibold text-green-ink"
+                : "text-muted hover:bg-surface-2 hover:text-ink"
+            }`}
+          >
+            Carga del equipo
+          </a>
+        )}
+        <a
+          href="/proyectos/tiempos"
+          className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
+            pathname === "/proyectos/tiempos" && searchParams.get("scope") !== "team"
+              ? "bg-green font-semibold text-green-ink"
+              : "text-muted hover:bg-surface-2 hover:text-ink"
+          }`}
+        >
+          Mis tiempos
+        </a>
       </div>
 
       {canManage && (
@@ -153,21 +174,5 @@ export function ProjectsSidebar({
         />
       )}
     </aside>
-  );
-}
-
-/** Item deshabilitado del footer: función que llega con módulos futuros
- * (time tracking / capacidad). Visible pero sin navegación. */
-function SidebarPlaceholder({ label }: { label: string }) {
-  return (
-    <div
-      className="flex cursor-default items-center justify-between gap-2 rounded-lg px-3.5 py-2 text-sm text-faint"
-      title="Próximamente"
-    >
-      <span>{label}</span>
-      <span className="rounded-pill border border-line px-1.5 text-[10px] uppercase tracking-wide">
-        pronto
-      </span>
-    </div>
   );
 }
