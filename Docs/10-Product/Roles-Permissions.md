@@ -15,7 +15,7 @@ Los roles con `module_code` dan acceso a un módulo específico y pueden asignar
 sin ser Administrador de sistema, a través de una página propia del módulo (no
 `/usuarios`). Roles actuales:
 - **CRM:** Administrador CRM (`crm_admin`), Creador (`crm_creator`), Visualizador (`crm_viewer`) — el rol en sí lo asigna el super admin desde `/usuarios`; `crm_admin` administra el catálogo de KAM/PM en `/crm/kams` vía el permiso `kam.manage`.
-- **Proyectos:** Proyectos - Admin (`proyectos_admin`), Proyectos - Colaborador (`proyectos_colaborador`) — un `proyectos_admin` (o el super admin) asigna/revoca estos dos roles desde `/proyectos/usuarios`, vía el permiso `project.manage_access`.
+- **Proyectos:** Proyectos - Admin (`proyectos_admin`: `project.view`+`project.manage`+`project.assign`+`project.manage_access`) y Proyectos - Colaborador (`proyectos_colaborador`: `project.view`+`project.manage`+`project.assign`) — un `proyectos_admin` (o el super admin) asigna/revoca estos dos roles desde `/proyectos/usuarios`, vía el permiso `project.manage_access`. Hoy ambos roles pueden modificar tareas y proyectos por igual (no existe un permiso más angosto solo para "editar tareas"); la única diferencia es que Colaborador no puede delegar accesos. Pendiente: un editor de roles configurable (a definir) reemplazará este catálogo fijo.
 
 ### Patrón para delegar accesos de un módulo nuevo
 1. Crear el/los rol(es) del módulo con `module_code = '<modulo>'`.
