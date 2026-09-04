@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getSupabaseServerClient } from "./supabase-server";
 
 export interface CurrentUser {
@@ -29,7 +30,10 @@ type UserRoleRow = {
   } | null;
 };
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+// cache(): dedup por request — sin esto, cada layout/page/server-action del
+// árbol de una misma navegación repite auth.getUser() + queries de roles/permisos
+// (varios round-trips secuenciales cada vez), multiplicando la latencia percibida.
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await getSupabaseServerClient();
   const {
     data: { user },
@@ -106,7 +110,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     moduleCodes,
     isSuper,
   };
-}
+});
 
 export function hasPermission(user: CurrentUser | null, code: string): boolean {
   if (!user) return false;

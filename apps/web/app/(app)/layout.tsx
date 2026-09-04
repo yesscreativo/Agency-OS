@@ -34,7 +34,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // verse; el fallback opaco lo da el background del body.
     <div className="min-h-screen text-ink">
       <AppBackground />
-      <header className="sticky top-0 z-20 border-b border-line bg-bg/80 backdrop-blur-xl">
+      {/* z-40: el header (y su dropdown de notificaciones) debe pintar por encima de
+          cualquier `section` con su propio stacking context dentro de <main> (ej. el
+          panel de campos de la tarea usa z-30) — <main> no crea stacking context propio,
+          así que el z-index del header compite directo contra el de esas sections. */}
+      <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-4 px-8 py-3">
           <a href="/inicio" className="flex items-center">
             {/* Wordmark según tema: blanco sobre oscuro, negro sobre claro */}
