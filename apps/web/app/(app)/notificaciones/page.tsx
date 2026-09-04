@@ -42,7 +42,7 @@ export default async function NotificationsPage() {
         ) : (
           <ul className="space-y-2">
             {notifs.map((n) => {
-              const href = n.quote_id ? `/crm/${n.quote_id}` : undefined;
+              const href = n.link ?? (n.quote_id ? `/crm/${n.quote_id}` : undefined);
               const Row = (
                 <div
                   className={`flex gap-3 rounded-lg border px-5 py-4 backdrop-blur-xl transition ${

@@ -18,12 +18,14 @@ const SIZES: Record<AvatarSize, string> = {
 };
 
 export interface AvatarProps extends HTMLAttributes<HTMLDivElement> {
-  /** Iniciales, p. ej. "DR". */
+  /** Iniciales, p. ej. "DR". Fallback cuando no hay `src`. */
   initials: string;
   tone?: AvatarTone;
   size?: AvatarSize;
   /** Muestra el punto verde de "en línea". */
   online?: boolean;
+  /** URL de la imagen de avatar; si viene, se pinta la foto en vez de iniciales. */
+  src?: string | null;
 }
 
 export function Avatar({
@@ -31,16 +33,26 @@ export function Avatar({
   tone = "purple",
   size = "md",
   online = false,
+  src,
   className = "",
   ...props
 }: AvatarProps) {
   return (
     <div className={`relative inline-flex ${className}`} {...props}>
-      <div
-        className={`flex items-center justify-center rounded-pill font-semibold ${TONES[tone]} ${SIZES[size]}`}
-      >
-        {initials}
-      </div>
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={initials}
+          className={`rounded-pill object-cover ${SIZES[size]}`}
+        />
+      ) : (
+        <div
+          className={`flex items-center justify-center rounded-pill font-semibold ${TONES[tone]} ${SIZES[size]}`}
+        >
+          {initials}
+        </div>
+      )}
       {online && (
         <span className="absolute -bottom-px right-0 h-3 w-3 rounded-pill border-2 border-bg bg-green" />
       )}

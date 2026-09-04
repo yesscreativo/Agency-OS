@@ -102,6 +102,37 @@ async function countProjectTasks(
   return { counts, doneCounts };
 }
 
+/** Cuenta tareas/subtareas RETRASADAS de un conjunto de proyectos: con fecha de
+ * vencimiento anterior a `today` (YYYY-MM-DD) y cuyo estado NO es "hecho".
+ * Reusa el embed desambiguado de status (`!work_items_status_fk`). */
+export async function countOverdueTasksInProjects(
+  db: Db,
+  projectIds: string[],
+  today: string,
+): Promise<number> {
+  if (projectIds.length === 0) return 0;
+  let overdue = 0;
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("work_items")
+      .select("id, status:work_item_statuses!work_items_status_fk(is_done)")
+      .in("type", ["task", "subtask"])
+      .is("deleted_at", null)
+      .in("project_id", projectIds)
+      .not("due_date", "is", null)
+      .lt("due_date", today)
+      .range(from, from + pageSize - 1)
+      .returns<{ id: string; status: { is_done: boolean } | null }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (!row.status?.is_done) overdue += 1;
+    }
+    if (!data || data.length < pageSize) break;
+  }
+  return overdue;
+}
+
 export type WorkItemAssigneeRow = {
   user_id: string;
   users: {

@@ -1,16 +1,24 @@
 import type { CSSProperties, HTMLAttributes } from "react";
 
-export type BadgeTone = "success" | "info" | "danger" | "neutral";
+export type BadgeTone = "success" | "info" | "warn" | "danger" | "neutral";
 export type BadgeVariant = "soft" | "solid";
 
 const TONES: Record<BadgeTone, { pill: string; dot: string }> = {
   success: { pill: "bg-green-soft text-green", dot: "bg-green" },
   info: { pill: "bg-purple-soft text-purple", dot: "bg-purple" },
+  warn: {
+    pill: "text-warn [background:color-mix(in_srgb,var(--warn)_16%,transparent)]",
+    dot: "bg-warn",
+  },
   danger: {
     pill: "text-danger [background:color-mix(in_srgb,var(--danger)_15%,transparent)]",
     dot: "bg-danger",
   },
-  neutral: { pill: "bg-surface-2 text-muted", dot: "bg-faint" },
+  // Translúcido (no sólido): coherente con el resto del glassmorphism.
+  neutral: {
+    pill: "text-muted [background:color-mix(in_srgb,var(--muted)_15%,transparent)]",
+    dot: "bg-faint",
+  },
 };
 
 /** Color de texto (#0d0f08 oscuro o #ffffff blanco) con mejor contraste sobre un

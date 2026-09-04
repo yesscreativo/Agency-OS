@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { Button, FieldError, Input, Label } from "@agency-os/ui";
+import { Avatar, Button, FieldError, Input, Label } from "@agency-os/ui";
+import { initialsOf } from "@agency-os/domain";
 import { updatePassword, type AuthActionState } from "@/lib/auth-actions";
-import { updateMyProfile } from "@/lib/profile-actions";
+import { removeMyAvatar, updateMyProfile, uploadMyAvatar } from "@/lib/profile-actions";
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 function SubmitPasswordButton() {
   const { pending } = useFormStatus();
@@ -20,15 +23,22 @@ const initialPasswordState: AuthActionState = { error: null };
 export function ProfileForm({
   initialName,
   email,
+  initialAvatarUrl = null,
 }: {
   initialName: string;
   email: string;
+  initialAvatarUrl?: string | null;
 }) {
   const [name, setName] = useState(initialName);
   const [nameError, setNameError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
   const [passwordState, passwordAction] = useFormState(updatePassword, initialPasswordState);
+
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarPending, startAvatarTransition] = useTransition();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const saveName = () => {
     setSaved(false);
@@ -40,8 +50,74 @@ export function ProfileForm({
     });
   };
 
+  const onAvatarFile = (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setAvatarError(null);
+    if (file.size > MAX_AVATAR_BYTES) {
+      setAvatarError("La imagen supera el límite de 2 MB.");
+      return;
+    }
+    startAvatarTransition(async () => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await uploadMyAvatar(fd);
+      if (res.error) setAvatarError(res.error);
+      else setAvatarUrl(res.avatarUrl ?? null);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    });
+  };
+
+  const onAvatarRemove = () => {
+    setAvatarError(null);
+    startAvatarTransition(async () => {
+      const res = await removeMyAvatar();
+      if (res.error) setAvatarError(res.error);
+      else setAvatarUrl(null);
+    });
+  };
+
   return (
     <div className="max-w-[480px] space-y-8">
+      <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
+        <h2 className="text-lg font-bold tracking-tight">Foto</h2>
+        <div className="mt-4 flex items-center gap-4">
+          <Avatar initials={initialsOf(name)} src={avatarUrl} tone="purple" size="lg" />
+          <div>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => onAvatarFile(e.target.files)}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarPending}
+              >
+                {avatarPending ? "Subiendo…" : avatarUrl ? "Cambiar foto" : "Subir foto"}
+              </Button>
+              {avatarUrl && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={onAvatarRemove}
+                  disabled={avatarPending}
+                >
+                  Quitar
+                </Button>
+              )}
+            </div>
+            {avatarError && <p className="mt-1 text-sm text-danger">{avatarError}</p>}
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
         <h2 className="text-lg font-bold tracking-tight">Datos personales</h2>
         <div className="mt-4 space-y-4">

@@ -8,8 +8,11 @@ import {
   deleteAttachmentRow,
   deleteStatus,
   getAttachment,
+  getComment,
   insertAttachment,
   listAttachments,
+  listCommentAttachments,
+  recordActivity,
   reorderStatuses,
   setAssignees,
   softDeleteWorkItem,
@@ -18,6 +21,7 @@ import {
   type AttachmentRow,
   type Db,
   type Enums,
+  type Json,
 } from "@agency-os/db";
 import { validateWorkItemTitle } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
@@ -102,6 +106,38 @@ async function assertClientInOrg(db: Db, id: string, organizationId: string): Pr
     .maybeSingle();
   if (error) throw error;
   return !!data && data.organization_id === organizationId;
+}
+
+/** Registra un evento en el activity timeline del work item. La actividad es
+ * secundaria: nunca debe tumbar la mutación principal, por eso va en try/catch. */
+async function safeActivity(
+  db: Db,
+  input: {
+    orgId: string;
+    workItemId: string;
+    actorUserId: string;
+    eventType: string;
+    payload?: Json;
+  },
+): Promise<void> {
+  try {
+    await recordActivity(db, {
+      orgId: input.orgId,
+      workItemId: input.workItemId,
+      actorUserId: input.actorUserId,
+      eventType: input.eventType,
+      payload: input.payload,
+    });
+  } catch (error) {
+    console.error("recordActivity", error);
+  }
+}
+
+/** Etiqueta de una columna del tablero (para el payload de status_changed). */
+async function statusLabel(db: Db, id: string | null): Promise<string | null> {
+  if (!id) return null;
+  const { data } = await db.from("work_item_statuses").select("label").eq("id", id).maybeSingle();
+  return data?.label ?? null;
 }
 
 // ---------- Proyecto ----------
@@ -192,15 +228,64 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         }
       }
 
+      // Estado previo para diffear el activity timeline.
+      const { data: prev } = await db
+        .from("work_items")
+        .select("title, description, status_id, priority")
+        .eq("id", id)
+        .maybeSingle();
+
+      const newDescription = input.description?.trim() || null;
+      const newStatusId = input.statusId ?? null;
+
       await updateWorkItem(db, id, {
         title,
-        description: input.description?.trim() || null,
+        description: newDescription,
         priority: input.priority,
-        status_id: input.statusId ?? null,
+        status_id: newStatusId,
         start_date: input.startDate || null,
         due_date: input.dueDate || null,
         estimated_minutes: input.estimatedMinutes ?? null,
       });
+
+      if (prev) {
+        if (prev.title !== title) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "title_edited",
+            payload: { from: prev.title, to: title },
+          });
+        }
+        if ((prev.description ?? null) !== newDescription) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "description_edited",
+            payload: {},
+          });
+        }
+        if (input.priority && prev.priority !== input.priority) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "priority_changed",
+            payload: { from: prev.priority, to: input.priority },
+          });
+        }
+        if ((prev.status_id ?? null) !== newStatusId) {
+          await safeActivity(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            eventType: "status_changed",
+            payload: { from: prev.status_id ?? null, to: newStatusId, label: await statusLabel(db, newStatusId) },
+          });
+        }
+      }
       revalidateProjectId = projectId;
     } else {
       if (input.parentId) {
@@ -232,6 +317,13 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
           estimated_minutes: input.estimatedMinutes ?? null,
         });
       }
+      await safeActivity(db, {
+        orgId: auth.organizationId,
+        workItemId: id,
+        actorUserId: auth.userId,
+        eventType: "created",
+        payload: { title, type: input.type ?? "task" },
+      });
       revalidateProjectId = projectId;
     }
 
@@ -282,7 +374,23 @@ export async function moveWorkItem(id: string, statusId: string): Promise<Action
       return { error: "El estado no pertenece a este proyecto." };
     }
 
+    const { data: prev } = await db
+      .from("work_items")
+      .select("status_id")
+      .eq("id", id)
+      .maybeSingle();
+
     await updateWorkItem(db, id, { status_id: statusId });
+
+    if (!prev || prev.status_id !== statusId) {
+      await safeActivity(db, {
+        orgId: auth.organizationId,
+        workItemId: id,
+        actorUserId: auth.userId,
+        eventType: "status_changed",
+        payload: { from: prev?.status_id ?? null, to: statusId, label: await statusLabel(db, statusId) },
+      });
+    }
 
     revalidatePath("/proyectos");
     revalidatePath(`/proyectos/${projectId}`);
@@ -303,7 +411,38 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
     const projectId = await assertWorkItemInOrg(db, id, auth.organizationId);
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
+    // Set previo para diffear altas/bajas en el activity timeline.
+    const { data: prevRows } = await db
+      .from("work_item_assignees")
+      .select("user_id")
+      .eq("work_item_id", id);
+    const prevIds = new Set((prevRows ?? []).map((r) => r.user_id));
+    const nextIds = new Set(userIds);
+
     await setAssignees(db, id, auth.organizationId, userIds);
+
+    for (const uid of nextIds) {
+      if (!prevIds.has(uid)) {
+        await safeActivity(db, {
+          orgId: auth.organizationId,
+          workItemId: id,
+          actorUserId: auth.userId,
+          eventType: "assignee_added",
+          payload: { userId: uid },
+        });
+      }
+    }
+    for (const uid of prevIds) {
+      if (!nextIds.has(uid)) {
+        await safeActivity(db, {
+          orgId: auth.organizationId,
+          workItemId: id,
+          actorUserId: auth.userId,
+          eventType: "assignee_removed",
+          payload: { userId: uid },
+        });
+      }
+    }
 
     revalidatePath(`/proyectos/${projectId}`);
     return { ok: true };
@@ -573,6 +712,134 @@ export async function deleteWorkItemAttachment(id: string): Promise<ActionResult
     return { ok: true };
   } catch (error) {
     console.error("deleteWorkItemAttachment", error);
+    return { error: "No se pudo eliminar el adjunto. Intenta de nuevo." };
+  }
+}
+
+// ---------- Adjuntos de comentarios ----------
+
+/** Sube un archivo asociado a un COMENTARIO. Gate `project.view` + ser autor del
+ * comentario (comentar no exige `project.manage`; la policy de INSERT del bucket
+ * se relajó a miembro de la org en 025). */
+export async function uploadCommentAttachment(
+  commentId: string,
+  formData: FormData,
+): Promise<AttachmentResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) return { error: "No tienes permiso." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Selecciona un archivo." };
+  if (file.size > MAX_ATTACHMENT_BYTES) return { error: "El archivo supera el límite de 10 MB." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const comment = await getComment(db, commentId);
+    if (!comment || comment.organization_id !== organizationId) {
+      return { error: "El comentario no existe o no pertenece a tu organización." };
+    }
+    if (comment.author_user_id !== user.id) {
+      return { error: "Solo puedes adjuntar archivos a tus propios comentarios." };
+    }
+
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${organizationId}/${comment.work_item_id}/${crypto.randomUUID()}-${safeName}`;
+
+    const { error: uploadError } = await db.storage.from(ATTACHMENT_BUCKET).upload(path, file, {
+      contentType: file.type ? safeStorageContentType(file.type) : "application/octet-stream",
+      upsert: false,
+    });
+    if (uploadError) {
+      console.error("uploadCommentAttachment:storage", uploadError);
+      return { error: "No se pudo subir el archivo." };
+    }
+
+    const row = await insertAttachment(db, {
+      work_item_id: comment.work_item_id,
+      comment_id: commentId,
+      organization_id: organizationId,
+      path,
+      filename: file.name,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      created_by: user.id,
+    });
+
+    revalidatePath("/proyectos");
+    return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
+  } catch (error) {
+    console.error("uploadCommentAttachment", error);
+    return { error: "No se pudo subir el archivo. Intenta de nuevo." };
+  }
+}
+
+export interface CommentAttachment extends WorkItemAttachment {
+  commentId: string;
+}
+export type CommentAttachmentsResult =
+  | { attachments: CommentAttachment[]; error?: never }
+  | { attachments?: never; error: string };
+
+/** Adjuntos de los comentarios de una tarea (URLs firmadas), para agruparlos por
+ * comentario en el hilo. Gate `project.view`. */
+export async function listCommentAttachmentsForWorkItem(
+  workItemId: string,
+): Promise<CommentAttachmentsResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) return { error: "No tienes permiso." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const projectId = await assertWorkItemInOrg(db, workItemId, organizationId);
+    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+
+    const rows = await listCommentAttachments(db, workItemId);
+    const attachments = await Promise.all(
+      rows.map(async (r) => ({
+        ...toAttachment(r, await signedAttachmentUrl(db, r.path)),
+        commentId: r.comment_id as string,
+      })),
+    );
+    return { attachments };
+  } catch (error) {
+    console.error("listCommentAttachmentsForWorkItem", error);
+    return { error: "No se pudieron cargar los adjuntos." };
+  }
+}
+
+/** Borra un adjunto de comentario: autor del comentario o `project.manage`. */
+export async function deleteCommentAttachment(id: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const attachment = await getAttachment(db, id);
+    if (!attachment || attachment.organization_id !== organizationId || !attachment.comment_id) {
+      return { error: "El adjunto no existe o no pertenece a tu organización." };
+    }
+    const comment = await getComment(db, attachment.comment_id);
+    const isAuthor = comment?.author_user_id === user.id;
+    if (!isAuthor && !hasPermission(user, "project.manage")) {
+      return { error: "No puedes eliminar este adjunto." };
+    }
+
+    const { error: rmError } = await db.storage.from(ATTACHMENT_BUCKET).remove([attachment.path]);
+    if (rmError) console.error("deleteCommentAttachment:storage", rmError);
+    await deleteAttachmentRow(db, id);
+
+    revalidatePath("/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteCommentAttachment", error);
     return { error: "No se pudo eliminar el adjunto. Intenta de nuevo." };
   }
 }

@@ -19,7 +19,11 @@ export default async function PerfilPage() {
       <p className="mt-1 text-sm text-muted">Administra tus datos y tu contraseña.</p>
 
       <div className="mt-8">
-        <ProfileForm initialName={person?.full_name ?? user.fullName} email={user.email} />
+        <ProfileForm
+          initialName={person?.full_name ?? user.fullName}
+          email={user.email}
+          initialAvatarUrl={user.avatarUrl}
+        />
       </div>
     </div>
   );

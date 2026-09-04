@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { getProject, listProjects, type ProjectRow } from "@agency-os/db";
+import {
+  countOverdueTasksInProjects,
+  getProject,
+  listProjects,
+  type ProjectRow,
+} from "@agency-os/db";
 import { matchesShortId, extractShortId, projectProgress } from "@agency-os/domain";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -10,6 +15,8 @@ import {
   type ProjectListRow,
 } from "@/components/proyectos/projects-list";
 import { ClientLogoUploader } from "@/components/proyectos/client-logo";
+import { ClientKpis } from "@/components/proyectos/client-kpis";
+import { NoAccessPanel } from "@/components/no-access-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +43,14 @@ export default async function ClienteSpacePage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessModule(user, "proyectos")) redirect("/inicio");
-  if (!hasPermission(user, "project.view")) redirect("/inicio");
+  if (!canAccessModule(user, "proyectos") || !hasPermission(user, "project.view")) {
+    return (
+      <NoAccessPanel
+        title="No tienes acceso a Proyectos"
+        message="Tu rol no tiene permiso para ver este módulo. Si crees que deberías tener acceso, pídele a un administrador que te lo habilite."
+      />
+    );
+  }
 
   const organizationId = user.organizationIds[0];
   if (!organizationId) redirect("/proyectos");
@@ -69,6 +82,27 @@ export default async function ClienteSpacePage({
     clientId: client.id,
   });
 
+  // KPIs del cliente = sobre TODOS sus proyectos (no el subconjunto filtrado por
+  // búsqueda). Si no hay búsqueda, reutilizamos `projects` para no consultar dos veces.
+  const allClientProjects = searchParams.q
+    ? await listProjects(db, organizationId, { clientId: client.id })
+    : projects;
+  const tasksTotal = allClientProjects.reduce((n, p) => n + p.tasks_count, 0);
+  const tasksDone = allClientProjects.reduce((n, p) => n + p.tasks_done_count, 0);
+  const activeCount = allClientProjects.filter(
+    (p) => (p.project_state ?? "active") === "active",
+  ).length;
+
+  // Tareas retrasadas del cliente (vencidas y no "hechas"). `today` en hora local
+  // del server como YYYY-MM-DD, igual criterio que el job diario de pg_cron.
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const overdueCount = await countOverdueTasksInProjects(
+    db,
+    allClientProjects.map((p) => p.id),
+    todayIso,
+  );
+
   const rows: ProjectListRow[] = projects.map((p) => ({
     id: p.id,
     title: p.title,
@@ -80,11 +114,18 @@ export default async function ClienteSpacePage({
     projectState: p.project_state ?? "active",
   }));
 
-  const lockedClient: ClientOption = {
+  const defaultClient: ClientOption = {
     id: client.id,
     name: client.name,
     company: client.company,
   };
+  // Todos los clientes de la org: el modal de alta preselecciona este cliente
+  // pero permite crear a cualquier otro (selector editable, ya no bloqueado).
+  const allClients: ClientOption[] = (clientRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    company: c.company,
+  }));
 
   return (
     <div className="space-y-6">
@@ -95,11 +136,20 @@ export default async function ClienteSpacePage({
         initialLogoUrl={logoUrl}
         canManage={hasPermission(user, "project.manage")}
       />
+      <ClientKpis
+        projectCount={allClientProjects.length}
+        activeCount={activeCount}
+        tasksTotal={tasksTotal}
+        tasksDone={tasksDone}
+        tasksInProgress={tasksTotal - tasksDone}
+        overdueCount={overdueCount}
+      />
       <ProjectsList
         rows={rows}
         q={searchParams.q ?? ""}
-        clients={[lockedClient]}
-        lockedClient={lockedClient}
+        clients={allClients}
+        defaultClient={defaultClient}
+        canManage={hasPermission(user, "project.manage")}
         hideHeading
       />
     </div>

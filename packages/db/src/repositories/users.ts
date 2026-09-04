@@ -12,12 +12,14 @@ export interface OrgUser {
   id: string;
   fullName: string;
   email: string | null;
+  /** URL pública del avatar (bucket user-avatars) o null si usa iniciales. */
+  avatarUrl: string | null;
   roles: OrgUserRoleAssignment[];
 }
 
 type OrgUserRow = {
   id: string;
-  person: { full_name: string; email: string | null } | null;
+  person: { full_name: string; email: string | null; avatar_url: string | null } | null;
   user_roles: {
     id: string;
     organization_id: string;
@@ -31,7 +33,7 @@ export async function listOrgUsers(db: Db, organizationId: string): Promise<OrgU
   const { data, error } = await db
     .from("users")
     .select(
-      "id, person:people!inner(full_name, email), user_roles(id, organization_id, roles(code, name, module_code))",
+      "id, person:people!inner(full_name, email, avatar_url), user_roles(id, organization_id, roles(code, name, module_code))",
     )
     .is("deleted_at", null)
     .returns<OrgUserRow[]>();
@@ -42,6 +44,9 @@ export async function listOrgUsers(db: Db, organizationId: string): Promise<OrgU
       id: row.id,
       fullName: row.person?.full_name ?? row.person?.email ?? "—",
       email: row.person?.email ?? null,
+      avatarUrl: row.person?.avatar_url
+        ? (db.storage.from("user-avatars").getPublicUrl(row.person.avatar_url).data.publicUrl ?? null)
+        : null,
       roles: row.user_roles
         .filter((ur) => ur.organization_id === organizationId && ur.roles)
         .map((ur) => ({

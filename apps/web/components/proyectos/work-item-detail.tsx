@@ -8,35 +8,33 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, Button, FieldError, Input, Label, Select, Textarea } from "@agency-os/ui";
-import {
-  formatDuration,
-  parseDuration,
-  WORK_ITEM_PRIORITIES,
-  type WorkItemPriority,
-} from "@agency-os/domain";
+import { Badge, Button, FieldError, Label, Textarea } from "@agency-os/ui";
+import { sumMinutes, type WorkItemPriority } from "@agency-os/domain";
+import type { TimeEntryDTO } from "@/lib/time-tracking-actions";
 import {
   deleteWorkItem,
   deleteWorkItemAttachment,
   saveWorkItem,
-  setWorkItemAssignees,
   uploadWorkItemAttachment,
   type WorkItemAttachment,
 } from "@/lib/project-actions";
 import { taskHref } from "@/lib/project-paths";
 import type { BoardStatus } from "./project-board";
 import { WorkItemEditor } from "./work-item-editor";
+import { AttachmentCard, MAX_ATTACHMENT_BYTES, PriorityBadge } from "./work-item-fields";
+import { WorkItemFieldsPanel } from "./work-item-fields-panel";
 import {
-  AssigneeMultiSelect,
-  AttachmentCard,
-  MAX_ATTACHMENT_BYTES,
-  PRIORITY_LABEL,
-  PriorityBadge,
-} from "./work-item-fields";
+  WorkItemActivityPanel,
+  type PanelActivity,
+  type PanelComment,
+} from "./work-item-activity-panel";
+import { TimeTrackingPanel } from "./time-tracking-panel";
 
 export interface DetailAssignee {
   id: string;
   name: string;
+  /** Solo presente en la lista de orgUsers; los asignados de la tarea usan iniciales. */
+  avatarUrl?: string | null;
 }
 
 export interface DetailTask {
@@ -69,6 +67,10 @@ export function WorkItemDetail({
   canManage,
   canAssign,
   initialAttachments,
+  currentUserId,
+  comments,
+  activity,
+  timeEntries,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -81,17 +83,18 @@ export function WorkItemDetail({
   canManage: boolean;
   canAssign: boolean;
   initialAttachments: WorkItemAttachment[];
+  currentUserId: string;
+  comments: PanelComment[];
+  activity: PanelActivity[];
+  timeEntries: TimeEntryDTO[];
 }) {
   const router = useRouter();
+  const loggedMinutes = sumMinutes(timeEntries);
 
+  // Título y descripción se editan aquí; el resto de campos (estado, prioridad,
+  // fechas, duración, asignados) los maneja WorkItemFieldsPanel inline.
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
-  const [priority, setPriority] = useState<WorkItemPriority>(task.priority);
-  const [statusId, setStatusId] = useState(task.statusId ?? "");
-  const [startDate, setStartDate] = useState(task.startDate ?? "");
-  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
-  const [estimated, setEstimated] = useState(formatDuration(task.estimatedMinutes));
-  const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignees.map((a) => a.id));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -104,12 +107,6 @@ export function WorkItemDetail({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSubmit = Boolean(title.trim());
-
-  const toggleAssignee = (userId: string) => {
-    setAssigneeIds((ids) =>
-      ids.includes(userId) ? ids.filter((id) => id !== userId) : [...ids, userId],
-    );
-  };
 
   const onFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -148,39 +145,27 @@ export function WorkItemDetail({
     });
   };
 
+  // Guarda título + descripción. Reenvía los demás campos desde `task` (estado
+  // actual del server) para no pisarlos: saveWorkItem reescribe todo el registro.
   const onSave = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !canManage) return;
     setError(null);
     setSaved(false);
-    const parsedEstimate = parseDuration(estimated);
-    if (parsedEstimate.error) {
-      setError(parsedEstimate.error);
-      return;
-    }
     startTransition(async () => {
-      if (canManage) {
-        const res = await saveWorkItem({
-          id: task.id,
-          projectId,
-          title: title.trim(),
-          description: description.trim() || null,
-          statusId: statusId || null,
-          priority,
-          startDate: startDate || null,
-          dueDate: dueDate || null,
-          estimatedMinutes: parsedEstimate.minutes,
-        });
-        if (res.error || !res.id) {
-          setError(res.error ?? "No se pudo guardar la tarea. Intenta de nuevo.");
-          return;
-        }
-      }
-      if (canAssign) {
-        const assignRes = await setWorkItemAssignees(task.id, assigneeIds);
-        if (assignRes.error) {
-          setError(assignRes.error);
-          return;
-        }
+      const res = await saveWorkItem({
+        id: task.id,
+        projectId,
+        title: title.trim(),
+        description: description.trim() || null,
+        statusId: task.statusId,
+        priority: task.priority,
+        startDate: task.startDate,
+        dueDate: task.dueDate,
+        estimatedMinutes: task.estimatedMinutes,
+      });
+      if (res.error || !res.id) {
+        setError(res.error ?? "No se pudo guardar la tarea. Intenta de nuevo.");
+        return;
       }
       setSaved(true);
       router.refresh();
@@ -210,97 +195,56 @@ export function WorkItemDetail({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       {/* Columna principal */}
       <div className="space-y-6">
+        {/* input nativo (no el DS Input) para que su `text-sm` base no le gane al
+            tamaño de encabezado; se ve como el título del tablero (text-3xl). */}
+        <input
+          id="wi-title"
+          aria-label="Título de la tarea"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => title.trim() !== task.title && onSave()}
+          disabled={!canManage}
+          className="w-full border-0 bg-transparent p-0 text-3xl font-bold tracking-tight text-ink outline-none placeholder:text-faint disabled:opacity-100"
+        />
+
+        {/* Campos compactos estilo ClickUp: edición inline + auto-guardado. */}
+        <WorkItemFieldsPanel
+          projectId={projectId}
+          task={{
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            statusId: task.statusId,
+            priority: task.priority,
+            startDate: task.startDate,
+            dueDate: task.dueDate,
+            estimatedMinutes: task.estimatedMinutes,
+            assignees: task.assignees,
+          }}
+          statuses={statuses}
+          orgUsers={orgUsers}
+          canManage={canManage}
+          canAssign={canAssign}
+          loggedMinutes={loggedMinutes}
+        />
+
+        <TimeTrackingPanel
+          workItemId={task.id}
+          currentUserId={currentUserId}
+          canManage={canManage}
+          entries={timeEntries}
+          orgUsers={orgUsers}
+        />
+
         <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
-          <Label htmlFor="wi-title">Título *</Label>
-          <Input
-            id="wi-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={!canManage}
-            className="text-lg font-semibold"
-          />
-
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="wi-status">Estado</Label>
-              <Select
-                id="wi-status"
-                value={statusId}
-                onChange={(e) => setStatusId(e.target.value)}
-                disabled={!canManage}
-              >
-                <option value="">Sin estado</option>
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="wi-priority">Prioridad</Label>
-              <Select
-                id="wi-priority"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as WorkItemPriority)}
-                disabled={!canManage}
-              >
-                {WORK_ITEM_PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="wi-start">Inicio</Label>
-              <Input
-                id="wi-start"
-                type="date"
-                value={startDate ?? ""}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={!canManage}
-              />
-            </div>
-            <div>
-              <Label htmlFor="wi-due">Vence</Label>
-              <Input
-                id="wi-due"
-                type="date"
-                value={dueDate ?? ""}
-                onChange={(e) => setDueDate(e.target.value)}
-                disabled={!canManage}
-              />
-            </div>
-            <div>
-              <Label htmlFor="wi-estimate">Duración estimada</Label>
-              <Input
-                id="wi-estimate"
-                value={estimated}
-                onChange={(e) => setEstimated(e.target.value)}
-                placeholder="p. ej. 2h, 90m, 1h 30m"
-                disabled={!canManage}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <Label>Asignados</Label>
-            {orgUsers.length === 0 ? (
-              <p className="text-sm text-muted">No hay usuarios en la organización.</p>
-            ) : (
-              <AssigneeMultiSelect
-                users={orgUsers}
-                selectedIds={assigneeIds}
-                onToggle={toggleAssignee}
-                disabled={!canAssign}
-              />
+          <div className="flex items-center justify-between">
+            <Label htmlFor="wi-description">Descripción</Label>
+            {canManage && description !== (task.description ?? "") && (
+              <Button variant="primary" size="sm" onClick={onSave} disabled={isPending}>
+                {isPending ? "Guardando…" : "Guardar"}
+              </Button>
             )}
           </div>
-        </section>
-
-        <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
-          <Label htmlFor="wi-description">Descripción</Label>
           <Textarea
             id="wi-description"
             value={description}
@@ -308,6 +252,7 @@ export function WorkItemDetail({
             rows={6}
             disabled={!canManage}
           />
+          {saved && !isPending && <span className="mt-1 block text-sm text-green">Guardado ✓</span>}
         </section>
 
         {task.type === "task" && (
@@ -391,33 +336,28 @@ export function WorkItemDetail({
 
         {error && <FieldError>{error}</FieldError>}
 
-        <div className="flex items-center gap-3">
-          {(canManage || canAssign) && (
-            <Button variant="primary" onClick={onSave} disabled={isPending || !canSubmit}>
-              {isPending ? "Guardando…" : "Guardar cambios"}
-            </Button>
-          )}
-          {saved && !isPending && <span className="text-sm text-green">Guardado ✓</span>}
-          {canManage && (
+        {canManage && (
+          <div className="flex items-center gap-3">
             <Button
               variant="danger"
               onClick={onDeleteClick}
               disabled={isPending}
               className="ml-auto"
             >
-              {confirmingDelete ? "¿Confirmar?" : "Eliminar"}
+              {confirmingDelete ? "¿Confirmar?" : "Eliminar tarea"}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Panel de actividad y comentarios (se llena en los Slices 2–3). */}
-      <aside className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
-        <h2 className="font-semibold text-ink">Actividad y comentarios</h2>
-        <p className="mt-2 text-sm text-faint">
-          Los comentarios, menciones y el registro de actividad llegan en las próximas fases.
-        </p>
-      </aside>
+      {/* Panel de comentarios + actividad (ClickUp Parity Fase B, Slice 1). */}
+      <WorkItemActivityPanel
+        workItemId={task.id}
+        currentUserId={currentUserId}
+        orgUsers={orgUsers}
+        comments={comments}
+        activity={activity}
+      />
 
       {task.type === "task" && (
         <WorkItemEditor

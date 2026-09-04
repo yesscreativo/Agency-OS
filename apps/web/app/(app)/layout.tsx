@@ -61,12 +61,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 title: n.title,
                 body: n.body,
                 quoteId: n.quote_id,
+                workItemId: n.work_item_id,
+                link: n.link,
                 readAt: n.read_at,
                 createdAt: n.created_at,
               }))}
             />
             <div className="flex items-center gap-2.5">
-              <Avatar initials={initialsOf(user.fullName)} tone="purple" size="md" />
+              <Avatar initials={initialsOf(user.fullName)} src={user.avatarUrl} tone="purple" size="md" />
               <div className="leading-tight">
                 <div className="font-semibold">{user.fullName}</div>
                 {user.roles.length > 0 && (

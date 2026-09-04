@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Badge, Button, FieldError, Input, Label, Modal, Select, Table, Td, Th } from "@agency-os/ui";
-import { createProjectAction } from "@/lib/project-actions";
+import { Badge, Button, Input, Table, Td, Th } from "@agency-os/ui";
 import { projectHref } from "@/lib/project-paths";
+import { NewProjectModal, type ClientOption } from "./new-project-modal";
+
+export type { ClientOption };
 
 export type ProjectState = "active" | "completed" | "archived";
 
@@ -20,12 +22,6 @@ export interface ProjectListRow {
   projectState: ProjectState;
 }
 
-export interface ClientOption {
-  id: string;
-  name: string;
-  company: string | null;
-}
-
 const PROJECT_STATE_BADGE: Record<ProjectState, { label: string; tone: "success" | "info" | "neutral" }> = {
   active: { label: "Activo", tone: "info" },
   completed: { label: "Completado", tone: "success" },
@@ -39,7 +35,8 @@ export function ProjectsList({
   heading = "Proyectos",
   subtitle = "Gestiona los proyectos y sus tareas",
   hideHeading = false,
-  lockedClient,
+  defaultClient,
+  canManage = false,
 }: {
   rows: ProjectListRow[];
   q: string;
@@ -49,8 +46,10 @@ export function ProjectsList({
   subtitle?: string;
   /** Oculta el bloque de título (cuando el contenedor ya muestra su propio header). */
   hideHeading?: boolean;
-  /** Cliente fijo del space: prefija y bloquea el select del modal de alta. */
-  lockedClient?: ClientOption;
+  /** Cliente del space: PRESELECCIONA el select del modal, pero editable. */
+  defaultClient?: ClientOption;
+  /** Solo con `project.manage` se puede crear: gatea el botón de alta. */
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -76,9 +75,11 @@ export function ProjectsList({
             <p className="mt-1 text-sm text-muted">{subtitle}</p>
           </div>
         )}
-        <Button variant="primary" onClick={() => setModalOpen(true)}>
-          + Nuevo proyecto
-        </Button>
+        {canManage && (
+          <Button variant="primary" onClick={() => setModalOpen(true)}>
+            + Nuevo proyecto
+          </Button>
+        )}
       </div>
 
       <form onSubmit={submitSearch} className="mt-6 flex gap-2">
@@ -111,8 +112,13 @@ export function ProjectsList({
             <p className="max-w-[44ch] text-sm text-muted">
               {q
                 ? "Ningún proyecto coincide con la búsqueda."
-                : "Crea el primer proyecto para empezar a organizar tareas."}
+                : "Crea el primer proyecto para empezar a organizar tareas. Las tareas viven dentro de un proyecto."}
             </p>
+            {!q && canManage && (
+              <Button variant="primary" onClick={() => setModalOpen(true)}>
+                + Nuevo proyecto
+              </Button>
+            )}
           </div>
         ) : (
           <Table>
@@ -176,93 +182,8 @@ export function ProjectsList({
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         clients={clients}
-        lockedClient={lockedClient}
+        defaultClient={defaultClient}
       />
     </div>
-  );
-}
-
-/** Alta de proyecto: cliente (obligatorio, no se puede enviar sin él) + título.
- * Al crear navega a la ficha del proyecto. */
-function NewProjectModal({
-  open,
-  onClose,
-  clients,
-  lockedClient,
-}: {
-  open: boolean;
-  onClose: () => void;
-  clients: ClientOption[];
-  lockedClient?: ClientOption;
-}) {
-  const router = useRouter();
-  const [clientId, setClientId] = useState(lockedClient?.id ?? "");
-  const [title, setTitle] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  const canSubmit = Boolean(clientId) && Boolean(title.trim());
-
-  const close = () => {
-    onClose();
-    setClientId(lockedClient?.id ?? "");
-    setTitle("");
-    setError(null);
-  };
-
-  const onCreate = () => {
-    if (!canSubmit) return;
-    setError(null);
-    const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
-    startTransition(async () => {
-      const res = await createProjectAction({ clientId, title });
-      if (res.error) setError(res.error);
-      else if (res.id)
-        router.push(projectHref({ id: clientId, name: clientName }, { id: res.id, title: title.trim() }));
-    });
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={close}
-      title="Nuevo proyecto"
-      description="Selecciona el cliente y el nombre del proyecto."
-      footer={
-        <>
-          <Button variant="outline" size="sm" onClick={close} disabled={isPending}>
-            Cancelar
-          </Button>
-          <Button variant="primary" size="sm" onClick={onCreate} disabled={isPending || !canSubmit}>
-            Crear
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <div>
-          <Label htmlFor="np-client">Cliente *</Label>
-          <Select
-            id="np-client"
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            disabled={Boolean(lockedClient)}
-          >
-            <option value="">Selecciona…</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.company ? ` · ${c.company}` : ""}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="np-title">Nombre del proyecto *</Label>
-          <Input id="np-title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        </div>
-        {error && <FieldError>{error}</FieldError>}
-      </div>
-    </Modal>
   );
 }

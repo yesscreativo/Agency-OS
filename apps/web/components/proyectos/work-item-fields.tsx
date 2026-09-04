@@ -67,7 +67,7 @@ export function AttachmentCard({
             className="h-24 w-full rounded object-cover"
           />
         ) : (
-          <div className="flex h-24 items-center justify-center rounded bg-surface-2 text-3xl">📄</div>
+          <div className="flex h-24 items-center justify-center rounded bg-glass-strong text-3xl backdrop-blur-xl">📄</div>
         )}
         <div className="mt-1 truncate text-xs text-muted">{attachment.filename}</div>
       </a>
@@ -89,7 +89,7 @@ export function PendingFileCard({ file, onRemove }: { file: File; onRemove?: () 
           ✕
         </button>
       )}
-      <div className="flex h-24 items-center justify-center rounded bg-surface-2 text-3xl">
+      <div className="flex h-24 items-center justify-center rounded bg-glass-strong text-3xl backdrop-blur-xl">
         {file.type.startsWith("image/") ? "🖼️" : "📄"}
       </div>
       <div className="mt-1 truncate text-xs text-muted" title={file.name}>
@@ -192,11 +192,11 @@ export function AssigneeMultiSelect({
 /** Chip de prioridad para tarjetas/listas (colores del board). */
 export const PRIORITY_BADGE: Record<
   WorkItemPriority,
-  { label: string; tone: "success" | "info" | "danger" | "neutral"; variant?: "soft" | "solid" }
+  { label: string; tone: "success" | "info" | "warn" | "danger" | "neutral"; variant?: "soft" | "solid" }
 > = {
   low: { label: "Baja", tone: "neutral" },
   normal: { label: "Normal", tone: "info" },
-  high: { label: "Alta", tone: "danger" },
+  high: { label: "Alta", tone: "warn" },
   urgent: { label: "Urgente", tone: "danger", variant: "solid" },
 };
 

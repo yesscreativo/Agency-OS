@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Chip, Input } from "@agency-os/ui";
+import { Button, Chip, Input } from "@agency-os/ui";
 import type { ClientSpaceRow } from "@agency-os/db";
 import { clientHref } from "@/lib/project-paths";
 import { ClientAvatar } from "./client-logo";
+import { NewProjectModal, type ClientOption } from "./new-project-modal";
 
 type Tab = "todos" | "activos" | "mios";
 
@@ -19,10 +20,21 @@ const TABS: { key: Tab; label: string }[] = [
  * + lista de clientes (con nº de proyectos) que navega a cada space. El wireframe
  * también prevé "Carga del equipo"/"Mis tiempos" (Fase C / RRHH): van como
  * placeholders deshabilitados. */
-export function ProjectsSidebar({ clients }: { clients: ClientSpaceRow[] }) {
+export function ProjectsSidebar({
+  clients,
+  clientsForCreate,
+  canManage = false,
+}: {
+  clients: ClientSpaceRow[];
+  /** Todos los clientes de la org para el modal global de alta de proyecto. */
+  clientsForCreate: ClientOption[];
+  /** Solo con project.manage se muestra el botón global de "Nuevo proyecto". */
+  canManage?: boolean;
+}) {
   const pathname = usePathname();
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("todos");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const q = query.trim().toLowerCase();
   const filtered = clients.filter((c) => {
@@ -47,6 +59,17 @@ export function ProjectsSidebar({ clients }: { clients: ClientSpaceRow[] }) {
         Todos los proyectos
       </a>
 
+      {canManage && (
+        <Button
+          variant="primary"
+          size="sm"
+          className="mt-3 w-full"
+          onClick={() => setCreateOpen(true)}
+        >
+          + Nuevo proyecto
+        </Button>
+      )}
+
       <div className="mt-4">
         <Input
           value={query}
@@ -68,7 +91,7 @@ export function ProjectsSidebar({ clients }: { clients: ClientSpaceRow[] }) {
         Clientes · {filtered.length}
       </div>
 
-      <div className="mt-1 max-h-[calc(100vh-360px)] space-y-0.5 overflow-y-auto pr-1">
+      <div className="ds-scroll mt-1 max-h-[calc(100vh-360px)] space-y-0.5 overflow-y-auto pr-1">
         {filtered.length === 0 ? (
           <p className="px-3.5 py-2 text-sm text-faint">
             {clients.length === 0 ? "Aún no hay clientes con proyectos." : "Sin resultados."}
@@ -106,6 +129,14 @@ export function ProjectsSidebar({ clients }: { clients: ClientSpaceRow[] }) {
         <SidebarPlaceholder label="Carga del equipo" />
         <SidebarPlaceholder label="Mis tiempos" />
       </div>
+
+      {canManage && (
+        <NewProjectModal
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          clients={clientsForCreate}
+        />
+      )}
     </aside>
   );
 }

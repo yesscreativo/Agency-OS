@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
-import { formatDate, type WorkItemPriority } from "@agency-os/domain";
+import { formatDate, isOverdue, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
 import { taskHref } from "@/lib/project-paths";
 import { WorkItemEditor } from "./work-item-editor";
@@ -37,12 +37,13 @@ export interface BoardTask {
 export interface BoardOrgUser {
   id: string;
   name: string;
+  avatarUrl?: string | null;
 }
 
-const PRIORITY_BADGE: Record<WorkItemPriority, { label: string; tone: "success" | "info" | "danger" | "neutral"; variant?: "soft" | "solid" }> = {
+const PRIORITY_BADGE: Record<WorkItemPriority, { label: string; tone: "success" | "info" | "warn" | "danger" | "neutral"; variant?: "soft" | "solid" }> = {
   low: { label: "Baja", tone: "neutral" },
   normal: { label: "Normal", tone: "info" },
-  high: { label: "Alta", tone: "danger" },
+  high: { label: "Alta", tone: "warn" },
   urgent: { label: "Urgente", tone: "danger", variant: "solid" },
 };
 
@@ -56,14 +57,26 @@ function initialsOf(name: string): string {
   return (first.charAt(0) + last.charAt(0)).toUpperCase();
 }
 
-function AssigneeAvatars({ assignees }: { assignees: BoardAssignee[] }) {
+function AssigneeAvatars({
+  assignees,
+  avatarByUserId,
+}: {
+  assignees: BoardAssignee[];
+  avatarByUserId?: Map<string, string | null>;
+}) {
   if (assignees.length === 0) return null;
   const shown = assignees.slice(0, 3);
   const rest = assignees.length - shown.length;
   return (
     <AvatarGroup more={rest > 0 ? rest : undefined}>
       {shown.map((a) => (
-        <Avatar key={a.id} initials={initialsOf(a.name)} size="xs" title={a.name} />
+        <Avatar
+          key={a.id}
+          initials={initialsOf(a.name)}
+          src={avatarByUserId?.get(a.id) ?? null}
+          size="xs"
+          title={a.name}
+        />
       ))}
     </AvatarGroup>
   );
@@ -99,6 +112,10 @@ export function ProjectBoard({
   const [error, setError] = useState<string | null>(null);
 
   const openTask = (task: { id: string; title: string }) => router.push(taskHref(basePath, task));
+  const avatarByUserId = useMemo(
+    () => new Map(orgUsers.map((u) => [u.id, u.avatarUrl ?? null])),
+    [orgUsers],
+  );
 
   // Overlay optimista *transitorio*: solo contiene entradas para tareas con un
   // drag en curso (o recién confirmado, hasta que `tasks` refleje el cambio).
@@ -223,7 +240,7 @@ export function ProjectBoard({
       {view === "statuses" ? (
         <ProjectStatusManager projectId={projectId} statuses={statuses} />
       ) : view === "board" ? (
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="ds-scroll flex gap-4 overflow-x-auto pb-4">
           {statuses.map((col) => {
             const colTasks = grouped[col.id] ?? [];
             return (
@@ -251,10 +268,11 @@ export function ProjectBoard({
                   <span className="font-mono text-xs font-bold text-muted">{colTasks.length}</span>
                 </div>
 
-                <div className="flex max-h-[calc(100vh-360px)] min-h-[80px] flex-col gap-2 overflow-y-auto pr-1">
+                <div className="ds-scroll flex max-h-[calc(100vh-360px)] min-h-[80px] flex-col gap-2 overflow-y-auto pr-1">
                   {colTasks.map((t) => {
                     const priority = PRIORITY_BADGE[t.priority];
                     const subCount = childrenByParent.get(t.id)?.length ?? 0;
+                    const overdue = isOverdue(t.dueDate, col.isDone);
                     return (
                       <button
                         key={t.id}
@@ -266,7 +284,7 @@ export function ProjectBoard({
                           setOverCol(null);
                         }}
                         onClick={() => openTask(t)}
-                        className={`rounded-md border border-line bg-glass-strong p-3 text-left backdrop-blur-xl transition hover:border-line-strong ${
+                        className={`rounded-md border border-line bg-glass p-3 text-left backdrop-blur-xl transition hover:border-line-strong ${
                           canManage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
                         } ${dragId === t.id ? "opacity-50" : ""}`}
                       >
@@ -278,14 +296,24 @@ export function ProjectBoard({
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 text-[12px] text-muted">
-                            {t.dueDate && <span>{formatDate(t.dueDate)}</span>}
+                            {t.dueDate && (
+                              <span
+                                className={
+                                  overdue ? "font-semibold text-danger" : undefined
+                                }
+                                title={overdue ? "Retrasada" : undefined}
+                              >
+                                {overdue && "⚠ "}
+                                {formatDate(t.dueDate)}
+                              </span>
+                            )}
                             {subCount > 0 && (
                               <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
                                 {subCount} subtarea{subCount === 1 ? "" : "s"}
                               </span>
                             )}
                           </div>
-                          <AssigneeAvatars assignees={t.assignees} />
+                          <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
                         </div>
                       </button>
                     );
@@ -306,6 +334,7 @@ export function ProjectBoard({
           topTasks={topTasks}
           childrenByParent={childrenByParent}
           onOpen={openTask}
+          avatarByUserId={avatarByUserId}
         />
       )}
 
@@ -332,11 +361,13 @@ function ListView({
   topTasks,
   childrenByParent,
   onOpen,
+  avatarByUserId,
 }: {
   statuses: BoardStatus[];
   topTasks: BoardTask[];
   childrenByParent: Map<string, BoardTask[]>;
   onOpen: (task: { id: string; title: string }) => void;
+  avatarByUserId?: Map<string, string | null>;
 }) {
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
@@ -352,13 +383,17 @@ function ListView({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-glass backdrop-blur-xl">
+    <div className="space-y-2">
       {topTasks.map((t) => {
         const status = t.statusId ? statusById.get(t.statusId) : null;
         const priority = PRIORITY_BADGE[t.priority];
         const children = childrenByParent.get(t.id) ?? [];
+        const overdue = isOverdue(t.dueDate, status?.isDone ?? false);
         return (
-          <div key={t.id} className="border-b border-line last:border-b-0">
+          <div
+            key={t.id}
+            className="overflow-hidden rounded-lg border border-line bg-glass backdrop-blur-xl transition hover:border-line-strong"
+          >
             <button
               type="button"
               onClick={() => onOpen(t)}
@@ -370,13 +405,21 @@ function ListView({
                 <Badge tone={priority.tone} variant={priority.variant}>
                   {priority.label}
                 </Badge>
-                {t.dueDate && <span className="text-[12px] text-muted">{formatDate(t.dueDate)}</span>}
-                <AssigneeAvatars assignees={t.assignees} />
+                {overdue && <Badge tone="danger">Retrasada</Badge>}
+                {t.dueDate && (
+                  <span
+                    className={`text-[12px] ${overdue ? "font-semibold text-danger" : "text-muted"}`}
+                  >
+                    {formatDate(t.dueDate)}
+                  </span>
+                )}
+                <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
               </div>
             </button>
             {children.map((c) => {
               const cStatus = c.statusId ? statusById.get(c.statusId) : null;
               const cPriority = PRIORITY_BADGE[c.priority];
+              const cOverdue = isOverdue(c.dueDate, cStatus?.isDone ?? false);
               return (
                 <button
                   key={c.id}
@@ -390,8 +433,15 @@ function ListView({
                     <Badge tone={cPriority.tone} variant={cPriority.variant}>
                       {cPriority.label}
                     </Badge>
-                    {c.dueDate && <span className="text-[12px] text-muted">{formatDate(c.dueDate)}</span>}
-                    <AssigneeAvatars assignees={c.assignees} />
+                    {cOverdue && <Badge tone="danger">Retrasada</Badge>}
+                    {c.dueDate && (
+                      <span
+                        className={`text-[12px] ${cOverdue ? "font-semibold text-danger" : "text-muted"}`}
+                      >
+                        {formatDate(c.dueDate)}
+                      </span>
+                    )}
+                    <AssigneeAvatars assignees={c.assignees} avatarByUserId={avatarByUserId} />
                   </div>
                 </button>
               );

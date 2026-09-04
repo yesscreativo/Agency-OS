@@ -287,9 +287,11 @@ export function WorkItemEditor({
             disabled={!canManage}
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="wi-status">Estado</Label>
+        {/* Panel de campos con filas icono+etiqueta, mismo lenguaje visual que el
+            detalle de la tarea (work-item-fields-panel), pero con inputs porque
+            aquí la tarea aún no existe para guardar campo a campo. */}
+        <div className="rounded-lg border border-line bg-glass px-4 py-1.5 backdrop-blur-xl">
+          <FieldRow icon={<IconStatus />} label="Estado" htmlFor="wi-status">
             <Select
               id="wi-status"
               value={statusId}
@@ -303,9 +305,9 @@ export function WorkItemEditor({
                 </option>
               ))}
             </Select>
-          </div>
-          <div>
-            <Label htmlFor="wi-priority">Prioridad</Label>
+          </FieldRow>
+
+          <FieldRow icon={<IconFlag />} label="Prioridad" htmlFor="wi-priority">
             <Select
               id="wi-priority"
               value={priority}
@@ -318,54 +320,49 @@ export function WorkItemEditor({
                 </option>
               ))}
             </Select>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="wi-start">Inicio</Label>
+          </FieldRow>
+
+          <FieldRow icon={<IconCalendar />} label="Fechas">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                aria-label="Inicio"
+                type="date"
+                value={startDate ?? ""}
+                onChange={(e) => setStartDate(e.target.value)}
+                disabled={!canManage}
+              />
+              <Input
+                aria-label="Vence"
+                type="date"
+                value={dueDate ?? ""}
+                onChange={(e) => setDueDate(e.target.value)}
+                disabled={!canManage}
+              />
+            </div>
+          </FieldRow>
+
+          <FieldRow icon={<IconClock />} label="Duración estimada" htmlFor="wi-estimate">
             <Input
-              id="wi-start"
-              type="date"
-              value={startDate ?? ""}
-              onChange={(e) => setStartDate(e.target.value)}
+              id="wi-estimate"
+              value={estimated}
+              onChange={(e) => setEstimated(e.target.value)}
+              placeholder="p. ej. 2h, 90m, 1h 30m…"
               disabled={!canManage}
             />
-          </div>
-          <div>
-            <Label htmlFor="wi-due">Vence</Label>
-            <Input
-              id="wi-due"
-              type="date"
-              value={dueDate ?? ""}
-              onChange={(e) => setDueDate(e.target.value)}
-              disabled={!canManage}
-            />
-          </div>
-        </div>
+          </FieldRow>
 
-        <div>
-          <Label htmlFor="wi-estimate">Duración estimada</Label>
-          <Input
-            id="wi-estimate"
-            value={estimated}
-            onChange={(e) => setEstimated(e.target.value)}
-            placeholder="p. ej. 2h, 90m, 1h 30m"
-            disabled={!canManage}
-          />
-        </div>
-
-        <div>
-          <Label>Asignados</Label>
-          {orgUsers.length === 0 ? (
-            <p className="text-sm text-muted">No hay usuarios en la organización.</p>
-          ) : (
-            <AssigneeMultiSelect
-              users={orgUsers}
-              selectedIds={assigneeIds}
-              onToggle={toggleAssignee}
-              disabled={!canAssign}
-            />
-          )}
+          <FieldRow icon={<IconUser />} label="Asignados">
+            {orgUsers.length === 0 ? (
+              <p className="text-sm text-muted">No hay usuarios en la organización.</p>
+            ) : (
+              <AssigneeMultiSelect
+                users={orgUsers}
+                selectedIds={assigneeIds}
+                onToggle={toggleAssignee}
+                disabled={!canAssign}
+              />
+            )}
+          </FieldRow>
         </div>
 
         <div>
@@ -452,3 +449,74 @@ export function WorkItemEditor({
     </Modal>
   );
 }
+
+/** Fila etiqueta→campo con icono, alineada con el panel de campos del detalle
+ * (work-item-fields-panel.tsx). La etiqueta va a la izquierda; el input a la derecha. */
+function FieldRow({
+  icon,
+  label,
+  htmlFor,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <label
+        htmlFor={htmlFor}
+        className="flex w-32 shrink-0 items-center gap-2 text-[13px] text-muted"
+      >
+        <span className="text-faint">{icon}</span>
+        {label}
+      </label>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+/* Iconos SVG inline (15px), calcados de work-item-fields-panel para consistencia. */
+const iconProps = {
+  width: 15,
+  height: 15,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+const IconStatus = () => (
+  <svg {...iconProps}>
+    <circle cx="12" cy="12" r="9" />
+  </svg>
+);
+const IconFlag = () => (
+  <svg {...iconProps}>
+    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+    <line x1="4" y1="22" x2="4" y2="15" />
+  </svg>
+);
+const IconCalendar = () => (
+  <svg {...iconProps}>
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+);
+const IconUser = () => (
+  <svg {...iconProps}>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+const IconClock = () => (
+  <svg {...iconProps}>
+    <circle cx="12" cy="12" r="9" />
+    <polyline points="12 7 12 12 15 15" />
+  </svg>
+);

@@ -1,11 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { getWorkItem, listOrgUsers } from "@agency-os/db";
+import { getWorkItem, listActivity, listComments, listOrgUsers, listTimeEntries } from "@agency-os/db";
 import { extractShortId, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { listWorkItemAttachments } from "@/lib/project-actions";
+import { listCommentAttachmentsForWorkItem, listWorkItemAttachments } from "@/lib/project-actions";
+import { NoAccessPanel } from "@/components/no-access-panel";
 import {
   WorkItemDetail,
   type DetailSubtask,
@@ -28,8 +29,17 @@ export default async function WorkItemDetailPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessModule(user, "proyectos")) redirect("/inicio");
-  if (!hasPermission(user, "project.view")) redirect("/inicio");
+  // Sin acceso: mensaje claro (mismo panel que el layout) en vez de rebotar. Esto
+  // hace que el enlace de una notificación de mención muestre un motivo, no un
+  // redirect silencioso a /inicio.
+  if (!canAccessModule(user, "proyectos") || !hasPermission(user, "project.view")) {
+    return (
+      <NoAccessPanel
+        title="No tienes acceso a esta tarea"
+        message="Tu rol no tiene permiso para ver Proyectos. Si crees que deberías poder abrir esta tarea, pídele a un administrador que te habilite el acceso."
+      />
+    );
+  }
 
   const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();
@@ -107,8 +117,52 @@ export default async function WorkItemDetailPage({
     statusId: st.status_id,
   }));
 
-  const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName }));
-  const currentStatus = boardStatuses.find((s) => s.id === task.status_id) ?? null;
+  const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
+
+  // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
+  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows] = await Promise.all([
+    listComments(db, taskId),
+    listActivity(db, taskId),
+    listCommentAttachmentsForWorkItem(taskId),
+    listTimeEntries(db, taskId),
+  ]);
+  const commentAttachments =
+    "attachments" in commentAttachmentsResult && commentAttachmentsResult.attachments
+      ? commentAttachmentsResult.attachments
+      : [];
+  const attachmentsByComment = new Map<string, typeof commentAttachments>();
+  for (const a of commentAttachments) {
+    const list = attachmentsByComment.get(a.commentId) ?? [];
+    list.push(a);
+    attachmentsByComment.set(a.commentId, list);
+  }
+  const comments = commentRows.map((c) => ({
+    id: c.id,
+    parentId: c.parent_comment_id,
+    authorId: c.author_user_id,
+    authorName: c.author?.full_name ?? "—",
+    body: c.body,
+    createdAt: c.created_at,
+    editedAt: c.edited_at,
+    attachments: attachmentsByComment.get(c.id) ?? [],
+  }));
+  const activity = activityRows.map((a) => ({
+    id: a.id,
+    eventType: a.event_type,
+    actorName: a.actor?.full_name ?? null,
+    payload: (a.payload ?? {}) as Record<string, unknown>,
+    createdAt: a.created_at,
+  }));
+  const timeEntries = timeEntryRows.map((e) => ({
+    id: e.id,
+    userId: e.user_id,
+    userName: e.user?.full_name ?? "—",
+    userAvatarUrl: e.user?.avatar_url ?? null,
+    minutes: e.minutes,
+    spentOn: e.spent_on,
+    note: e.note,
+    source: e.source,
+  }));
 
   // Base canónica del proyecto: se reusa el segmento tal cual vino en la URL
   // (cosmético + código); breadcrumb y subtareas cuelgan de aquí.
@@ -116,15 +170,15 @@ export default async function WorkItemDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-4">
         <Link href={projectPath} className="text-sm text-muted transition hover:text-ink">
           ← {task.project?.title ?? "Proyecto"}
         </Link>
-        <div className="mt-1 flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">{task.title}</h1>
-          {detailTask.type === "subtask" && <Badge tone="neutral">Subtarea</Badge>}
-          {currentStatus && <Badge color={currentStatus.color}>{currentStatus.label}</Badge>}
-        </div>
+        {detailTask.type === "subtask" && (
+          <Badge tone="neutral" className="ml-3 align-middle">
+            Subtarea
+          </Badge>
+        )}
       </div>
 
       <WorkItemDetail
@@ -137,6 +191,10 @@ export default async function WorkItemDetailPage({
         canManage={hasPermission(user, "project.manage")}
         canAssign={hasPermission(user, "project.assign")}
         initialAttachments={attachments}
+        currentUserId={user.id}
+        comments={comments}
+        activity={activity}
+        timeEntries={timeEntries}
       />
     </div>
   );
