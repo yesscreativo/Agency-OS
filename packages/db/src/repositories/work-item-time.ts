@@ -71,14 +71,30 @@ export async function listTimeEntries(db: Db, workItemId: string): Promise<TimeE
 }
 
 const SELECT_WITH_USER_AND_TASK =
-  "*, user:users!work_item_time_entries_user_id_fkey(id, person:people(full_name, avatar_url)), task:work_items!work_item_time_entries_work_item_id_fkey(id, title)";
+  "*, user:users!work_item_time_entries_user_id_fkey(id, person:people(full_name, avatar_url)), task:work_items!work_item_time_entries_work_item_id_fkey(id, title), project:work_items!work_item_time_entries_project_id_fkey(id, title, client:clients(id, name))";
 
-type ReportSelectRow = SelectRow & { task: { id: string; title: string } | null };
+type ReportSelectRow = SelectRow & {
+  task: { id: string; title: string } | null;
+  project: { id: string; title: string; client: { id: string; name: string } | null } | null;
+};
 
-export type TimeEntryForReport = TimeEntryWithUser & { taskTitle: string };
+export type TimeEntryForReport = TimeEntryWithUser & {
+  taskTitle: string;
+  projectId: string;
+  projectTitle: string;
+  clientId: string;
+  clientName: string;
+};
 
 function toReportEntry(row: ReportSelectRow): TimeEntryForReport {
-  return { ...toEntry(row), taskTitle: row.task?.title ?? "—" };
+  return {
+    ...toEntry(row),
+    taskTitle: row.task?.title ?? "—",
+    projectId: row.project?.id ?? row.project_id,
+    projectTitle: row.project?.title ?? "—",
+    clientId: row.project?.client?.id ?? "sin-cliente",
+    clientName: row.project?.client?.name ?? "Sin cliente",
+  };
 }
 
 export async function reportEntries(

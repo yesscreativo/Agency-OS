@@ -4,6 +4,7 @@
 
 import { Avatar, Button, Input, Label, Select } from "@agency-os/ui";
 import { formatDuration, groupMinutesByUser, initialsOf } from "@agency-os/domain";
+import { ClientTimeMasterDetail } from "./client-time-master-detail";
 
 export interface TimeReportEntry {
   id: string;
@@ -11,6 +12,10 @@ export interface TimeReportEntry {
   userName: string;
   userAvatarUrl: string | null;
   taskTitle: string;
+  projectId: string;
+  projectTitle: string;
+  clientId: string;
+  clientName: string;
   minutes: number;
   spentOn: string;
   note: string | null;
@@ -49,7 +54,11 @@ export function TimeReport({ scope, canManage, entries, projects, filters }: Tim
           <h1 className="text-3xl font-bold tracking-tight">
             {scope === "team" ? "Tiempos del equipo" : "Mis tiempos"}
           </h1>
-          <p className="mt-1 text-sm text-muted">Tiempo registrado en tareas de Proyectos.</p>
+          <p className="mt-1 text-sm text-muted">
+            {scope === "team"
+              ? "Tiempo registrado en tareas de Proyectos."
+              : "Tiempo que has registrado, por cliente."}
+          </p>
         </div>
         {canManage && (
           <div className="flex gap-2">
@@ -79,17 +88,19 @@ export function TimeReport({ scope, canManage, entries, projects, filters }: Tim
 
       <form method="get" className="mt-6 flex flex-wrap items-end gap-3">
         {scope === "team" && <input type="hidden" name="scope" value="team" />}
-        <div>
-          <Label htmlFor="tr-project">Proyecto</Label>
-          <Select id="tr-project" name="project" defaultValue={filters.project} className="w-56">
-            <option value="">Todos</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {scope === "team" && (
+          <div>
+            <Label htmlFor="tr-project">Proyecto</Label>
+            <Select id="tr-project" name="project" defaultValue={filters.project} className="w-56">
+              <option value="">Todos</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         <div>
           <Label htmlFor="tr-from">Desde</Label>
           <Input id="tr-from" type="date" name="from" defaultValue={filters.from} className="w-40" />
@@ -115,7 +126,7 @@ export function TimeReport({ scope, canManage, entries, projects, filters }: Tim
             {totalMinutes > 0 ? formatDuration(totalMinutes) : "0m"}
           </span>
         </div>
-        {byUser.length > 0 && (
+        {scope === "team" && byUser.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {byUser.map((u) => {
               const info = infoByUser.get(u.userId);
@@ -134,31 +145,35 @@ export function TimeReport({ scope, canManage, entries, projects, filters }: Tim
         )}
       </div>
 
-      <div className="mt-4 space-y-1.5">
-        {entries.length === 0 ? (
-          <p className="rounded-lg border border-line bg-glass px-8 py-16 text-center text-sm text-muted backdrop-blur-xl">
-            No hay tiempo registrado en este rango.
-          </p>
-        ) : (
-          entries.map((e) => (
-            <div
-              key={e.id}
-              className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-glass px-4 py-3 text-sm backdrop-blur-xl"
-            >
-              <Avatar initials={initialsOf(e.userName)} src={e.userAvatarUrl} size="xs" />
-              <span className="w-24 shrink-0 text-muted">{formatDay(e.spentOn)}</span>
-              <span className="min-w-0 flex-1 truncate text-ink">{e.taskTitle}</span>
-              {scope === "team" && <span className="text-muted">{e.userName}</span>}
-              <span className="shrink-0 font-semibold tabular-nums text-ink">{formatDuration(e.minutes)}</span>
-              {e.note && (
-                <span className="w-full truncate pl-9 text-xs text-muted sm:w-auto sm:flex-1 sm:pl-0">
-                  {e.note}
-                </span>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+      {scope === "mine" ? (
+        <ClientTimeMasterDetail entries={entries} />
+      ) : (
+        <div className="mt-4 space-y-1.5">
+          {entries.length === 0 ? (
+            <p className="rounded-lg border border-line bg-glass px-8 py-16 text-center text-sm text-muted backdrop-blur-xl">
+              No hay tiempo registrado en este rango.
+            </p>
+          ) : (
+            entries.map((e) => (
+              <div
+                key={e.id}
+                className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-glass px-4 py-3 text-sm backdrop-blur-xl"
+              >
+                <Avatar initials={initialsOf(e.userName)} src={e.userAvatarUrl} size="xs" />
+                <span className="w-24 shrink-0 text-muted">{formatDay(e.spentOn)}</span>
+                <span className="min-w-0 flex-1 truncate text-ink">{e.taskTitle}</span>
+                <span className="text-muted">{e.userName}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-ink">{formatDuration(e.minutes)}</span>
+                {e.note && (
+                  <span className="w-full truncate pl-9 text-xs text-muted sm:w-auto sm:flex-1 sm:pl-0">
+                    {e.note}
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
