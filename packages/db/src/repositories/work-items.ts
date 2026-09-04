@@ -133,6 +133,39 @@ export async function countOverdueTasksInProjects(
   return overdue;
 }
 
+/** Cuenta tareas/subtareas ABIERTAS (no "hecho", no borradas) asignadas a cada
+ * usuario de `userIds`, sin importar el proyecto — para "Carga del equipo". */
+export async function countOpenTasksByAssignee(
+  db: Db,
+  opts: { organizationId: string; userIds: string[] },
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  if (opts.userIds.length === 0) return out;
+  const idSet = new Set(opts.userIds);
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("work_items")
+      .select(
+        "id, status:work_item_statuses!work_items_status_fk(is_done), assignees:work_item_assignees(user_id)",
+      )
+      .eq("organization_id", opts.organizationId)
+      .in("type", ["task", "subtask"])
+      .is("deleted_at", null)
+      .range(from, from + pageSize - 1)
+      .returns<{ id: string; status: { is_done: boolean } | null; assignees: { user_id: string }[] }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.status?.is_done) continue;
+      for (const a of row.assignees) {
+        if (idSet.has(a.user_id)) out[a.user_id] = (out[a.user_id] ?? 0) + 1;
+      }
+    }
+    if (!data || data.length < pageSize) break;
+  }
+  return out;
+}
+
 export type WorkItemAssigneeRow = {
   user_id: string;
   users: {

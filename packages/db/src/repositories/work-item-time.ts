@@ -166,3 +166,23 @@ export async function sumMinutesByProject(db: Db, projectId: string): Promise<nu
   if (error) throw error;
   return (data ?? []).reduce((n, r) => n + r.minutes, 0);
 }
+
+/** Minutos por usuario dentro de un rango de fechas — para "Carga del
+ * equipo" (tiempo de la semana de cada colaborador). */
+export async function sumMinutesByUsersInRange(
+  db: Db,
+  opts: { organizationId: string; userIds: string[]; from: string; to: string },
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  if (opts.userIds.length === 0) return out;
+  const { data, error } = await db
+    .from("work_item_time_entries")
+    .select("user_id, minutes")
+    .eq("organization_id", opts.organizationId)
+    .in("user_id", opts.userIds)
+    .gte("spent_on", opts.from)
+    .lte("spent_on", opts.to);
+  if (error) throw error;
+  for (const r of data ?? []) out[r.user_id] = (out[r.user_id] ?? 0) + r.minutes;
+  return out;
+}

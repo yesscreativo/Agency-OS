@@ -2,6 +2,8 @@ export * from "./types/database";
 export * from "./client/browser";
 export * from "./client/server";
 export * from "./repositories/shared";
+export * from "./repositories/areas";
+export * from "./repositories/job-titles";
 export * from "./repositories/quotes";
 export * from "./repositories/quote-statuses";
 export * from "./repositories/clients";

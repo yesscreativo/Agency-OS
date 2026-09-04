@@ -2,13 +2,21 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Badge, Button, Input, Label, Modal, Select, Table, Td, Th } from "@agency-os/ui";
-import { deleteUser, grantRole, inviteUser, revokeRole } from "@/lib/access-actions";
+import { assignPersonAreaAction, deleteUser, grantRole, inviteUser, revokeRole } from "@/lib/access-actions";
 
 export interface AccessUserRow {
   id: string;
+  personId: string;
   fullName: string;
   email: string | null;
+  areaId: string | null;
+  areaName: string | null;
   roles: { userRoleId: string; roleCode: string; roleName: string; moduleCode: string | null }[];
+}
+
+export interface AccessAreaOption {
+  id: string;
+  name: string;
 }
 
 export interface AccessRole {
@@ -26,6 +34,7 @@ interface AccessManagerProps {
   users: AccessUserRow[];
   roles: AccessRole[];
   modules: AccessModule[];
+  areas: AccessAreaOption[];
   /** id del usuario en sesión, para no permitir auto-eliminarse. */
   currentUserId: string;
 }
@@ -35,15 +44,32 @@ function moduleLabel(modules: AccessModule[], code: string | null): string {
   return modules.find((m) => m.code === code)?.name ?? code;
 }
 
-export function AccessManager({ users, roles, modules, currentUserId }: AccessManagerProps) {
+export function AccessManager({ users, roles, modules, areas, currentUserId }: AccessManagerProps) {
   const [inviting, setInviting] = useState(false);
   const [assigning, setAssigning] = useState<AccessUserRow | null>(null);
   const [deleting, setDeleting] = useState<AccessUserRow | null>(null);
+  const [assigningArea, setAssigningArea] = useState<AccessUserRow | null>(null);
   const [roleId, setRoleId] = useState("");
+  const [areaId, setAreaId] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const openAssignArea = (user: AccessUserRow) => {
+    setAssigningArea(user);
+    setAreaId(user.areaId ?? "");
+    setError(null);
+  };
+
+  const submitAssignArea = () => {
+    if (!assigningArea) return;
+    startTransition(async () => {
+      const result = await assignPersonAreaAction(assigningArea.personId, areaId || null);
+      if (result.error) setError(result.error);
+      else setAssigningArea(null);
+    });
+  };
 
   // Roles agrupados por módulo (o "Sistema" para is_super) para el <select> (optgroups).
   const rolesByModule = useMemo(() => {
@@ -124,6 +150,7 @@ export function AccessManager({ users, roles, modules, currentUserId }: AccessMa
           <thead>
             <tr>
               <Th>Usuario</Th>
+              <Th>Área</Th>
               <Th>Accesos</Th>
               <Th className="text-right"> </Th>
             </tr>
@@ -135,6 +162,7 @@ export function AccessManager({ users, roles, modules, currentUserId }: AccessMa
                   <div className="text-sm font-semibold">{user.fullName}</div>
                   {user.email && <div className="text-xs text-muted">{user.email}</div>}
                 </Td>
+                <Td>{user.areaName ?? <span className="text-faint">Sin área</span>}</Td>
                 <Td>
                   {user.roles.length === 0 ? (
                     <Badge tone="neutral">Pendiente</Badge>
@@ -165,6 +193,9 @@ export function AccessManager({ users, roles, modules, currentUserId }: AccessMa
                 </Td>
                 <Td className="text-right">
                   <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => openAssignArea(user)}>
+                      Área
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => openAssign(user)}>
                       Asignar rol
                     </Button>
@@ -279,6 +310,34 @@ export function AccessManager({ users, roles, modules, currentUserId }: AccessMa
           </div>
         </div>
         {error && inviting && <p className="mt-2 text-sm text-danger">{error}</p>}
+      </Modal>
+
+      <Modal
+        open={assigningArea !== null}
+        onClose={() => setAssigningArea(null)}
+        title="Asignar área"
+        description={assigningArea ? `Área de ${assigningArea.fullName}.` : undefined}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setAssigningArea(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={submitAssignArea} disabled={pending}>
+              {pending ? "Guardando…" : "Guardar"}
+            </Button>
+          </>
+        }
+      >
+        <Label htmlFor="assign-area">Área</Label>
+        <Select id="assign-area" value={areaId} onChange={(e) => setAreaId(e.target.value)}>
+          <option value="">Sin área</option>
+          {areas.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </Select>
+        {error && assigningArea && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Modal>
     </div>
   );

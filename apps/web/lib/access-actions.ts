@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createSupabaseServiceRoleClient, grantUserRole, revokeUserRole } from "@agency-os/db";
+import {
+  createArea,
+  createSupabaseServiceRoleClient,
+  grantUserRole,
+  revokeUserRole,
+  updateAreaManager,
+} from "@agency-os/db";
 import { isAllowedEmailDomain } from "@agency-os/domain";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -124,5 +130,66 @@ export async function inviteUser(email: string, fullName: string): Promise<Acces
   } catch (error) {
     console.error("inviteUser", error);
     return { error: "No se pudo invitar al usuario. Verifica el correo e intenta de nuevo." };
+  }
+}
+
+export async function createAreaAction(name: string, managerUserId: string): Promise<AccessActionResult> {
+  const auth = await requireSuperAdmin();
+  if (auth.error !== undefined) return { error: auth.error };
+  if (!name.trim() || !managerUserId) return { error: "Nombre y gerente son obligatorios." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    await createArea(db, { organizationId: auth.organizationId, name: name.trim(), managerUserId });
+    revalidatePath("/usuarios");
+    return { ok: true };
+  } catch (error) {
+    console.error("createAreaAction", error);
+    return { error: "No se pudo crear el área. Intenta de nuevo." };
+  }
+}
+
+export async function updateAreaManagerAction(
+  areaId: string,
+  managerUserId: string,
+): Promise<AccessActionResult> {
+  const auth = await requireSuperAdmin();
+  if (auth.error !== undefined) return { error: auth.error };
+  if (!managerUserId) return { error: "Selecciona un gerente." };
+
+  try {
+    const db = await getSupabaseServerClient();
+    await updateAreaManager(db, areaId, managerUserId);
+    revalidatePath("/usuarios");
+    return { ok: true };
+  } catch (error) {
+    console.error("updateAreaManagerAction", error);
+    return { error: "No se pudo actualizar el gerente. Intenta de nuevo." };
+  }
+}
+
+/** Asigna el ÁREA de una persona (distinto del cargo). Usa service_role porque
+ * ninguna policy de `people` cubre este caso (solo super admin puede hacerlo,
+ * igual que inviteUser/deleteUser arriba). */
+export async function assignPersonAreaAction(
+  personId: string,
+  areaId: string | null,
+): Promise<AccessActionResult> {
+  const auth = await requireSuperAdmin();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  try {
+    const admin = createSupabaseServiceRoleClient();
+    const { error } = await admin
+      .from("people")
+      .update({ area_id: areaId })
+      .eq("id", personId)
+      .eq("organization_id", auth.organizationId);
+    if (error) throw error;
+    revalidatePath("/usuarios");
+    return { ok: true };
+  } catch (error) {
+    console.error("assignPersonAreaAction", error);
+    return { error: "No se pudo asignar el área. Intenta de nuevo." };
   }
 }
