@@ -150,10 +150,10 @@ export function TimeTrackingPanel({
   const canEditEntry = (entry: TimeEntryDTO) => canManage || entry.userId === currentUserId;
 
   return (
-    <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl" aria-busy={isPending}>
+    <div aria-busy={isPending}>
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-ink">Tiempo registrado</h2>
-        <span className="text-sm font-semibold text-ink">
+        <span className="text-sm text-muted">Total</span>
+        <span className="text-lg font-semibold text-ink">
           {totalMinutes > 0 ? formatDuration(totalMinutes) : "0m"}
         </span>
       </div>
@@ -290,6 +290,6 @@ export function TimeTrackingPanel({
           </Button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }

@@ -149,7 +149,11 @@ export default async function WorkItemDetailPage({
   const activity = activityRows.map((a) => ({
     id: a.id,
     eventType: a.event_type,
+    actorId: a.actor?.id ?? null,
     actorName: a.actor?.full_name ?? null,
+    actorAvatarUrl: a.actor?.avatar_url
+      ? (db.storage.from("user-avatars").getPublicUrl(a.actor.avatar_url).data.publicUrl ?? null)
+      : null,
     payload: (a.payload ?? {}) as Record<string, unknown>,
     createdAt: a.created_at,
   }));

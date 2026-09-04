@@ -124,6 +124,7 @@ export function WorkItemFieldsPanel({
   canManage,
   canAssign,
   loggedMinutes = 0,
+  onOpenTimeTracking,
 }: {
   projectId: string;
   task: FieldsPanelTask;
@@ -132,8 +133,10 @@ export function WorkItemFieldsPanel({
   canManage: boolean;
   canAssign: boolean;
   /** Total de minutos ya registrados (para la fila "Registrar el tiempo"). El
-   * alta/edición de entradas la maneja `TimeTrackingPanel` en su sección propia. */
+   * alta/edición de entradas vive en el modal que abre `onOpenTimeTracking`. */
   loggedMinutes?: number;
+  /** Abre el modal de registro de tiempo (`TimeTrackingPanel`). */
+  onOpenTimeTracking?: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -390,14 +393,16 @@ export function WorkItemFieldsPanel({
           <span className="text-sm text-faint">Vacío</span>
         </Row>
 
-        {/* Registrar el tiempo: total registrado. El alta/edición vive en la
-            sección `TimeTrackingPanel`, bajo el grid de campos. */}
+        {/* Registrar el tiempo: total registrado; el alta/edición de entradas
+            vive en el modal de TimeTrackingPanel (work-item-detail.tsx). */}
         <Row icon={<IconTimer />} label="Registrar el tiempo">
-          {loggedMinutes > 0 ? (
-            <span className="text-sm text-ink">{formatDuration(loggedMinutes)}</span>
-          ) : (
-            <span className="text-sm text-faint">Vacío</span>
-          )}
+          <button
+            type="button"
+            onClick={onOpenTimeTracking}
+            className="text-sm text-ink underline-offset-2 hover:text-green hover:underline"
+          >
+            {loggedMinutes > 0 ? formatDuration(loggedMinutes) : "Registrar…"}
+          </button>
         </Row>
       </div>
       {error && <p className="mt-1 text-sm text-danger">{error}</p>}

@@ -8,7 +8,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, Button, FieldError, Label, Textarea } from "@agency-os/ui";
+import { Badge, Button, FieldError, Label, Modal, Textarea } from "@agency-os/ui";
 import { sumMinutes, type WorkItemPriority } from "@agency-os/domain";
 import type { TimeEntryDTO } from "@/lib/time-tracking-actions";
 import {
@@ -98,6 +98,7 @@ export function WorkItemDetail({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [creatingSubtask, setCreatingSubtask] = useState(false);
 
@@ -226,15 +227,23 @@ export function WorkItemDetail({
           canManage={canManage}
           canAssign={canAssign}
           loggedMinutes={loggedMinutes}
+          onOpenTimeTracking={() => setTimeTrackingOpen(true)}
         />
 
-        <TimeTrackingPanel
-          workItemId={task.id}
-          currentUserId={currentUserId}
-          canManage={canManage}
-          entries={timeEntries}
-          orgUsers={orgUsers}
-        />
+        <Modal
+          open={timeTrackingOpen}
+          onClose={() => setTimeTrackingOpen(false)}
+          title="Tiempo registrado"
+          size="lg"
+        >
+          <TimeTrackingPanel
+            workItemId={task.id}
+            currentUserId={currentUserId}
+            canManage={canManage}
+            entries={timeEntries}
+            orgUsers={orgUsers}
+          />
+        </Modal>
 
         <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div className="flex items-center justify-between">
