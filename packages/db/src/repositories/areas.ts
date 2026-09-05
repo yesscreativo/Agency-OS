@@ -67,6 +67,7 @@ export interface AreaPerson {
    * la persona todavía no tiene cuenta de acceso ("Pendiente"). */
   userId: string | null;
   fullName: string;
+  avatarUrl: string | null;
   jobTitleId: string | null;
   jobTitleName: string | null;
 }
@@ -74,6 +75,7 @@ export interface AreaPerson {
 type AreaPersonRow = {
   id: string;
   full_name: string;
+  avatar_url: string | null;
   job_title_id: string | null;
   job_title: { id: string; name: string } | null;
 };
@@ -84,7 +86,7 @@ type AreaPersonRow = {
 export async function listPeopleInArea(db: Db, areaId: string): Promise<AreaPerson[]> {
   const { data, error } = await db
     .from("people")
-    .select("id, full_name, job_title_id, job_title:job_titles(id, name)")
+    .select("id, full_name, avatar_url, job_title_id, job_title:job_titles(id, name)")
     .eq("area_id", areaId)
     .is("deleted_at", null)
     .order("full_name")
@@ -107,6 +109,9 @@ export async function listPeopleInArea(db: Db, areaId: string): Promise<AreaPers
     id: r.id,
     userId: userIdByPerson.get(r.id) ?? null,
     fullName: r.full_name,
+    avatarUrl: r.avatar_url
+      ? (db.storage.from("user-avatars").getPublicUrl(r.avatar_url).data.publicUrl ?? null)
+      : null,
     jobTitleId: r.job_title_id,
     jobTitleName: r.job_title?.name ?? null,
   }));

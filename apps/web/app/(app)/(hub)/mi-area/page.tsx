@@ -8,6 +8,7 @@ import {
   sumMinutesByUsersInRange,
 } from "@agency-os/db";
 import { currentWeekRange } from "@agency-os/domain";
+import { Button, Input, Label } from "@agency-os/ui";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { NoAccessPanel } from "@/components/no-access-panel";
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function MiAreaPage({
   searchParams,
 }: {
-  searchParams: { area?: string };
+  searchParams: { area?: string; from?: string; to?: string };
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -50,7 +51,10 @@ export default async function MiAreaPage({
   ]);
 
   const userIds = people.map((p) => p.userId).filter((id): id is string => id !== null);
-  const { from, to } = currentWeekRange();
+  const defaultRange = currentWeekRange();
+  const from = searchParams.from || defaultRange.from;
+  const to = searchParams.to || defaultRange.to;
+  const hasCustomRange = Boolean(searchParams.from || searchParams.to);
   const [openTasksByUser, minutesByUser] = await Promise.all([
     countOpenTasksByAssignee(db, { organizationId, userIds }),
     sumMinutesByUsersInRange(db, { organizationId, userIds, from, to }),
@@ -90,12 +94,37 @@ export default async function MiAreaPage({
 
       <div className="mt-6">
         <h2 className="text-lg font-bold tracking-tight">Carga del equipo</h2>
+
+        <form method="get" className="mt-3 flex flex-wrap items-end gap-3">
+          {searchParams.area && <input type="hidden" name="area" value={searchParams.area} />}
+          <div>
+            <Label htmlFor="ma-from">Desde</Label>
+            <Input id="ma-from" type="date" name="from" defaultValue={from} className="w-40" />
+          </div>
+          <div>
+            <Label htmlFor="ma-to">Hasta</Label>
+            <Input id="ma-to" type="date" name="to" defaultValue={to} className="w-40" />
+          </div>
+          <Button type="submit" size="sm">
+            Filtrar
+          </Button>
+          {hasCustomRange && (
+            <a
+              href={searchParams.area ? `/mi-area?area=${searchParams.area}` : "/mi-area"}
+              className="text-sm text-muted transition hover:text-ink"
+            >
+              Volver a esta semana
+            </a>
+          )}
+        </form>
+
         <TeamWorkloadCards
           people={people.map((p) => ({
             id: p.id,
             fullName: p.fullName,
+            avatarUrl: p.avatarUrl,
             openTasks: p.userId ? (openTasksByUser[p.userId] ?? 0) : 0,
-            minutesThisWeek: p.userId ? (minutesByUser[p.userId] ?? 0) : 0,
+            minutesInRange: p.userId ? (minutesByUser[p.userId] ?? 0) : 0,
           }))}
         />
       </div>
