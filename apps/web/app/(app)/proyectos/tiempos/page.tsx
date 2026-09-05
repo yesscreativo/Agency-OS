@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { listProjects, reportEntries } from "@agency-os/db";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { reportEntries } from "@agency-os/db";
+import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { TimeReport } from "@/components/proyectos/time-report";
 
@@ -9,26 +9,19 @@ export const dynamic = "force-dynamic";
 export default async function ProyectosTiemposPage({
   searchParams,
 }: {
-  searchParams: { scope?: string; project?: string; from?: string; to?: string };
+  searchParams: { from?: string; to?: string };
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const organizationId = user.organizationIds[0] ?? "";
-  const canManage = hasPermission(user, "project.manage");
-  const scope: "mine" | "team" = searchParams.scope === "team" && canManage ? "team" : "mine";
-
   const db = await getSupabaseServerClient();
-  const [entryRows, projects] = await Promise.all([
-    reportEntries(db, {
-      organizationId,
-      userId: scope === "mine" ? user.id : undefined,
-      projectId: scope === "team" ? searchParams.project || undefined : undefined,
-      from: searchParams.from || undefined,
-      to: searchParams.to || undefined,
-    }),
-    listProjects(db, organizationId),
-  ]);
+  const entryRows = await reportEntries(db, {
+    organizationId,
+    userId: user.id,
+    from: searchParams.from || undefined,
+    to: searchParams.to || undefined,
+  });
 
   const entries = entryRows.map((e) => ({
     id: e.id,
@@ -47,12 +40,8 @@ export default async function ProyectosTiemposPage({
 
   return (
     <TimeReport
-      scope={scope}
-      canManage={canManage}
       entries={entries}
-      projects={projects.map((p) => ({ id: p.id, title: p.title }))}
       filters={{
-        project: searchParams.project ?? "",
         from: searchParams.from ?? "",
         to: searchParams.to ?? "",
       }}

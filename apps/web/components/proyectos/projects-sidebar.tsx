@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Button, Chip, Input } from "@agency-os/ui";
 import type { ClientSpaceRow } from "@agency-os/db";
 import { clientHref } from "@/lib/project-paths";
@@ -17,9 +17,9 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 /** Sidebar de Spaces del módulo Proyectos: filtro de clientes + Todos/Activos/Míos
- * + lista de clientes (con nº de proyectos) que navega a cada space. El wireframe
- * también prevé "Carga del equipo"/"Mis tiempos" (Fase C / RRHH): van como
- * placeholders deshabilitados. */
+ * + lista de clientes (con nº de proyectos) que navega a cada space. "Carga del
+ * equipo" (antes acá, scope=team) se eliminó — vive en /mi-area con el alcance
+ * correcto (gerente del área). */
 export function ProjectsSidebar({
   clients,
   clientsForCreate,
@@ -35,7 +35,6 @@ export function ProjectsSidebar({
   canManageAccess?: boolean;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("todos");
   const [createOpen, setCreateOpen] = useState(false);
@@ -142,22 +141,10 @@ export function ProjectsSidebar({
             Accesos
           </a>
         )}
-        {canManage && (
-          <a
-            href="/proyectos/tiempos?scope=team"
-            className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
-              pathname === "/proyectos/tiempos" && searchParams.get("scope") === "team"
-                ? "bg-green font-semibold text-green-ink"
-                : "text-muted hover:bg-surface-2 hover:text-ink"
-            }`}
-          >
-            Carga del equipo
-          </a>
-        )}
         <a
           href="/proyectos/tiempos"
           className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
-            pathname === "/proyectos/tiempos" && searchParams.get("scope") !== "team"
+            pathname === "/proyectos/tiempos"
               ? "bg-green font-semibold text-green-ink"
               : "text-muted hover:bg-surface-2 hover:text-ink"
           }`}
