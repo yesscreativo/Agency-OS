@@ -22,3 +22,4 @@ export * from "./repositories/work-item-attachments";
 export * from "./repositories/work-item-comments";
 export * from "./repositories/work-item-activity";
 export * from "./repositories/work-item-time";
+export * from "./repositories/checklist-items";
