@@ -110,7 +110,7 @@ export function ChecklistPanel({
         next.map((r) => r.id),
       );
       if (res.error) setError(res.error);
-      else router.refresh();
+      router.refresh();
     });
   };
 
