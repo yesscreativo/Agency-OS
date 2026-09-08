@@ -14,6 +14,7 @@ import {
   type DetailTask,
 } from "@/components/proyectos/work-item-detail";
 import type { BoardStatus } from "@/components/proyectos/project-board";
+import type { ChecklistItemView } from "@/components/proyectos/checklist-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +112,10 @@ export default async function WorkItemDetailPage({
       .map((a) => ({ id: a.user_id, name: assigneeName(a) })),
   };
 
+  const checklistItems: ChecklistItemView[] = task.checklist_items
+    .filter((c) => !c.deleted_at)
+    .map((c) => ({ id: c.id, label: c.label, isCompleted: c.is_completed }));
+
   const subtasks: DetailSubtask[] = task.subtasks.map((st) => ({
     id: st.id,
     title: st.title,
@@ -202,6 +207,7 @@ export default async function WorkItemDetailPage({
         comments={comments}
         activity={activity}
         timeEntries={timeEntries}
+        checklistItems={checklistItems}
         activeTimer={activeTimer}
       />
     </div>

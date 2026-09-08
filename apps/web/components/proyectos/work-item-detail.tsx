@@ -29,6 +29,7 @@ import {
   type PanelComment,
 } from "./work-item-activity-panel";
 import { TimeTrackingPanel } from "./time-tracking-panel";
+import { ChecklistPanel, type ChecklistItemView } from "./checklist-panel";
 
 export interface DetailAssignee {
   id: string;
@@ -71,6 +72,7 @@ export function WorkItemDetail({
   comments,
   activity,
   timeEntries,
+  checklistItems,
   activeTimer,
 }: {
   projectId: string;
@@ -88,6 +90,7 @@ export function WorkItemDetail({
   comments: PanelComment[];
   activity: PanelActivity[];
   timeEntries: TimeEntryDTO[];
+  checklistItems: ChecklistItemView[];
   /** Timer activo del usuario (en esta tarea u otra), para el cronómetro. */
   activeTimer?: ActiveTimerDTO | null;
 }) {
@@ -267,6 +270,12 @@ export function WorkItemDetail({
           />
           {saved && !isPending && <span className="mt-1 block text-sm text-green">Guardado ✓</span>}
         </section>
+
+        <ChecklistPanel
+          workItemId={task.id}
+          items={checklistItems}
+          canWrite={canManage || task.assignees.some((a) => a.id === currentUserId)}
+        />
 
         {task.type === "task" && (
           <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
