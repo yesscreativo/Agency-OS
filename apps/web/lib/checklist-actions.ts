@@ -5,6 +5,7 @@ import {
   getChecklistItem,
   insertChecklistItem,
   isWorkItemAssignee,
+  listChecklistItems,
   recordActivity,
   reorderChecklistItems,
   toggleChecklistItem,
@@ -201,6 +202,12 @@ export async function reorderChecklistItemsAction(
     if (!workItem) return { error: "La tarea no existe o no pertenece a tu organización." };
     if (!(await canWriteChecklist(db, auth.user, workItemId))) {
       return { error: "No tienes permiso para editar esta checklist." };
+    }
+
+    const existing = await listChecklistItems(db, workItemId);
+    const existingIds = new Set(existing.map((i) => i.id));
+    if (orderedIds.some((id) => !existingIds.has(id))) {
+      return { error: "La lista de ítems no coincide con la checklist de esta tarea." };
     }
 
     await reorderChecklistItems(db, orderedIds);
