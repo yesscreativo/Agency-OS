@@ -143,6 +143,14 @@ export function currentWeekRange(today: Date = new Date()): { from: string; to: 
   return { from: formatLocalDate(monday), to: formatLocalDate(sunday) };
 }
 
+/** Suma (o resta con `days` negativo) días a una fecha LOCAL "YYYY-MM-DD",
+ * sin sesgo de timezone (reusa `dateParts`/`formatLocalDate`, igual que
+ * `currentWeekRange`). */
+export function addDays(date: string, days: number): string {
+  const { y, m, d } = dateParts(date);
+  return formatLocalDate(new Date(y, m - 1, d + days));
+}
+
 export function escapeHtml(value: string | null | undefined): string {
   if (!value) return "";
   return String(value)

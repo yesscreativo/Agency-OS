@@ -24,6 +24,7 @@ export type Database = {
           manager_user_id: string | null
           name: string
           organization_id: string
+          overload_threshold: number
           updated_at: string
         }
         Insert: {
@@ -32,6 +33,7 @@ export type Database = {
           manager_user_id?: string | null
           name: string
           organization_id: string
+          overload_threshold?: number
           updated_at?: string
         }
         Update: {
@@ -40,6 +42,7 @@ export type Database = {
           manager_user_id?: string | null
           name?: string
           organization_id?: string
+          overload_threshold?: number
           updated_at?: string
         }
         Relationships: [

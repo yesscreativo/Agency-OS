@@ -1,7 +1,7 @@
 // "Carga del equipo": una card por colaborador con tareas abiertas + tiempo del
 // periodo filtrado. Presentacional, sin interacción — server component.
 
-import { Avatar } from "@agency-os/ui";
+import { Avatar, Badge } from "@agency-os/ui";
 import { formatDuration, initialsOf } from "@agency-os/domain";
 
 export interface TeamWorkloadPerson {
@@ -12,30 +12,51 @@ export interface TeamWorkloadPerson {
   minutesInRange: number;
 }
 
-export function TeamWorkloadCards({ people }: { people: TeamWorkloadPerson[] }) {
+export function TeamWorkloadCards({
+  people,
+  threshold,
+}: {
+  people: TeamWorkloadPerson[];
+  /** Tareas abiertas a partir de las cuales se marca "Carga alta" (configurable
+   * por el gerente del área, ver OverloadThresholdEditor). */
+  threshold: number;
+}) {
   if (people.length === 0) {
     return <p className="mt-3 text-sm text-muted">Todavía no hay colaboradores en esta área.</p>;
   }
   return (
     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {people.map((p) => (
-        <div key={p.id} className="rounded-lg border border-line bg-glass p-4 backdrop-blur-xl">
-          <div className="flex items-center gap-2.5">
-            <Avatar initials={initialsOf(p.fullName)} src={p.avatarUrl} size="sm" />
-            <span className="font-semibold text-ink">{p.fullName}</span>
+      {people.map((p) => {
+        const overloaded = p.openTasks > threshold;
+        return (
+          <div
+            key={p.id}
+            className={`rounded-lg border p-4 backdrop-blur-xl ${
+              overloaded ? "border-danger bg-glass" : "border-line bg-glass"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <Avatar initials={initialsOf(p.fullName)} src={p.avatarUrl} size="sm" />
+                <span className="font-semibold text-ink">{p.fullName}</span>
+              </div>
+              {overloaded && <Badge tone="danger">Carga alta</Badge>}
+            </div>
+            <div className="mt-3 flex items-center justify-between text-sm">
+              <span className="text-muted">Tareas abiertas</span>
+              <span className={`font-semibold tabular-nums ${overloaded ? "text-danger" : "text-ink"}`}>
+                {p.openTasks}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-sm">
+              <span className="text-muted">En el periodo</span>
+              <span className="font-semibold tabular-nums text-ink">
+                {p.minutesInRange > 0 ? formatDuration(p.minutesInRange) : "0m"}
+              </span>
+            </div>
           </div>
-          <div className="mt-3 flex items-center justify-between text-sm">
-            <span className="text-muted">Tareas abiertas</span>
-            <span className="font-semibold tabular-nums text-ink">{p.openTasks}</span>
-          </div>
-          <div className="mt-1 flex items-center justify-between text-sm">
-            <span className="text-muted">En el periodo</span>
-            <span className="font-semibold tabular-nums text-ink">
-              {p.minutesInRange > 0 ? formatDuration(p.minutesInRange) : "0m"}
-            </span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

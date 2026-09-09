@@ -15,6 +15,7 @@ import { NoAccessPanel } from "@/components/no-access-panel";
 import { JobTitlesManager } from "@/components/mi-area/job-titles-manager";
 import { AreaCollaborators } from "@/components/mi-area/area-collaborators";
 import { TeamWorkloadCards } from "@/components/mi-area/team-workload-cards";
+import { OverloadThresholdEditor } from "@/components/mi-area/overload-threshold-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,10 @@ export default async function MiAreaPage({
       </div>
 
       <div className="mt-6">
-        <h2 className="text-lg font-bold tracking-tight">Carga del equipo</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold tracking-tight">Carga del equipo</h2>
+          <OverloadThresholdEditor areaId={selected.id} threshold={selected.overload_threshold} />
+        </div>
 
         <form method="get" className="mt-3 flex flex-wrap items-end gap-3">
           {searchParams.area && <input type="hidden" name="area" value={searchParams.area} />}
@@ -119,6 +123,7 @@ export default async function MiAreaPage({
         </form>
 
         <TeamWorkloadCards
+          threshold={selected.overload_threshold}
           people={people.map((p) => ({
             id: p.id,
             fullName: p.fullName,
