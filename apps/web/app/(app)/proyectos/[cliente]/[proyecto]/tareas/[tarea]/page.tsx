@@ -1,7 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { getWorkItem, listActivity, listComments, listOrgUsers, listTimeEntries } from "@agency-os/db";
-import { extractShortId, matchesShortId } from "@agency-os/domain";
+import {
+  getWorkItem,
+  listActivity,
+  listComments,
+  listOrgUsers,
+  listTimeEntries,
+  resolveProjectByShortId,
+  resolveTaskByShortId,
+} from "@agency-os/db";
+import { extractShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -47,28 +55,13 @@ export default async function WorkItemDetailPage({
   const db = await getSupabaseServerClient();
 
   // Resolver el proyecto por el código corto del segmento (dentro de la org).
-  const { data: projRows } = organizationId
-    ? await db
-        .from("work_items")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("type", "project")
-        .is("deleted_at", null)
-    : { data: [] as { id: string }[] };
-  const projectId = (projRows ?? []).find((r) =>
-    matchesShortId(r.id, extractShortId(params.proyecto)),
-  )?.id;
+  const projectId = organizationId
+    ? await resolveProjectByShortId(db, organizationId, extractShortId(params.proyecto))
+    : null;
   if (!projectId) notFound();
 
   // Resolver la tarea por su código corto, acotando a ese proyecto.
-  const { data: taskRows } = await db
-    .from("work_items")
-    .select("id")
-    .eq("project_id", projectId)
-    .in("type", ["task", "subtask"])
-    .is("deleted_at", null);
-  const taskId = (taskRows ?? []).find((r) => matchesShortId(r.id, extractShortId(params.tarea)))
-    ?.id;
+  const taskId = await resolveTaskByShortId(db, projectId, extractShortId(params.tarea));
   if (!taskId) notFound();
 
   const task = await getWorkItem(db, taskId);

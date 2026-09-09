@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import {
   countOverdueTasksInProjects,
   getProject,
+  listClients,
   listProjects,
+  resolveClientByShortId,
   type ProjectRow,
 } from "@agency-os/db";
-import { matchesShortId, extractShortId, projectProgress } from "@agency-os/domain";
+import { extractShortId, projectProgress } from "@agency-os/domain";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { projectHref } from "@/lib/project-paths";
@@ -65,17 +67,14 @@ export default async function ClienteSpacePage({
   }
 
   // Resolver el cliente por el código corto del segmento.
-  const { data: clientRows } = await db
-    .from("clients")
-    .select("id, name, company, logo_path")
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null);
-  const client = (clientRows ?? []).find((c) => matchesShortId(c.id, extractShortId(params.cliente)));
+  const client = await resolveClientByShortId(db, organizationId, extractShortId(params.cliente));
   if (!client) redirect("/proyectos");
 
   const logoUrl = client.logo_path
     ? (db.storage.from("client-logos").getPublicUrl(client.logo_path).data.publicUrl ?? null)
     : null;
+
+  const clientsPage = await listClients(db, { pageSize: 200 });
 
   const projects = await listProjects(db, organizationId, {
     search: searchParams.q,
@@ -121,7 +120,7 @@ export default async function ClienteSpacePage({
   };
   // Todos los clientes de la org: el modal de alta preselecciona este cliente
   // pero permite crear a cualquier otro (selector editable, ya no bloqueado).
-  const allClients: ClientOption[] = (clientRows ?? []).map((c) => ({
+  const allClients: ClientOption[] = clientsPage.rows.map((c) => ({
     id: c.id,
     name: c.name,
     company: c.company,

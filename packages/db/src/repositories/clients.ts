@@ -31,6 +31,25 @@ export async function listClients(
   return { rows: data ?? [], total: count ?? 0, page, pageSize };
 }
 
+/** Resuelve un cliente por su código corto de URL (`short_id`, primeros 8
+ * caracteres del uuid — ver migración 038). Reemplaza el patrón anterior de
+ * traer todos los clientes de la org y filtrar en JS con `matchesShortId`. */
+export async function resolveClientByShortId(
+  db: Db,
+  organizationId: string,
+  code: string,
+): Promise<{ id: string; name: string; company: string | null; logo_path: string | null } | null> {
+  const { data, error } = await db
+    .from("clients")
+    .select("id, name, company, logo_path")
+    .eq("organization_id", organizationId)
+    .eq("short_id", code.toLowerCase())
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function getClientById(db: Db, id: string) {
   const { data, error } = await db
     .from("clients")

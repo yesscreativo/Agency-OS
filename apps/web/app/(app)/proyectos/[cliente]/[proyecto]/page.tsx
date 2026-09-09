@@ -1,6 +1,12 @@
 import { notFound, redirect } from "next/navigation";
-import { getProject, listOrgUsers, sumMinutesByProject, sumMinutesByTask } from "@agency-os/db";
-import { checklistProgress, extractShortId, formatDuration, matchesShortId } from "@agency-os/domain";
+import {
+  getProject,
+  listOrgUsers,
+  resolveProjectByShortId,
+  sumMinutesByProject,
+  sumMinutesByTask,
+} from "@agency-os/db";
+import { checklistProgress, extractShortId, formatDuration } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -20,24 +26,6 @@ const PROJECT_STATE_BADGE = {
   completed: { label: "Completado", tone: "success" as const },
   archived: { label: "Archivado", tone: "neutral" as const },
 };
-
-/** Resuelve el id del proyecto a partir del código corto del segmento de URL,
- * dentro de la organización del usuario. `work_items.id` es uuid: no se puede
- * filtrar por prefijo vía PostgREST, así que se traen los ids de proyectos de la
- * org (pocos) y se cotejan en memoria con `matchesShortId`. */
-async function resolveProjectId(
-  db: Awaited<ReturnType<typeof getSupabaseServerClient>>,
-  orgId: string,
-  code: string,
-): Promise<string | null> {
-  const { data } = await db
-    .from("work_items")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("type", "project")
-    .is("deleted_at", null);
-  return (data ?? []).find((r) => matchesShortId(r.id, code))?.id ?? null;
-}
 
 export default async function ProjectDetailPage({
   params,
@@ -59,7 +47,7 @@ export default async function ProjectDetailPage({
   const db = await getSupabaseServerClient();
 
   const projectId = organizationId
-    ? await resolveProjectId(db, organizationId, extractShortId(params.proyecto))
+    ? await resolveProjectByShortId(db, organizationId, extractShortId(params.proyecto))
     : null;
   if (!projectId) notFound();
 
