@@ -604,6 +604,18 @@ async function signedAttachmentUrl(db: Db, path: string): Promise<string | null>
   return data?.signedUrl ?? null;
 }
 
+/** Firma varias rutas en una sola llamada a Storage (en vez de una por adjunto)
+ * — la usan los listados, que pueden traer varios adjuntos por request. */
+async function signedAttachmentUrls(db: Db, paths: string[]): Promise<Map<string, string>> {
+  if (paths.length === 0) return new Map();
+  const { data } = await db.storage.from(ATTACHMENT_BUCKET).createSignedUrls(paths, 60 * 60);
+  const map = new Map<string, string>();
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl) map.set(item.path, item.signedUrl);
+  }
+  return map;
+}
+
 function toAttachment(row: AttachmentRow, url: string | null): WorkItemAttachment {
   return {
     id: row.id,
@@ -679,9 +691,8 @@ export async function listWorkItemAttachments(workItemId: string): Promise<Attac
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
     const rows = await listAttachments(db, workItemId);
-    const attachments = await Promise.all(
-      rows.map(async (r) => toAttachment(r, await signedAttachmentUrl(db, r.path))),
-    );
+    const urls = await signedAttachmentUrls(db, rows.map((r) => r.path));
+    const attachments = rows.map((r) => toAttachment(r, urls.get(r.path) ?? null));
     return { attachments };
   } catch (error) {
     console.error("listWorkItemAttachments", error);
@@ -800,12 +811,11 @@ export async function listCommentAttachmentsForWorkItem(
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
     const rows = await listCommentAttachments(db, workItemId);
-    const attachments = await Promise.all(
-      rows.map(async (r) => ({
-        ...toAttachment(r, await signedAttachmentUrl(db, r.path)),
-        commentId: r.comment_id as string,
-      })),
-    );
+    const urls = await signedAttachmentUrls(db, rows.map((r) => r.path));
+    const attachments = rows.map((r) => ({
+      ...toAttachment(r, urls.get(r.path) ?? null),
+      commentId: r.comment_id as string,
+    }));
     return { attachments };
   } catch (error) {
     console.error("listCommentAttachmentsForWorkItem", error);
