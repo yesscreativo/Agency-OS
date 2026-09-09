@@ -40,19 +40,18 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("id, person_id, people(full_name, avatar_url)")
-    .eq("id", user.id)
-    .single();
-
-  const { data: userRoles } = await supabase
-    .from("user_roles")
-    .select(
-      "organization_id, roles(code, name, is_super, module_code, role_permissions(permissions(code)))",
-    )
-    .eq("user_id", user.id)
-    .returns<UserRoleRow[]>();
+  // Ambas consultas solo dependen de user.id — corren en paralelo (no hay
+  // motivo para serializarlas, y esta función se llama en cada página).
+  const [{ data: appUser }, { data: userRoles }] = await Promise.all([
+    supabase.from("users").select("id, person_id, people(full_name, avatar_url)").eq("id", user.id).single(),
+    supabase
+      .from("user_roles")
+      .select(
+        "organization_id, roles(code, name, is_super, module_code, role_permissions(permissions(code)))",
+      )
+      .eq("user_id", user.id)
+      .returns<UserRoleRow[]>(),
+  ]);
 
   const roleRows = (userRoles ?? [])
     .map((ur) => ur.roles)

@@ -52,18 +52,20 @@ export default async function ProjectDetailPage({
     : null;
   if (!projectId) notFound();
 
-  const project = await getProject(db, projectId);
+  // `getProject` y las tres consultas de abajo solo necesitan `projectId`
+  // (ninguna depende del resultado de `getProject`) — corren en paralelo en
+  // vez de esperar a que `getProject` termine primero.
+  const [project, orgUserRows, projectMinutes, minutesByTask] = await Promise.all([
+    getProject(db, projectId),
+    organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
+    sumMinutesByProject(db, projectId),
+    sumMinutesByTask(db, projectId),
+  ]);
   if (!project) notFound();
 
   // Ruta canónica; si la URL trae un slug viejo (renombre) redirige a la actual.
   const canonical = projectHref(project.client, project);
   if (`/proyectos/${params.cliente}/${params.proyecto}` !== canonical) redirect(canonical);
-
-  const [orgUserRows, projectMinutes, minutesByTask] = await Promise.all([
-    organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
-    sumMinutesByProject(db, projectId),
-    sumMinutesByTask(db, projectId),
-  ]);
 
   const statuses: BoardStatus[] = project.statuses.map((s) => ({
     id: s.id,
