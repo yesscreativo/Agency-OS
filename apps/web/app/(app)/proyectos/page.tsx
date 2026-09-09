@@ -110,13 +110,22 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
   const managedAreas = organizationId ? await listAreasManagedBy(db, user.id) : [];
   let teamLoad: { overloadedCount: number; totalCount: number } | null = null;
   if (managedAreas.length > 0) {
-    const peopleByArea = await Promise.all(managedAreas.map((a) => listPeopleInArea(db, a.id)));
-    const userIds = Array.from(
-      new Set(peopleByArea.flat().map((p) => p.userId).filter((id): id is string => Boolean(id))),
+    // Cada área tiene su propio umbral de "carga alta" (editable en /mi-area),
+    // así que se calcula por área y se suma — no se puede usar un único corte
+    // global si un gerente administra más de un área con umbrales distintos.
+    const perArea = await Promise.all(
+      managedAreas.map(async (area) => {
+        const peopleInArea = await listPeopleInArea(db, area.id);
+        const userIds = peopleInArea.map((p) => p.userId).filter((id): id is string => Boolean(id));
+        const counts = await countOpenTasksByAssignee(db, { organizationId: organizationId!, userIds });
+        const overloaded = userIds.filter((id) => (counts[id] ?? 0) > area.overload_threshold).length;
+        return { overloaded, total: userIds.length };
+      }),
     );
-    const counts = await countOpenTasksByAssignee(db, { organizationId: organizationId!, userIds });
-    const overloadedCount = userIds.filter((id) => (counts[id] ?? 0) > 5).length;
-    teamLoad = { overloadedCount, totalCount: userIds.length };
+    teamLoad = {
+      overloadedCount: perArea.reduce((sum, r) => sum + r.overloaded, 0),
+      totalCount: perArea.reduce((sum, r) => sum + r.total, 0),
+    };
   }
 
   const [projects, clientsPage] = await Promise.all([

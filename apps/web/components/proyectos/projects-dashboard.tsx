@@ -6,10 +6,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Input } from "@agency-os/ui";
+import { Input } from "@agency-os/ui";
 import { formatDuration, type WorkItemPriority } from "@agency-os/domain";
 import { saveWorkItem } from "@/lib/project-actions";
 import { PriorityBadge } from "./work-item-fields";
+
+const PRIORITY_ACCENT: Record<WorkItemPriority, string> = {
+  low: "border-l-line-strong",
+  normal: "border-l-purple",
+  high: "border-l-warn",
+  urgent: "border-l-danger",
+};
 
 export interface AgendaTaskView {
   id: string;
@@ -36,16 +43,21 @@ function AgendaCard({ task, overdue }: { task: AgendaTaskView; overdue?: boolean
   return (
     <a
       href={task.href}
-      className="block rounded-md border border-line bg-surface-2 p-2.5 text-sm transition hover:border-line-strong"
+      className={`block rounded-md border border-l-[3px] bg-surface-2 p-2.5 text-sm transition hover:border-line-strong hover:shadow-raised ${
+        overdue ? "border-danger border-l-danger" : `border-line ${PRIORITY_ACCENT[task.priority]}`
+      }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate font-medium text-ink">{task.title}</span>
-        {overdue && <Badge tone="danger">Retrasada</Badge>}
-      </div>
-      <div className="mt-1 truncate text-xs text-muted">
+      {overdue && (
+        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-danger">
+          <span className="h-1.5 w-1.5 rounded-pill bg-danger" />
+          Retrasada
+        </div>
+      )}
+      <p className="truncate font-medium leading-snug text-ink">{task.title}</p>
+      <p className="mt-0.5 truncate text-xs text-muted">
         {task.clientName ?? "—"} · {task.projectTitle}
-      </div>
-      <div className="mt-1.5 flex items-center gap-2">
+      </p>
+      <div className="mt-2 flex items-center justify-between gap-2">
         <PriorityBadge priority={task.priority} />
         {task.estimatedMinutes !== null && (
           <span className="font-mono text-[11px] text-muted">
@@ -182,22 +194,47 @@ export function ProjectsDashboard({
         )}
       </div>
 
-      <div className="mt-4 rounded-lg border border-line bg-glass p-4 backdrop-blur-xl">
-        <h2 className="font-semibold text-ink">Atención</h2>
-        <p className="mt-1 text-sm text-muted">
-          {overdueTasks.length === 0
-            ? "Sin tareas vencidas."
-            : `${overdueTasks.length} tarea${overdueTasks.length === 1 ? "" : "s"} vencida${overdueTasks.length === 1 ? "" : "s"}.`}
-        </p>
-        {teamLoad && (
-          <p className="mt-1 text-sm text-muted">
-            {teamLoad.overloadedCount === 0
-              ? "Tu equipo está al día."
-              : `${teamLoad.overloadedCount} persona${teamLoad.overloadedCount === 1 ? "" : "s"} con más de 5 tareas abiertas.`}{" "}
-            <a href="/mi-area" className="text-ink underline hover:no-underline">
-              Ver Mi área
-            </a>
+      <h2 className="mt-4 font-semibold text-ink">Atención</h2>
+      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-line bg-glass p-4 backdrop-blur-xl">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">Vencidas</p>
+          <p
+            className={`mt-1 text-3xl font-bold tabular-nums ${
+              overdueTasks.length > 0 ? "text-danger" : "text-ink"
+            }`}
+          >
+            {overdueTasks.length}
           </p>
+          <p className="mt-1 text-sm text-muted">
+            {overdueTasks.length === 0
+              ? "Sin tareas vencidas."
+              : `tarea${overdueTasks.length === 1 ? "" : "s"} vencida${overdueTasks.length === 1 ? "" : "s"}`}
+          </p>
+        </div>
+
+        {teamLoad && (
+          <a
+            href="/mi-area"
+            className="block rounded-lg border border-line bg-glass p-4 backdrop-blur-xl transition hover:border-line-strong hover:shadow-raised"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">
+              Carga del equipo
+            </p>
+            <p
+              className={`mt-1 text-3xl font-bold tabular-nums ${
+                teamLoad.overloadedCount > 0 ? "text-warn" : "text-ink"
+              }`}
+            >
+              {teamLoad.overloadedCount}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {teamLoad.overloadedCount === 0
+                ? "Al día"
+                : `persona${teamLoad.overloadedCount === 1 ? "" : "s"} con carga alta`}
+              {" · "}
+              <span className="text-ink underline">Ver Mi área</span>
+            </p>
+          </a>
         )}
       </div>
     </div>
