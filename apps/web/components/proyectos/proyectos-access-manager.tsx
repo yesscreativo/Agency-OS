@@ -30,6 +30,7 @@ export function ProyectosAccessManager({ users, roles }: ProyectosAccessManagerP
   const [assigning, setAssigning] = useState<ProyectosAccessUserRow | null>(null);
   const [roleId, setRoleId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const openAssign = (user: ProyectosAccessUserRow) => {
@@ -48,8 +49,10 @@ export function ProyectosAccessManager({ users, roles }: ProyectosAccessManagerP
   };
 
   const revoke = (userRoleId: string) => {
+    setRevokeError(null);
     startTransition(async () => {
-      await revokeProjectRole(userRoleId);
+      const result = await revokeProjectRole(userRoleId);
+      if (result.error) setRevokeError(result.error);
     });
   };
 
@@ -61,6 +64,8 @@ export function ProyectosAccessManager({ users, roles }: ProyectosAccessManagerP
           Da o quita el acceso al módulo Proyectos, sin tocar el resto de accesos del sistema.
         </p>
       </div>
+
+      {revokeError && <p className="mt-4 text-sm text-danger">{revokeError}</p>}
 
       <div className="mt-6">
         <Table>

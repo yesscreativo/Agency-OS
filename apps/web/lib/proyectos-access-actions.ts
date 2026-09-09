@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { grantUserRole, revokeUserRole } from "@agency-os/db";
+import { createSupabaseServiceRoleClient, grantUserRole, revokeUserRole } from "@agency-os/db";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -38,7 +38,12 @@ export async function grantProjectRole(userId: string, roleId: string): Promise<
     if (!role || role.module_code !== "proyectos") {
       return { error: "Rol inválido." };
     }
-    await grantUserRole(db, { userId, roleId, organizationId: auth.organizationId });
+    // user_roles_write exige users.manage, que un proyectos_admin no super
+    // admin no tiene — se usa service role para el write puntual, ya
+    // validado arriba (rol de Proyectos) y por requireProjectAccessManager
+    // (organización + project.manage_access).
+    const admin = createSupabaseServiceRoleClient();
+    await grantUserRole(admin, { userId, roleId, organizationId: auth.organizationId });
     revalidatePath("/proyectos/usuarios");
     return { ok: true };
   } catch (error) {
@@ -73,7 +78,11 @@ export async function revokeProjectRole(userRoleId: string): Promise<AccessActio
     if (!role || role.module_code !== "proyectos") {
       return { error: "Asignación inválida." };
     }
-    await revokeUserRole(db, userRoleId);
+    // Mismo motivo que en grantProjectRole: user_roles_write exige
+    // users.manage, así que el delete puntual va con service role, ya
+    // validado arriba (fila de la misma organización y rol de Proyectos).
+    const admin = createSupabaseServiceRoleClient();
+    await revokeUserRole(admin, userRoleId);
     revalidatePath("/proyectos/usuarios");
     return { ok: true };
   } catch (error) {
