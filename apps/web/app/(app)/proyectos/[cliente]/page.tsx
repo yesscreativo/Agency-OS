@@ -66,26 +66,29 @@ export default async function ClienteSpacePage({
     }
   }
 
-  // Resolver el cliente por el código corto del segmento.
-  const client = await resolveClientByShortId(db, organizationId, extractShortId(params.cliente));
+  // Resolver el cliente por el código corto del segmento. `listClients` (para
+  // el selector de "todos los clientes") no depende del cliente resuelto —
+  // corre en paralelo en vez de esperar a que termine la resolución.
+  const [client, clientsPage] = await Promise.all([
+    resolveClientByShortId(db, organizationId, extractShortId(params.cliente)),
+    listClients(db, { pageSize: 200 }),
+  ]);
   if (!client) redirect("/proyectos");
 
   const logoUrl = client.logo_path
     ? (db.storage.from("client-logos").getPublicUrl(client.logo_path).data.publicUrl ?? null)
     : null;
 
-  const clientsPage = await listClients(db, { pageSize: 200 });
-
-  const projects = await listProjects(db, organizationId, {
-    search: searchParams.q,
-    clientId: client.id,
-  });
-
   // KPIs del cliente = sobre TODOS sus proyectos (no el subconjunto filtrado por
-  // búsqueda). Si no hay búsqueda, reutilizamos `projects` para no consultar dos veces.
-  const allClientProjects = searchParams.q
-    ? await listProjects(db, organizationId, { clientId: client.id })
-    : projects;
+  // búsqueda). Si hay búsqueda, se corre aparte en paralelo con la lista
+  // filtrada en vez de esperar a que esta termine.
+  const [projects, allClientProjectsIfSearch] = await Promise.all([
+    listProjects(db, organizationId, { search: searchParams.q, clientId: client.id }),
+    searchParams.q
+      ? listProjects(db, organizationId, { clientId: client.id })
+      : Promise.resolve(null),
+  ]);
+  const allClientProjects = allClientProjectsIfSearch ?? projects;
   const tasksTotal = allClientProjects.reduce((n, p) => n + p.tasks_count, 0);
   const tasksDone = allClientProjects.reduce((n, p) => n + p.tasks_done_count, 0);
   const activeCount = allClientProjects.filter(
