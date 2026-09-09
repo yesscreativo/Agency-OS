@@ -1,6 +1,13 @@
 import { notFound, redirect } from "next/navigation";
-import { getProject, listOrgUsers, sumMinutesByProject, sumMinutesByTask } from "@agency-os/db";
-import { checklistProgress, extractShortId, formatDuration, matchesShortId } from "@agency-os/domain";
+import Link from "next/link";
+import {
+  getProject,
+  listOrgUsers,
+  resolveProjectByShortId,
+  sumMinutesByProject,
+  sumMinutesByTask,
+} from "@agency-os/db";
+import { checklistProgress, extractShortId, formatDuration } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -20,24 +27,6 @@ const PROJECT_STATE_BADGE = {
   completed: { label: "Completado", tone: "success" as const },
   archived: { label: "Archivado", tone: "neutral" as const },
 };
-
-/** Resuelve el id del proyecto a partir del código corto del segmento de URL,
- * dentro de la organización del usuario. `work_items.id` es uuid: no se puede
- * filtrar por prefijo vía PostgREST, así que se traen los ids de proyectos de la
- * org (pocos) y se cotejan en memoria con `matchesShortId`. */
-async function resolveProjectId(
-  db: Awaited<ReturnType<typeof getSupabaseServerClient>>,
-  orgId: string,
-  code: string,
-): Promise<string | null> {
-  const { data } = await db
-    .from("work_items")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("type", "project")
-    .is("deleted_at", null);
-  return (data ?? []).find((r) => matchesShortId(r.id, code))?.id ?? null;
-}
 
 export default async function ProjectDetailPage({
   params,
@@ -59,22 +48,24 @@ export default async function ProjectDetailPage({
   const db = await getSupabaseServerClient();
 
   const projectId = organizationId
-    ? await resolveProjectId(db, organizationId, extractShortId(params.proyecto))
+    ? await resolveProjectByShortId(db, organizationId, extractShortId(params.proyecto))
     : null;
   if (!projectId) notFound();
 
-  const project = await getProject(db, projectId);
+  // `getProject` y las tres consultas de abajo solo necesitan `projectId`
+  // (ninguna depende del resultado de `getProject`) — corren en paralelo en
+  // vez de esperar a que `getProject` termine primero.
+  const [project, orgUserRows, projectMinutes, minutesByTask] = await Promise.all([
+    getProject(db, projectId),
+    organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
+    sumMinutesByProject(db, projectId),
+    sumMinutesByTask(db, projectId),
+  ]);
   if (!project) notFound();
 
   // Ruta canónica; si la URL trae un slug viejo (renombre) redirige a la actual.
   const canonical = projectHref(project.client, project);
   if (`/proyectos/${params.cliente}/${params.proyecto}` !== canonical) redirect(canonical);
-
-  const [orgUserRows, projectMinutes, minutesByTask] = await Promise.all([
-    organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
-    sumMinutesByProject(db, projectId),
-    sumMinutesByTask(db, projectId),
-  ]);
 
   const statuses: BoardStatus[] = project.statuses.map((s) => ({
     id: s.id,
@@ -121,9 +112,9 @@ export default async function ProjectDetailPage({
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <a href="/proyectos" className="text-sm text-muted transition hover:text-ink">
+          <Link href="/proyectos" className="text-sm text-muted transition hover:text-ink">
             ← Proyectos
-          </a>
+          </Link>
           <div className="mt-1 flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{project.title}</h1>
             <Badge tone={state.tone}>{state.label}</Badge>

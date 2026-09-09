@@ -13,6 +13,7 @@ import {
 } from "@agency-os/db";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveTaskLink } from "@/lib/resolve-task-link";
 import type { Db } from "@agency-os/db";
 
 export type ActionResult = { ok: true; error?: never } | { ok?: never; error: string };
@@ -30,20 +31,28 @@ export type TimeEntryDTO = {
   source: string;
 };
 
-/** Confirma que el work item existe y es de la org; devuelve su project_id. */
-async function workItemProjectId(
+/** Confirma que el work item existe y es de la org; devuelve lo necesario para
+ * revalidar su path real (`resolveTaskLink`) en vez de toda `/proyectos`. */
+async function loadWorkItem(
   db: Db,
   workItemId: string,
   organizationId: string,
-): Promise<string | null> {
+): Promise<{ projectId: string; title: string } | null> {
   const { data } = await db
     .from("work_items")
-    .select("project_id, organization_id")
+    .select("project_id, title, organization_id")
     .eq("id", workItemId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!data || data.organization_id !== organizationId) return null;
-  return data.project_id;
+  return { projectId: data.project_id, title: data.title };
+}
+
+/** Título de una tarea ya validada (usado con `entry.work_item_id`, cuya
+ * pertenencia a la org ya se confirmó vía `entry.organization_id`). */
+async function workItemTitle(db: Db, workItemId: string): Promise<string | null> {
+  const { data } = await db.from("work_items").select("title").eq("id", workItemId).maybeSingle();
+  return data?.title ?? null;
 }
 
 export async function addTimeEntry(input: {
@@ -62,12 +71,12 @@ export async function addTimeEntry(input: {
   }
   try {
     const db = await getSupabaseServerClient();
-    const projectId = await workItemProjectId(db, input.workItemId, organizationId);
-    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+    const workItem = await loadWorkItem(db, input.workItemId, organizationId);
+    if (!workItem) return { error: "La tarea no existe o no pertenece a tu organización." };
     const row = await insertTimeEntry(db, {
       organization_id: organizationId,
       work_item_id: input.workItemId,
-      project_id: projectId,
+      project_id: workItem.projectId,
       user_id: user.id,
       minutes: Math.round(input.minutes),
       spent_on: input.spentOn,
@@ -85,7 +94,11 @@ export async function addTimeEntry(input: {
     } catch (e) {
       console.error("addTimeEntry:activity", e);
     }
-    revalidatePath("/proyectos");
+    const link = await resolveTaskLink(db, workItem.projectId, {
+      id: input.workItemId,
+      title: workItem.title,
+    });
+    revalidatePath(link ?? "/proyectos");
     return { id: row.id };
   } catch (error) {
     console.error("addTimeEntry", error);
@@ -120,7 +133,11 @@ export async function editTimeEntry(input: {
       spent_on: input.spentOn,
       note: input.note?.trim() || null,
     });
-    revalidatePath("/proyectos");
+    const title = await workItemTitle(db, entry.work_item_id);
+    const link = title
+      ? await resolveTaskLink(db, entry.project_id, { id: entry.work_item_id, title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("editTimeEntry", error);
@@ -143,7 +160,11 @@ export async function deleteTimeEntryAction(id: string): Promise<ActionResult> {
       return { error: "Solo puedes borrar tus propias entradas." };
     }
     await deleteTimeEntry(db, id);
-    revalidatePath("/proyectos");
+    const title = await workItemTitle(db, entry.work_item_id);
+    const link = title
+      ? await resolveTaskLink(db, entry.project_id, { id: entry.work_item_id, title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteTimeEntryAction", error);
@@ -160,12 +181,12 @@ async function stopActiveTimer(db: Db, userId: string, organizationId: string): 
   const active = await getActiveTimer(db, userId);
   if (!active) return 0;
   const minutes = Math.round((Date.now() - new Date(active.started_at).getTime()) / 60000);
-  const projectId = await workItemProjectId(db, active.work_item_id, organizationId);
-  if (minutes >= 1 && projectId) {
+  const workItem = await loadWorkItem(db, active.work_item_id, organizationId);
+  if (minutes >= 1 && workItem) {
     await insertTimeEntry(db, {
       organization_id: organizationId,
       work_item_id: active.work_item_id,
-      project_id: projectId,
+      project_id: workItem.projectId,
       user_id: userId,
       minutes,
       spent_on: new Date().toISOString().slice(0, 10),
@@ -197,15 +218,16 @@ export async function startTimer(workItemId: string): Promise<ActionResult> {
   if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
   try {
     const db = await getSupabaseServerClient();
-    const projectId = await workItemProjectId(db, workItemId, organizationId);
-    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+    const workItem = await loadWorkItem(db, workItemId, organizationId);
+    if (!workItem) return { error: "La tarea no existe o no pertenece a tu organización." };
     await stopActiveTimer(db, user.id, organizationId);
     await upsertActiveTimer(db, {
       user_id: user.id,
       organization_id: organizationId,
       work_item_id: workItemId,
     });
-    revalidatePath("/proyectos");
+    const link = await resolveTaskLink(db, workItem.projectId, { id: workItemId, title: workItem.title });
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("startTimer", error);
@@ -220,8 +242,19 @@ export async function stopTimer(): Promise<{ minutes: number; error?: never } | 
   if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
   try {
     const db = await getSupabaseServerClient();
+    const active = await getActiveTimer(db, user.id);
     const minutes = await stopActiveTimer(db, user.id, organizationId);
-    revalidatePath("/proyectos");
+    let link: string | null = null;
+    if (active) {
+      const workItem = await loadWorkItem(db, active.work_item_id, organizationId);
+      if (workItem) {
+        link = await resolveTaskLink(db, workItem.projectId, {
+          id: active.work_item_id,
+          title: workItem.title,
+        });
+      }
+    }
+    revalidatePath(link ?? "/proyectos");
     return { minutes };
   } catch (error) {
     console.error("stopTimer", error);

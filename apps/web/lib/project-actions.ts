@@ -26,6 +26,8 @@ import {
 import { validateWorkItemTitle } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveProjectLink, resolveTaskLink } from "@/lib/resolve-task-link";
+import { taskHref } from "@/lib/project-paths";
 
 export type IdResult = { id: string; error?: never } | { id?: never; error: string };
 export type ActionResult = { ok: true; error?: never } | { ok?: never; error: string };
@@ -327,8 +329,13 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
       revalidateProjectId = projectId;
     }
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${revalidateProjectId}`);
+    const projectLink = await resolveProjectLink(db, revalidateProjectId);
+    if (projectLink) {
+      revalidatePath(projectLink);
+      revalidatePath(taskHref(projectLink, { id, title }));
+    } else {
+      revalidatePath("/proyectos");
+    }
     return { id };
   } catch (error) {
     console.error("saveWorkItem", error);
@@ -348,8 +355,8 @@ export async function deleteWorkItem(id: string): Promise<ActionResult> {
 
     await softDeleteWorkItem(db, id);
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteWorkItem", error);
@@ -392,8 +399,8 @@ export async function moveWorkItem(id: string, statusId: string): Promise<Action
       });
     }
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("moveWorkItem", error);
@@ -444,7 +451,8 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
       }
     }
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("setWorkItemAssignees", error);
@@ -499,7 +507,8 @@ export async function saveProjectStatus(input: ProjectStatusInput): Promise<IdRe
       id = row.id;
     }
 
-    revalidatePath(`/proyectos/${input.projectId}`);
+    const projectLink = await resolveProjectLink(db, input.projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { id };
   } catch (error) {
     console.error("saveProjectStatus", error);
@@ -520,7 +529,8 @@ export async function deleteProjectStatus(id: string): Promise<ActionResult> {
 
     await deleteStatus(db, id);
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteProjectStatus", error);
@@ -558,7 +568,8 @@ export async function reorderProjectStatuses(
 
     await reorderStatuses(db, orderedIds);
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("reorderProjectStatuses", error);
@@ -602,6 +613,18 @@ export type AttachmentListResult =
 async function signedAttachmentUrl(db: Db, path: string): Promise<string | null> {
   const { data } = await db.storage.from(ATTACHMENT_BUCKET).createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
+}
+
+/** Firma varias rutas en una sola llamada a Storage (en vez de una por adjunto)
+ * — la usan los listados, que pueden traer varios adjuntos por request. */
+async function signedAttachmentUrls(db: Db, paths: string[]): Promise<Map<string, string>> {
+  if (paths.length === 0) return new Map();
+  const { data } = await db.storage.from(ATTACHMENT_BUCKET).createSignedUrls(paths, 60 * 60);
+  const map = new Map<string, string>();
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl) map.set(item.path, item.signedUrl);
+  }
+  return map;
 }
 
 function toAttachment(row: AttachmentRow, url: string | null): WorkItemAttachment {
@@ -657,7 +680,11 @@ export async function uploadWorkItemAttachment(
       created_by: auth.userId,
     });
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const { data: taskRow } = await db.from("work_items").select("title").eq("id", workItemId).maybeSingle();
+    const link = taskRow
+      ? await resolveTaskLink(db, projectId, { id: workItemId, title: taskRow.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
   } catch (error) {
     console.error("uploadWorkItemAttachment", error);
@@ -679,9 +706,8 @@ export async function listWorkItemAttachments(workItemId: string): Promise<Attac
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
     const rows = await listAttachments(db, workItemId);
-    const attachments = await Promise.all(
-      rows.map(async (r) => toAttachment(r, await signedAttachmentUrl(db, r.path))),
-    );
+    const urls = await signedAttachmentUrls(db, rows.map((r) => r.path));
+    const attachments = rows.map((r) => toAttachment(r, urls.get(r.path) ?? null));
     return { attachments };
   } catch (error) {
     console.error("listWorkItemAttachments", error);
@@ -708,7 +734,17 @@ export async function deleteWorkItemAttachment(id: string): Promise<ActionResult
     await deleteAttachmentRow(db, id);
 
     const projectId = await assertWorkItemInOrg(db, attachment.work_item_id, auth.organizationId);
-    if (projectId) revalidatePath(`/proyectos/${projectId}`);
+    if (projectId) {
+      const { data: taskRow } = await db
+        .from("work_items")
+        .select("title")
+        .eq("id", attachment.work_item_id)
+        .maybeSingle();
+      const link = taskRow
+        ? await resolveTaskLink(db, projectId, { id: attachment.work_item_id, title: taskRow.title })
+        : null;
+      revalidatePath(link ?? "/proyectos");
+    }
     return { ok: true };
   } catch (error) {
     console.error("deleteWorkItemAttachment", error);
@@ -768,7 +804,15 @@ export async function uploadCommentAttachment(
       created_by: user.id,
     });
 
-    revalidatePath("/proyectos");
+    const { data: taskRow } = await db
+      .from("work_items")
+      .select("title, project_id")
+      .eq("id", comment.work_item_id)
+      .maybeSingle();
+    const link = taskRow
+      ? await resolveTaskLink(db, taskRow.project_id, { id: comment.work_item_id, title: taskRow.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
   } catch (error) {
     console.error("uploadCommentAttachment", error);
@@ -800,12 +844,11 @@ export async function listCommentAttachmentsForWorkItem(
     if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
 
     const rows = await listCommentAttachments(db, workItemId);
-    const attachments = await Promise.all(
-      rows.map(async (r) => ({
-        ...toAttachment(r, await signedAttachmentUrl(db, r.path)),
-        commentId: r.comment_id as string,
-      })),
-    );
+    const urls = await signedAttachmentUrls(db, rows.map((r) => r.path));
+    const attachments = rows.map((r) => ({
+      ...toAttachment(r, urls.get(r.path) ?? null),
+      commentId: r.comment_id as string,
+    }));
     return { attachments };
   } catch (error) {
     console.error("listCommentAttachmentsForWorkItem", error);
@@ -836,7 +879,15 @@ export async function deleteCommentAttachment(id: string): Promise<ActionResult>
     if (rmError) console.error("deleteCommentAttachment:storage", rmError);
     await deleteAttachmentRow(db, id);
 
-    revalidatePath("/proyectos");
+    const { data: taskRow } = await db
+      .from("work_items")
+      .select("title, project_id")
+      .eq("id", attachment.work_item_id)
+      .maybeSingle();
+    const link = taskRow
+      ? await resolveTaskLink(db, taskRow.project_id, { id: attachment.work_item_id, title: taskRow.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteCommentAttachment", error);

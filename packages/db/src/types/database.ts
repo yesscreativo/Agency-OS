@@ -150,6 +150,7 @@ export type Database = {
           organization_id: string
           phone: string | null
           responsible: string | null
+          short_id: string | null
           updated_at: string
         }
         Insert: {
@@ -165,6 +166,7 @@ export type Database = {
           organization_id: string
           phone?: string | null
           responsible?: string | null
+          short_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -180,6 +182,7 @@ export type Database = {
           organization_id?: string
           phone?: string | null
           responsible?: string | null
+          short_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1501,6 +1504,7 @@ export type Database = {
           project_id: string
           project_state: Database["public"]["Enums"]["project_state"] | null
           quote_id: string | null
+          short_id: string | null
           sort_order: number
           start_date: string | null
           status_id: string | null
@@ -1524,6 +1528,7 @@ export type Database = {
           project_id: string
           project_state?: Database["public"]["Enums"]["project_state"] | null
           quote_id?: string | null
+          short_id?: string | null
           sort_order?: number
           start_date?: string | null
           status_id?: string | null
@@ -1547,6 +1552,7 @@ export type Database = {
           project_id?: string
           project_state?: Database["public"]["Enums"]["project_state"] | null
           quote_id?: string | null
+          short_id?: string | null
           sort_order?: number
           start_date?: string | null
           status_id?: string | null

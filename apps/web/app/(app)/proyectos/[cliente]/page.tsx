@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import {
   countOverdueTasksInProjects,
   getProject,
+  listClients,
   listProjects,
+  resolveClientByShortId,
   type ProjectRow,
 } from "@agency-os/db";
-import { matchesShortId, extractShortId, projectProgress } from "@agency-os/domain";
+import { extractShortId, projectProgress } from "@agency-os/domain";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { projectHref } from "@/lib/project-paths";
@@ -64,29 +66,29 @@ export default async function ClienteSpacePage({
     }
   }
 
-  // Resolver el cliente por el código corto del segmento.
-  const { data: clientRows } = await db
-    .from("clients")
-    .select("id, name, company, logo_path")
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null);
-  const client = (clientRows ?? []).find((c) => matchesShortId(c.id, extractShortId(params.cliente)));
+  // Resolver el cliente por el código corto del segmento. `listClients` (para
+  // el selector de "todos los clientes") no depende del cliente resuelto —
+  // corre en paralelo en vez de esperar a que termine la resolución.
+  const [client, clientsPage] = await Promise.all([
+    resolveClientByShortId(db, organizationId, extractShortId(params.cliente)),
+    listClients(db, { pageSize: 200 }),
+  ]);
   if (!client) redirect("/proyectos");
 
   const logoUrl = client.logo_path
     ? (db.storage.from("client-logos").getPublicUrl(client.logo_path).data.publicUrl ?? null)
     : null;
 
-  const projects = await listProjects(db, organizationId, {
-    search: searchParams.q,
-    clientId: client.id,
-  });
-
   // KPIs del cliente = sobre TODOS sus proyectos (no el subconjunto filtrado por
-  // búsqueda). Si no hay búsqueda, reutilizamos `projects` para no consultar dos veces.
-  const allClientProjects = searchParams.q
-    ? await listProjects(db, organizationId, { clientId: client.id })
-    : projects;
+  // búsqueda). Si hay búsqueda, se corre aparte en paralelo con la lista
+  // filtrada en vez de esperar a que esta termine.
+  const [projects, allClientProjectsIfSearch] = await Promise.all([
+    listProjects(db, organizationId, { search: searchParams.q, clientId: client.id }),
+    searchParams.q
+      ? listProjects(db, organizationId, { clientId: client.id })
+      : Promise.resolve(null),
+  ]);
+  const allClientProjects = allClientProjectsIfSearch ?? projects;
   const tasksTotal = allClientProjects.reduce((n, p) => n + p.tasks_count, 0);
   const tasksDone = allClientProjects.reduce((n, p) => n + p.tasks_done_count, 0);
   const activeCount = allClientProjects.filter(
@@ -121,7 +123,7 @@ export default async function ClienteSpacePage({
   };
   // Todos los clientes de la org: el modal de alta preselecciona este cliente
   // pero permite crear a cualquier otro (selector editable, ya no bloqueado).
-  const allClients: ClientOption[] = (clientRows ?? []).map((c) => ({
+  const allClients: ClientOption[] = clientsPage.rows.map((c) => ({
     id: c.id,
     name: c.name,
     company: c.company,

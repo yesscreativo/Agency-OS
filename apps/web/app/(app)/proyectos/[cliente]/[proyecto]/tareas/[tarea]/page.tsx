@@ -1,7 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { getWorkItem, listActivity, listComments, listOrgUsers, listTimeEntries } from "@agency-os/db";
-import { extractShortId, matchesShortId } from "@agency-os/domain";
+import {
+  getWorkItem,
+  listActivity,
+  listComments,
+  listOrgUsers,
+  listTimeEntries,
+  resolveProjectByShortId,
+  resolveTaskByShortId,
+} from "@agency-os/db";
+import { extractShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -47,50 +55,58 @@ export default async function WorkItemDetailPage({
   const db = await getSupabaseServerClient();
 
   // Resolver el proyecto por el código corto del segmento (dentro de la org).
-  const { data: projRows } = organizationId
-    ? await db
-        .from("work_items")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("type", "project")
-        .is("deleted_at", null)
-    : { data: [] as { id: string }[] };
-  const projectId = (projRows ?? []).find((r) =>
-    matchesShortId(r.id, extractShortId(params.proyecto)),
-  )?.id;
+  const projectId = organizationId
+    ? await resolveProjectByShortId(db, organizationId, extractShortId(params.proyecto))
+    : null;
   if (!projectId) notFound();
 
   // Resolver la tarea por su código corto, acotando a ese proyecto.
-  const { data: taskRows } = await db
-    .from("work_items")
-    .select("id")
-    .eq("project_id", projectId)
-    .in("type", ["task", "subtask"])
-    .is("deleted_at", null);
-  const taskId = (taskRows ?? []).find((r) => matchesShortId(r.id, extractShortId(params.tarea)))
-    ?.id;
+  const taskId = await resolveTaskByShortId(db, projectId, extractShortId(params.tarea));
   if (!taskId) notFound();
 
-  const task = await getWorkItem(db, taskId);
+  // Todo lo de abajo depende solo de taskId/projectId/organizationId, no entre
+  // sí (ninguna necesita el `task` completo) — antes se esperaba en secuencia
+  // (7+ round-trips uno detrás del otro), ahora corre en paralelo.
+  const [
+    task,
+    orgUserRows,
+    attachmentsResult,
+    statusRows,
+    commentRows,
+    activityRows,
+    commentAttachmentsResult,
+    timeEntryRows,
+    activeTimer,
+  ] = await Promise.all([
+    getWorkItem(db, taskId),
+    organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
+    listWorkItemAttachments(taskId),
+    // `getWorkItem` no trae las columnas del tablero; se consultan aparte para
+    // el selector de Estado.
+    (async () => {
+      const { data } = await db
+        .from("work_item_statuses")
+        .select("id, label, color, is_done")
+        .eq("project_id", projectId)
+        .order("sort_order");
+      return data ?? [];
+    })(),
+    listComments(db, taskId),
+    listActivity(db, taskId),
+    listCommentAttachmentsForWorkItem(taskId),
+    listTimeEntries(db, taskId),
+    getActiveTimerAction(),
+  ]);
   if (!task || task.organization_id !== organizationId || task.project_id !== projectId) {
     notFound();
   }
 
-  const orgUserRows = organizationId ? await listOrgUsers(db, organizationId) : [];
-  const attachmentsResult = await listWorkItemAttachments(taskId);
   const attachments =
     "attachments" in attachmentsResult && attachmentsResult.attachments
       ? attachmentsResult.attachments
       : [];
 
-  // `getWorkItem` no trae las columnas del tablero; se consultan aquí para el
-  // selector de Estado.
-  const { data: statusRows } = await db
-    .from("work_item_statuses")
-    .select("id, label, color, is_done")
-    .eq("project_id", projectId)
-    .order("sort_order");
-  const boardStatuses: BoardStatus[] = (statusRows ?? []).map((s) => ({
+  const boardStatuses: BoardStatus[] = statusRows.map((s) => ({
     id: s.id,
     label: s.label,
     color: s.color,
@@ -125,15 +141,6 @@ export default async function WorkItemDetailPage({
 
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
 
-  // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
-  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows, activeTimer] =
-    await Promise.all([
-      listComments(db, taskId),
-      listActivity(db, taskId),
-      listCommentAttachmentsForWorkItem(taskId),
-      listTimeEntries(db, taskId),
-      getActiveTimerAction(),
-    ]);
   const commentAttachments =
     "attachments" in commentAttachmentsResult && commentAttachmentsResult.attachments
       ? commentAttachmentsResult.attachments

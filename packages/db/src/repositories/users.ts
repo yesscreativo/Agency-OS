@@ -25,6 +25,7 @@ type OrgUserRow = {
   id: string;
   person_id: string;
   person: {
+    organization_id: string;
     full_name: string;
     email: string | null;
     avatar_url: string | null;
@@ -39,18 +40,34 @@ type OrgUserRow = {
 };
 
 /** Usuarios (con login) del org y sus roles por módulo. Un usuario "pendiente"
- * es el que no tiene ninguna asignación. RLS limita a la organización. */
+ * es el que no tiene ninguna asignación en ningún lado todavía.
+ *
+ * La query no puede filtrar `.eq("organization_id", ...)` directamente:
+ * `users` no tiene esa columna, y filtrar por la relación embebida
+ * (`user_roles.organization_id`) excluiría a los pendientes, que no tienen
+ * ninguna fila en `user_roles`. Por eso se trae todo lo que permite RLS (que
+ * hoy cubre "cualquiera de mis organizaciones", no el `organizationId`
+ * puntual recibido) y se recorta en memoria replicando las mismas dos
+ * condiciones de `users_select` (011_pending_users_visibility.sql): tiene rol
+ * en ESTA organización, o está pendiente y su `people.organization_id` es
+ * ESTA organización. Sin este filtro, un usuario con acceso a más de una
+ * organización vería acá también usuarios de sus otras orgs. */
 export async function listOrgUsers(db: Db, organizationId: string): Promise<OrgUser[]> {
   const { data, error } = await db
     .from("users")
     .select(
-      "id, person_id, person:people!inner(full_name, email, avatar_url, area_id, area:areas(id, name)), user_roles(id, organization_id, roles(code, name, module_code))",
+      "id, person_id, person:people!inner(organization_id, full_name, email, avatar_url, area_id, area:areas(id, name)), user_roles(id, organization_id, roles(code, name, module_code))",
     )
     .is("deleted_at", null)
     .returns<OrgUserRow[]>();
   if (error) throw error;
 
   return (data ?? [])
+    .filter((row) => {
+      const hasRoleHere = row.user_roles.some((ur) => ur.organization_id === organizationId && ur.roles);
+      const isPendingHere = row.user_roles.length === 0 && row.person?.organization_id === organizationId;
+      return hasRoleHere || isPendingHere;
+    })
     .map((row) => ({
       id: row.id,
       personId: row.person_id,

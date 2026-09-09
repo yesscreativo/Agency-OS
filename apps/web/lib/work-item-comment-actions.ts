@@ -16,7 +16,7 @@ import {
 import { parseMentions, validateComment } from "@agency-os/domain";
 import { getCurrentUser, hasPermission, type CurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { projectHref, taskHref } from "@/lib/project-paths";
+import { resolveTaskLink } from "@/lib/resolve-task-link";
 
 export type CommentResult =
   | { comment: CommentWithAuthor; error?: never }
@@ -56,29 +56,6 @@ async function loadWorkItemForComment(
   if (error) throw error;
   if (!data || data.organization_id !== organizationId) return null;
   return { id: data.id, title: data.title, projectId: data.project_id };
-}
-
-/** Ruta canónica de la tarea (con slugs+código corto) para enlazar la
- * notificación de mención. Resuelve proyecto → cliente. Best-effort: si algo
- * falta devuelve null y la campana cae a /notificaciones. */
-async function resolveTaskLink(db: Db, projectId: string, task: { id: string; title: string }) {
-  const { data: project } = await db
-    .from("work_items")
-    .select("id, title, client_id")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (!project) return null;
-  let client: { id: string; name: string } | null = null;
-  if (project.client_id) {
-    const { data: c } = await db
-      .from("clients")
-      .select("id, name")
-      .eq("id", project.client_id)
-      .maybeSingle();
-    if (c) client = { id: c.id, name: c.name };
-  }
-  const base = projectHref(client, { id: project.id, title: project.title });
-  return taskHref(base, task);
 }
 
 export interface CreateCommentInput {
@@ -142,15 +119,18 @@ export async function createComment(input: CreateCommentInput): Promise<CommentR
       console.error("recordActivity:comment", error);
     }
 
+    // Ruta real de la tarea (con slugs) — se usa para notificar menciones y
+    // para revalidar solo esa página en vez de toda la sección /proyectos.
+    const link = await resolveTaskLink(db, workItem.projectId, {
+      id: workItem.id,
+      title: workItem.title,
+    });
+
     // Notificar a los mencionados (menos al propio autor) con service_role,
     // porque la RLS de notifications no permite insertar filas de otros usuarios.
     const targets = mentionedIds.filter((uid) => uid !== auth.user.id);
     if (targets.length > 0) {
       try {
-        const link = await resolveTaskLink(db, workItem.projectId, {
-          id: workItem.id,
-          title: workItem.title,
-        });
         const excerpt = body.length > 140 ? `${body.slice(0, 140)}…` : body;
         const service = createSupabaseServiceRoleClient();
         await createNotifications(
@@ -170,8 +150,7 @@ export async function createComment(input: CreateCommentInput): Promise<CommentR
       }
     }
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${workItem.projectId}`);
+    revalidatePath(link ?? "/proyectos");
     return { comment };
   } catch (error) {
     console.error("createComment", error);
@@ -204,7 +183,11 @@ export async function editComment(input: EditCommentInput): Promise<ActionResult
     }
 
     await updateCommentBody(db, input.id, body);
-    revalidatePath("/proyectos");
+    const workItem = await loadWorkItemForComment(db, comment.work_item_id, auth.organizationId);
+    const link = workItem
+      ? await resolveTaskLink(db, workItem.projectId, { id: workItem.id, title: workItem.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("editComment", error);
@@ -228,7 +211,11 @@ export async function deleteComment(id: string): Promise<ActionResult> {
     }
 
     await softDeleteComment(db, id);
-    revalidatePath("/proyectos");
+    const workItem = await loadWorkItemForComment(db, comment.work_item_id, auth.organizationId);
+    const link = workItem
+      ? await resolveTaskLink(db, workItem.projectId, { id: workItem.id, title: workItem.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteComment", error);

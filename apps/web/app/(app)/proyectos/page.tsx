@@ -83,33 +83,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
   const todayStr = addDays(weekStart, offsetFromMonday);
   const tomorrowStr = addDays(todayStr, 1);
 
-  const agenda = organizationId
-    ? await listMyAgenda(db, {
-        organizationId,
-        userId: user.id,
-        today: todayStr,
-        tomorrow: tomorrowStr,
-        weekStart,
-        weekEnd,
-      })
-    : await Promise.resolve<{
-        todayCount: number;
-        tomorrowCount: number;
-        overdue: AgendaTask[];
-        byDate: Record<string, AgendaTask[]>;
-        undated: AgendaTask[];
-      }>({ todayCount: 0, tomorrowCount: 0, overdue: [], byDate: {}, undated: [] });
-
-  const days: AgendaDay[] = DAY_LABELS.map((label, i) => {
-    const date = addDays(weekStart, i);
-    return { date, label, tasks: rankAgendaTasks((agenda.byDate[date] ?? []).map(toAgendaTaskView)) };
-  });
-  const overdueTasks = rankAgendaTasks(agenda.overdue.map(toAgendaTaskView));
-  const undatedTasks = agenda.undated.map(toAgendaTaskView);
-
-  const managedAreas = organizationId ? await listAreasManagedBy(db, user.id) : [];
-  let teamLoad: { overloadedCount: number; totalCount: number } | null = null;
-  if (managedAreas.length > 0) {
+  async function computeTeamLoad(userId: string): Promise<{ overloadedCount: number; totalCount: number } | null> {
+    if (!organizationId) return null;
+    const managedAreas = await listAreasManagedBy(db, userId);
+    if (managedAreas.length === 0) return null;
     // Cada área tiene su propio umbral de "carga alta" (editable en /mi-area),
     // así que se calcula por área y se suma — no se puede usar un único corte
     // global si un gerente administra más de un área con umbrales distintos.
@@ -117,23 +94,52 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
       managedAreas.map(async (area) => {
         const peopleInArea = await listPeopleInArea(db, area.id);
         const userIds = peopleInArea.map((p) => p.userId).filter((id): id is string => Boolean(id));
-        const counts = await countOpenTasksByAssignee(db, { organizationId: organizationId!, userIds });
+        const counts = await countOpenTasksByAssignee(db, { organizationId, userIds });
         const overloaded = userIds.filter((id) => (counts[id] ?? 0) > area.overload_threshold).length;
         return { overloaded, total: userIds.length };
       }),
     );
-    teamLoad = {
+    return {
       overloadedCount: perArea.reduce((sum, r) => sum + r.overloaded, 0),
       totalCount: perArea.reduce((sum, r) => sum + r.total, 0),
     };
   }
 
-  const [projects, clientsPage] = await Promise.all([
+  // Las tres ramas (agenda, carga del equipo, proyectos+clientes) son
+  // independientes entre sí — antes se esperaban en secuencia (4-5 round-trips
+  // a Supabase uno detrás del otro); ahora corren en paralelo.
+  const [agenda, teamLoad, [projects, clientsPage]] = await Promise.all([
     organizationId
-      ? listProjects(db, organizationId, { search: searchParams.q })
-      : Promise.resolve<ProjectRow[]>([]),
-    listClients(db, { pageSize: 200 }),
+      ? listMyAgenda(db, {
+          organizationId,
+          userId: user.id,
+          today: todayStr,
+          tomorrow: tomorrowStr,
+          weekStart,
+          weekEnd,
+        })
+      : Promise.resolve<{
+          todayCount: number;
+          tomorrowCount: number;
+          overdue: AgendaTask[];
+          byDate: Record<string, AgendaTask[]>;
+          undated: AgendaTask[];
+        }>({ todayCount: 0, tomorrowCount: 0, overdue: [], byDate: {}, undated: [] }),
+    computeTeamLoad(user.id),
+    Promise.all([
+      organizationId
+        ? listProjects(db, organizationId, { search: searchParams.q })
+        : Promise.resolve<ProjectRow[]>([]),
+      listClients(db, { pageSize: 200 }),
+    ]),
   ]);
+
+  const days: AgendaDay[] = DAY_LABELS.map((label, i) => {
+    const date = addDays(weekStart, i);
+    return { date, label, tasks: rankAgendaTasks((agenda.byDate[date] ?? []).map(toAgendaTaskView)) };
+  });
+  const overdueTasks = rankAgendaTasks(agenda.overdue.map(toAgendaTaskView));
+  const undatedTasks = agenda.undated.map(toAgendaTaskView);
 
   const rows: ProjectListRow[] = projects.map((p) => ({
     id: p.id,

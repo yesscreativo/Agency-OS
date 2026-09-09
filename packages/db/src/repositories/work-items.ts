@@ -636,3 +636,42 @@ export async function listMyAgenda(
 
   return { todayCount, tomorrowCount, overdue, byDate, undated };
 }
+
+/** Resuelve un proyecto por su código corto de URL (`short_id`, ver migración
+ * 038) dentro de la organización. Reemplaza el patrón anterior de traer todos
+ * los proyectos de la org y filtrar en JS con `matchesShortId`. */
+export async function resolveProjectByShortId(
+  db: Db,
+  organizationId: string,
+  code: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("work_items")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("type", "project")
+    .eq("short_id", code.toLowerCase())
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
+/** Resuelve una tarea/subtarea por su código corto de URL, acotado a un
+ * proyecto puntual. Mismo motivo que `resolveProjectByShortId`. */
+export async function resolveTaskByShortId(
+  db: Db,
+  projectId: string,
+  code: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("work_items")
+    .select("id")
+    .eq("project_id", projectId)
+    .in("type", ["task", "subtask"])
+    .eq("short_id", code.toLowerCase())
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
