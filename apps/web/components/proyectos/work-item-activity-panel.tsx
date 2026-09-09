@@ -40,7 +40,9 @@ export interface PanelComment {
 export interface PanelActivity {
   id: string;
   eventType: string;
+  actorId: string | null;
   actorName: string | null;
+  actorAvatarUrl: string | null;
   payload: Record<string, unknown>;
   createdAt: string;
 }
@@ -78,6 +80,10 @@ function activityText(a: PanelActivity, usersById: Map<string, string>): string 
       const mins = Number(p.minutes ?? 0);
       return mins > 0 ? `registró ${formatDuration(mins)}` : "registró tiempo";
     }
+    case "checklist_item_added":
+      return p.label ? `agregó "${String(p.label)}" a la checklist` : "agregó un ítem a la checklist";
+    case "checklist_item_completed":
+      return p.label ? `completó "${String(p.label)}"` : "completó un ítem de la checklist";
     default:
       return a.eventType;
   }
@@ -525,7 +531,12 @@ export function WorkItemActivityPanel({
             <ul className="space-y-3">
               {activity.map((a) => (
                 <li key={a.id} className="flex gap-2.5 text-sm">
-                  <Avatar initials={initialsOf(a.actorName ?? "?")} size="xs" tone="neutral" />
+                  <Avatar
+                    initials={initialsOf(a.actorName ?? "?")}
+                    src={a.actorAvatarUrl}
+                    size="xs"
+                    tone="neutral"
+                  />
                   <div className="min-w-0">
                     <span className="text-ink">
                       <span className="font-semibold">{a.actorName ?? "Alguien"}</span>{" "}

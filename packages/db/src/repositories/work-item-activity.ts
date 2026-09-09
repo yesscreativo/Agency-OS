@@ -7,22 +7,27 @@ export type ActivityRow = Tables<"work_item_activity">;
 export interface ActivityActor {
   id: string;
   full_name: string;
+  avatar_url: string | null;
 }
 
 export type ActivityWithActor = ActivityRow & { actor: ActivityActor | null };
 
 const ACTIVITY_SELECT =
-  "*, actor:users!work_item_activity_actor_user_id_fkey(id, person:people(full_name))";
+  "*, actor:users!work_item_activity_actor_user_id_fkey(id, person:people(full_name, avatar_url))";
 
 type ActivitySelectRow = ActivityRow & {
-  actor: { id: string; person: { full_name: string } | null } | null;
+  actor: { id: string; person: { full_name: string; avatar_url: string | null } | null } | null;
 };
 
 function toActivity(row: ActivitySelectRow): ActivityWithActor {
   return {
     ...row,
     actor: row.actor
-      ? { id: row.actor.id, full_name: row.actor.person?.full_name ?? "—" }
+      ? {
+          id: row.actor.id,
+          full_name: row.actor.person?.full_name ?? "—",
+          avatar_url: row.actor.person?.avatar_url ?? null,
+        }
       : null,
   };
 }

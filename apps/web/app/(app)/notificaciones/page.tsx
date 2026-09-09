@@ -53,11 +53,15 @@ export default async function NotificationsPage() {
                 >
                   <span
                     className={`mt-1.5 h-2 w-2 shrink-0 rounded-pill ${
-                      n.read_at ? "bg-transparent" : "bg-green"
+                      n.read_at ? "bg-transparent" : n.type === "overdue" ? "bg-danger" : "bg-green"
                     }`}
                   />
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">{n.title}</div>
+                    <div
+                      className={`text-sm font-semibold ${n.type === "overdue" ? "text-danger" : ""}`}
+                    >
+                      {n.title}
+                    </div>
                     {n.body && <div className="text-[13px] text-muted">{n.body}</div>}
                     <div className="mt-1 text-xs text-faint">{formatDate(n.created_at)}</div>
                   </div>

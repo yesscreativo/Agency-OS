@@ -7,6 +7,7 @@ import { fetchNotificationState, markNotificationsRead } from "@/lib/notificatio
 
 export interface NotificationItem {
   id: string;
+  type: string;
   title: string;
   body: string | null;
   quoteId: string | null;
@@ -233,11 +234,17 @@ export function NotificationBell({
                       >
                         <span
                           className={`mt-1.5 h-2 w-2 shrink-0 rounded-pill ${
-                            n.readAt ? "bg-transparent" : "bg-green"
+                            n.readAt ? "bg-transparent" : n.type === "overdue" ? "bg-danger" : "bg-green"
                           }`}
                         />
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold">{n.title}</span>
+                          <span
+                            className={`block truncate text-sm font-semibold ${
+                              n.type === "overdue" ? "text-danger" : ""
+                            }`}
+                          >
+                            {n.title}
+                          </span>
                           {n.body && (
                             <span className="block truncate text-[13px] text-muted">{n.body}</span>
                           )}

@@ -8,9 +8,9 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, Button, FieldError, Label, Textarea } from "@agency-os/ui";
+import { Badge, Button, FieldError, Label, Modal, Textarea } from "@agency-os/ui";
 import { sumMinutes, type WorkItemPriority } from "@agency-os/domain";
-import type { TimeEntryDTO } from "@/lib/time-tracking-actions";
+import type { ActiveTimerDTO, TimeEntryDTO } from "@/lib/time-tracking-actions";
 import {
   deleteWorkItem,
   deleteWorkItemAttachment,
@@ -29,6 +29,7 @@ import {
   type PanelComment,
 } from "./work-item-activity-panel";
 import { TimeTrackingPanel } from "./time-tracking-panel";
+import { ChecklistPanel, type ChecklistItemView } from "./checklist-panel";
 
 export interface DetailAssignee {
   id: string;
@@ -71,6 +72,8 @@ export function WorkItemDetail({
   comments,
   activity,
   timeEntries,
+  checklistItems,
+  activeTimer,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -87,6 +90,9 @@ export function WorkItemDetail({
   comments: PanelComment[];
   activity: PanelActivity[];
   timeEntries: TimeEntryDTO[];
+  checklistItems: ChecklistItemView[];
+  /** Timer activo del usuario (en esta tarea u otra), para el cronómetro. */
+  activeTimer?: ActiveTimerDTO | null;
 }) {
   const router = useRouter();
   const loggedMinutes = sumMinutes(timeEntries);
@@ -98,6 +104,7 @@ export function WorkItemDetail({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [creatingSubtask, setCreatingSubtask] = useState(false);
 
@@ -226,15 +233,24 @@ export function WorkItemDetail({
           canManage={canManage}
           canAssign={canAssign}
           loggedMinutes={loggedMinutes}
+          onOpenTimeTracking={() => setTimeTrackingOpen(true)}
         />
 
-        <TimeTrackingPanel
-          workItemId={task.id}
-          currentUserId={currentUserId}
-          canManage={canManage}
-          entries={timeEntries}
-          orgUsers={orgUsers}
-        />
+        <Modal
+          open={timeTrackingOpen}
+          onClose={() => setTimeTrackingOpen(false)}
+          title="Tiempo registrado"
+          size="lg"
+        >
+          <TimeTrackingPanel
+            workItemId={task.id}
+            currentUserId={currentUserId}
+            canManage={canManage}
+            entries={timeEntries}
+            orgUsers={orgUsers}
+            activeTimer={activeTimer}
+          />
+        </Modal>
 
         <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <div className="flex items-center justify-between">
@@ -254,6 +270,12 @@ export function WorkItemDetail({
           />
           {saved && !isPending && <span className="mt-1 block text-sm text-green">Guardado ✓</span>}
         </section>
+
+        <ChecklistPanel
+          workItemId={task.id}
+          items={checklistItems}
+          canWrite={canManage || task.assignees.some((a) => a.id === currentUserId)}
+        />
 
         {task.type === "task" && (
           <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">

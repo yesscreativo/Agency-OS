@@ -17,19 +17,22 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 /** Sidebar de Spaces del módulo Proyectos: filtro de clientes + Todos/Activos/Míos
- * + lista de clientes (con nº de proyectos) que navega a cada space. El wireframe
- * también prevé "Carga del equipo"/"Mis tiempos" (Fase C / RRHH): van como
- * placeholders deshabilitados. */
+ * + lista de clientes (con nº de proyectos) que navega a cada space. "Carga del
+ * equipo" (antes acá, scope=team) se eliminó — vive en /mi-area con el alcance
+ * correcto (gerente del área). */
 export function ProjectsSidebar({
   clients,
   clientsForCreate,
   canManage = false,
+  canManageAccess = false,
 }: {
   clients: ClientSpaceRow[];
   /** Todos los clientes de la org para el modal global de alta de proyecto. */
   clientsForCreate: ClientOption[];
   /** Solo con project.manage se muestra el botón global de "Nuevo proyecto". */
   canManage?: boolean;
+  /** Solo con project.manage_access se muestra el link "Accesos". */
+  canManageAccess?: boolean;
 }) {
   const pathname = usePathname();
   const [query, setQuery] = useState("");
@@ -126,8 +129,28 @@ export function ProjectsSidebar({
       </div>
 
       <div className="mt-5 space-y-0.5 border-t border-line pt-4">
-        <SidebarPlaceholder label="Carga del equipo" />
-        <SidebarPlaceholder label="Mis tiempos" />
+        {canManageAccess && (
+          <a
+            href="/proyectos/usuarios"
+            className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
+              pathname === "/proyectos/usuarios"
+                ? "bg-green font-semibold text-green-ink"
+                : "text-muted hover:bg-surface-2 hover:text-ink"
+            }`}
+          >
+            Accesos
+          </a>
+        )}
+        <a
+          href="/proyectos/tiempos"
+          className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
+            pathname === "/proyectos/tiempos"
+              ? "bg-green font-semibold text-green-ink"
+              : "text-muted hover:bg-surface-2 hover:text-ink"
+          }`}
+        >
+          Mis tiempos
+        </a>
       </div>
 
       {canManage && (
@@ -138,21 +161,5 @@ export function ProjectsSidebar({
         />
       )}
     </aside>
-  );
-}
-
-/** Item deshabilitado del footer: función que llega con módulos futuros
- * (time tracking / capacidad). Visible pero sin navegación. */
-function SidebarPlaceholder({ label }: { label: string }) {
-  return (
-    <div
-      className="flex cursor-default items-center justify-between gap-2 rounded-lg px-3.5 py-2 text-sm text-faint"
-      title="Próximamente"
-    >
-      <span>{label}</span>
-      <span className="rounded-pill border border-line px-1.5 text-[10px] uppercase tracking-wide">
-        pronto
-      </span>
-    </div>
   );
 }

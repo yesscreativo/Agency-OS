@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  deleteActiveTimer,
   deleteTimeEntry,
+  getActiveTimer,
   getTimeEntry,
   insertTimeEntry,
   recordActivity,
   updateTimeEntry,
+  upsertActiveTimer,
 } from "@agency-os/db";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -145,5 +148,98 @@ export async function deleteTimeEntryAction(id: string): Promise<ActionResult> {
   } catch (error) {
     console.error("deleteTimeEntryAction", error);
     return { error: "No se pudo borrar la entrada. Intenta de nuevo." };
+  }
+}
+
+export type ActiveTimerDTO = { workItemId: string; startedAt: string };
+
+/** Detiene el timer activo del usuario (si existe), creando su entrada de
+ * tiempo (source='timer') si acumuló al menos 1 minuto. Devuelve los minutos
+ * registrados (0 si no había timer o duró menos de 1 minuto). */
+async function stopActiveTimer(db: Db, userId: string, organizationId: string): Promise<number> {
+  const active = await getActiveTimer(db, userId);
+  if (!active) return 0;
+  const minutes = Math.round((Date.now() - new Date(active.started_at).getTime()) / 60000);
+  const projectId = await workItemProjectId(db, active.work_item_id, organizationId);
+  if (minutes >= 1 && projectId) {
+    await insertTimeEntry(db, {
+      organization_id: organizationId,
+      work_item_id: active.work_item_id,
+      project_id: projectId,
+      user_id: userId,
+      minutes,
+      spent_on: new Date().toISOString().slice(0, 10),
+      source: "timer",
+    });
+    try {
+      await recordActivity(db, {
+        orgId: organizationId,
+        workItemId: active.work_item_id,
+        actorUserId: userId,
+        eventType: "time_logged",
+        payload: { minutes, source: "timer" },
+      });
+    } catch (e) {
+      console.error("stopActiveTimer:activity", e);
+    }
+  }
+  await deleteActiveTimer(db, userId);
+  return minutes >= 1 ? minutes : 0;
+}
+
+/** Inicia el cronómetro en una tarea. Si el usuario ya tenía uno corriendo en
+ * otra tarea, lo detiene primero (crea su entrada) — auto-stop del previo. */
+export async function startTimer(workItemId: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) return { error: "No tienes permiso." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+  try {
+    const db = await getSupabaseServerClient();
+    const projectId = await workItemProjectId(db, workItemId, organizationId);
+    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+    await stopActiveTimer(db, user.id, organizationId);
+    await upsertActiveTimer(db, {
+      user_id: user.id,
+      organization_id: organizationId,
+      work_item_id: workItemId,
+    });
+    revalidatePath("/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("startTimer", error);
+    return { error: "No se pudo iniciar el cronómetro. Intenta de nuevo." };
+  }
+}
+
+export async function stopTimer(): Promise<{ minutes: number; error?: never } | { minutes?: never; error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+  try {
+    const db = await getSupabaseServerClient();
+    const minutes = await stopActiveTimer(db, user.id, organizationId);
+    revalidatePath("/proyectos");
+    return { minutes };
+  } catch (error) {
+    console.error("stopTimer", error);
+    return { error: "No se pudo detener el cronómetro. Intenta de nuevo." };
+  }
+}
+
+/** Timer activo del usuario (o null), para hidratar la UI al cargar la tarea. */
+export async function getActiveTimerAction(): Promise<ActiveTimerDTO | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  try {
+    const db = await getSupabaseServerClient();
+    const active = await getActiveTimer(db, user.id);
+    if (!active) return null;
+    return { workItemId: active.work_item_id, startedAt: active.started_at };
+  } catch (error) {
+    console.error("getActiveTimerAction", error);
+    return null;
   }
 }

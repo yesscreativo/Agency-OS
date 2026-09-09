@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentWeekRange,
   dateRangeLabel,
   daysOverdue,
   escapeHtml,
@@ -180,5 +181,17 @@ describe("escapeHtml", () => {
     expect(escapeHtml(null)).toBe("");
     expect(escapeHtml(undefined)).toBe("");
     expect(escapeHtml("")).toBe("");
+  });
+});
+
+describe("currentWeekRange", () => {
+  it("domingo (2026-09-06) -> semana que empezó el lunes 2026-08-31", () => {
+    expect(currentWeekRange(new Date(2026, 8, 6))).toEqual({ from: "2026-08-31", to: "2026-09-06" });
+  });
+  it("miércoles (2026-09-02) -> misma semana lunes a domingo", () => {
+    expect(currentWeekRange(new Date(2026, 8, 2))).toEqual({ from: "2026-08-31", to: "2026-09-06" });
+  });
+  it("lunes (2026-08-31) -> desde ese mismo lunes", () => {
+    expect(currentWeekRange(new Date(2026, 7, 31))).toEqual({ from: "2026-08-31", to: "2026-09-06" });
   });
 });

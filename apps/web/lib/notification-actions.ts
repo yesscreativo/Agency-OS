@@ -8,6 +8,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 export interface NotificationState {
   items: {
     id: string;
+    type: string;
     title: string;
     body: string | null;
     quoteId: string | null;
@@ -33,6 +34,7 @@ export async function fetchNotificationState(): Promise<NotificationState | null
   return {
     items: rows.map((n) => ({
       id: n.id,
+      type: n.type,
       title: n.title,
       body: n.body,
       quoteId: n.quote_id,

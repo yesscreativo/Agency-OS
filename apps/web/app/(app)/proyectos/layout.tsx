@@ -30,6 +30,7 @@ export default async function ProyectosLayout({ children }: { children: React.Re
   const organizationId = user.organizationIds[0];
   const db = await getSupabaseServerClient();
   const canManage = hasPermission(user, "project.manage");
+  const canManageAccess = hasPermission(user, "project.manage_access");
   const [clients, clientsPage] = await Promise.all([
     organizationId ? listClientSpaces(db, organizationId, user.id) : Promise.resolve([]),
     canManage ? listClients(db, { pageSize: 200 }) : Promise.resolve({ rows: [] }),
@@ -42,7 +43,12 @@ export default async function ProyectosLayout({ children }: { children: React.Re
 
   return (
     <div className="flex flex-col gap-8 sm:flex-row">
-      <ProjectsSidebar clients={clients} clientsForCreate={clientsForCreate} canManage={canManage} />
+      <ProjectsSidebar
+        clients={clients}
+        clientsForCreate={clientsForCreate}
+        canManage={canManage}
+        canManageAccess={canManageAccess}
+      />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

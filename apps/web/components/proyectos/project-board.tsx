@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
-import { formatDate, isOverdue, type WorkItemPriority } from "@agency-os/domain";
+import { formatDate, formatDuration, isOverdue, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
 import { taskHref } from "@/lib/project-paths";
 import { WorkItemEditor } from "./work-item-editor";
@@ -32,6 +32,8 @@ export interface BoardTask {
   startDate: string | null;
   dueDate: string | null;
   assignees: BoardAssignee[];
+  checklistCompleted: number;
+  checklistTotal: number;
 }
 
 export interface BoardOrgUser {
@@ -95,6 +97,7 @@ export function ProjectBoard({
   orgUsers,
   canManage,
   canAssign,
+  minutesByTask,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -105,6 +108,8 @@ export function ProjectBoard({
   orgUsers: BoardOrgUser[];
   canManage: boolean;
   canAssign: boolean;
+  /** Minutos registrados por work_item_id (columna de tiempo en la Lista). */
+  minutesByTask?: Record<string, number>;
 }) {
   const router = useRouter();
   const [view, setView] = useState<"board" | "list" | "statuses">("board");
@@ -312,6 +317,11 @@ export function ProjectBoard({
                                 {subCount} subtarea{subCount === 1 ? "" : "s"}
                               </span>
                             )}
+                            {t.checklistTotal > 0 && (
+                              <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
+                                ✓ {t.checklistCompleted}/{t.checklistTotal}
+                              </span>
+                            )}
                           </div>
                           <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
                         </div>
@@ -335,6 +345,7 @@ export function ProjectBoard({
           childrenByParent={childrenByParent}
           onOpen={openTask}
           avatarByUserId={avatarByUserId}
+          minutesByTask={minutesByTask}
         />
       )}
 
@@ -362,12 +373,14 @@ function ListView({
   childrenByParent,
   onOpen,
   avatarByUserId,
+  minutesByTask,
 }: {
   statuses: BoardStatus[];
   topTasks: BoardTask[];
   childrenByParent: Map<string, BoardTask[]>;
   onOpen: (task: { id: string; title: string }) => void;
   avatarByUserId?: Map<string, string | null>;
+  minutesByTask?: Record<string, number>;
 }) {
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
@@ -413,6 +426,16 @@ function ListView({
                     {formatDate(t.dueDate)}
                   </span>
                 )}
+                {Boolean(minutesByTask?.[t.id]) && (
+                  <span className="font-mono text-[12px] tabular-nums text-muted">
+                    {formatDuration(minutesByTask![t.id])}
+                  </span>
+                )}
+                {t.checklistTotal > 0 && (
+                  <span className="font-mono text-[12px] tabular-nums text-muted">
+                    ✓ {t.checklistCompleted}/{t.checklistTotal}
+                  </span>
+                )}
                 <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
               </div>
             </button>
@@ -439,6 +462,16 @@ function ListView({
                         className={`text-[12px] ${cOverdue ? "font-semibold text-danger" : "text-muted"}`}
                       >
                         {formatDate(c.dueDate)}
+                      </span>
+                    )}
+                    {Boolean(minutesByTask?.[c.id]) && (
+                      <span className="font-mono text-[12px] tabular-nums text-muted">
+                        {formatDuration(minutesByTask![c.id])}
+                      </span>
+                    )}
+                    {c.checklistTotal > 0 && (
+                      <span className="font-mono text-[12px] tabular-nums text-muted">
+                        ✓ {c.checklistCompleted}/{c.checklistTotal}
                       </span>
                     )}
                     <AssigneeAvatars assignees={c.assignees} avatarByUserId={avatarByUserId} />

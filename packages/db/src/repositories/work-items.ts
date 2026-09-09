@@ -133,6 +133,39 @@ export async function countOverdueTasksInProjects(
   return overdue;
 }
 
+/** Cuenta tareas/subtareas ABIERTAS (no "hecho", no borradas) asignadas a cada
+ * usuario de `userIds`, sin importar el proyecto — para "Carga del equipo". */
+export async function countOpenTasksByAssignee(
+  db: Db,
+  opts: { organizationId: string; userIds: string[] },
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  if (opts.userIds.length === 0) return out;
+  const idSet = new Set(opts.userIds);
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("work_items")
+      .select(
+        "id, status:work_item_statuses!work_items_status_fk(is_done), assignees:work_item_assignees(user_id)",
+      )
+      .eq("organization_id", opts.organizationId)
+      .in("type", ["task", "subtask"])
+      .is("deleted_at", null)
+      .range(from, from + pageSize - 1)
+      .returns<{ id: string; status: { is_done: boolean } | null; assignees: { user_id: string }[] }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.status?.is_done) continue;
+      for (const a of row.assignees) {
+        if (idSet.has(a.user_id)) out[a.user_id] = (out[a.user_id] ?? 0) + 1;
+      }
+    }
+    if (!data || data.length < pageSize) break;
+  }
+  return out;
+}
+
 export type WorkItemAssigneeRow = {
   user_id: string;
   users: {
@@ -141,9 +174,15 @@ export type WorkItemAssigneeRow = {
   } | null;
 };
 
+export type ChecklistItemSummary = Pick<
+  Tables<"checklist_items">,
+  "id" | "label" | "is_completed" | "deleted_at"
+>;
+
 export type ProjectTaskRow = Tables<"work_items"> & {
   status: Pick<Tables<"work_item_statuses">, "id" | "label" | "color" | "is_done"> | null;
   assignees: WorkItemAssigneeRow[];
+  checklist_items: ChecklistItemSummary[];
 };
 
 export type ProjectDetail = Tables<"work_items"> & {
@@ -157,7 +196,7 @@ export type ProjectDetail = Tables<"work_items"> & {
 // queremos, y statuses.project_id→work_items.id, la inversa). Sin el nombre del
 // FK, PostgREST responde 300 (PGRST201) y la consulta lanza. Igual en countProjectTasks.
 const TASKS_SELECT =
-  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email)))";
+  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email))), checklist_items(id, label, is_completed, deleted_at)";
 
 /** Proyecto + sus columnas del tablero (`work_item_statuses`, ordenadas por
  * sort_order) + sus tareas/subtareas con assignees embebidos. Las tareas se
@@ -185,6 +224,7 @@ export async function getProject(db: Db, id: string): Promise<ProjectDetail | nu
       .in("type", ["task", "subtask"])
       .is("deleted_at", null)
       .order("sort_order")
+      .order("sort_order", { foreignTable: "checklist_items" })
       .returns<ProjectTaskRow[]>(),
   ]);
   if (tasksResult.error) throw tasksResult.error;
@@ -214,6 +254,7 @@ export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | 
     .eq("id", id)
     .in("type", ["task", "subtask"])
     .is("deleted_at", null)
+    .order("sort_order", { foreignTable: "checklist_items" })
     .maybeSingle<ProjectTaskRow>();
   if (error) throw error;
   if (!data) return null;
@@ -232,6 +273,7 @@ export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | 
       .eq("type", "subtask")
       .is("deleted_at", null)
       .order("sort_order")
+      .order("sort_order", { foreignTable: "checklist_items" })
       .returns<ProjectTaskRow[]>(),
   ]);
   if (projectResult.error) throw projectResult.error;

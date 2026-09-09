@@ -6,6 +6,7 @@ import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { listCommentAttachmentsForWorkItem, listWorkItemAttachments } from "@/lib/project-actions";
+import { getActiveTimerAction } from "@/lib/time-tracking-actions";
 import { NoAccessPanel } from "@/components/no-access-panel";
 import {
   WorkItemDetail,
@@ -13,6 +14,7 @@ import {
   type DetailTask,
 } from "@/components/proyectos/work-item-detail";
 import type { BoardStatus } from "@/components/proyectos/project-board";
+import type { ChecklistItemView } from "@/components/proyectos/checklist-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +112,10 @@ export default async function WorkItemDetailPage({
       .map((a) => ({ id: a.user_id, name: assigneeName(a) })),
   };
 
+  const checklistItems: ChecklistItemView[] = task.checklist_items
+    .filter((c) => !c.deleted_at)
+    .map((c) => ({ id: c.id, label: c.label, isCompleted: c.is_completed }));
+
   const subtasks: DetailSubtask[] = task.subtasks.map((st) => ({
     id: st.id,
     title: st.title,
@@ -120,12 +126,14 @@ export default async function WorkItemDetailPage({
   const orgUsers = orgUserRows.map((u) => ({ id: u.id, name: u.fullName, avatarUrl: u.avatarUrl }));
 
   // Comentarios + actividad para el panel lateral (Slice 1 ClickUp Parity).
-  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows] = await Promise.all([
-    listComments(db, taskId),
-    listActivity(db, taskId),
-    listCommentAttachmentsForWorkItem(taskId),
-    listTimeEntries(db, taskId),
-  ]);
+  const [commentRows, activityRows, commentAttachmentsResult, timeEntryRows, activeTimer] =
+    await Promise.all([
+      listComments(db, taskId),
+      listActivity(db, taskId),
+      listCommentAttachmentsForWorkItem(taskId),
+      listTimeEntries(db, taskId),
+      getActiveTimerAction(),
+    ]);
   const commentAttachments =
     "attachments" in commentAttachmentsResult && commentAttachmentsResult.attachments
       ? commentAttachmentsResult.attachments
@@ -149,7 +157,11 @@ export default async function WorkItemDetailPage({
   const activity = activityRows.map((a) => ({
     id: a.id,
     eventType: a.event_type,
+    actorId: a.actor?.id ?? null,
     actorName: a.actor?.full_name ?? null,
+    actorAvatarUrl: a.actor?.avatar_url
+      ? (db.storage.from("user-avatars").getPublicUrl(a.actor.avatar_url).data.publicUrl ?? null)
+      : null,
     payload: (a.payload ?? {}) as Record<string, unknown>,
     createdAt: a.created_at,
   }));
@@ -195,6 +207,8 @@ export default async function WorkItemDetailPage({
         comments={comments}
         activity={activity}
         timeEntries={timeEntries}
+        checklistItems={checklistItems}
+        activeTimer={activeTimer}
       />
     </div>
   );

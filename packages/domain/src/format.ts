@@ -125,6 +125,24 @@ export function overdueLabel(
   return n === 1 ? "Retrasada 1 día" : `Retrasada ${n} días`;
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function formatLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Rango lunes-domingo (fechas LOCALES, no UTC) de la semana que contiene
+ * `today`. `today` se inyecta para poder testear de forma determinista. */
+export function currentWeekRange(today: Date = new Date()): { from: string; to: string } {
+  const day = today.getDay(); // 0=domingo..6=sábado
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + diffToMonday);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  return { from: formatLocalDate(monday), to: formatLocalDate(sunday) };
+}
+
 export function escapeHtml(value: string | null | undefined): string {
   if (!value) return "";
   return String(value)
