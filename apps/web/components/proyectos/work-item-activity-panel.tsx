@@ -80,6 +80,10 @@ function activityText(a: PanelActivity, usersById: Map<string, string>): string 
       const mins = Number(p.minutes ?? 0);
       return mins > 0 ? `registró ${formatDuration(mins)}` : "registró tiempo";
     }
+    case "checklist_item_added":
+      return p.label ? `agregó "${String(p.label)}" a la checklist` : "agregó un ítem a la checklist";
+    case "checklist_item_completed":
+      return p.label ? `completó "${String(p.label)}"` : "completó un ítem de la checklist";
     default:
       return a.eventType;
   }
