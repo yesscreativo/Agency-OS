@@ -5,6 +5,7 @@
 // packages/domain/src/agenda.ts). Vive arriba de <ProjectsList>, misma página.
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Input } from "@agency-os/ui";
 import { formatDuration, type WorkItemPriority } from "@agency-os/domain";
@@ -41,7 +42,7 @@ export interface AgendaDay {
 
 function AgendaCard({ task, overdue }: { task: AgendaTaskView; overdue?: boolean }) {
   return (
-    <a
+    <Link
       href={task.href}
       className={`block rounded-md border border-l-[3px] bg-surface-2 p-2.5 text-sm transition hover:border-line-strong hover:shadow-raised ${
         overdue ? "border-danger border-l-danger" : `border-line ${PRIORITY_ACCENT[task.priority]}`
@@ -65,7 +66,7 @@ function AgendaCard({ task, overdue }: { task: AgendaTaskView; overdue?: boolean
           </span>
         )}
       </div>
-    </a>
+    </Link>
   );
 }
 
@@ -95,9 +96,9 @@ function UndatedRow({ task, onSaved }: { task: AgendaTaskView; onSaved: () => vo
 
   return (
     <div className="rounded-md border border-line bg-surface-2 p-2.5 text-sm">
-      <a href={task.href} className="block truncate font-medium text-ink hover:underline">
+      <Link href={task.href} className="block truncate font-medium text-ink hover:underline">
         {task.title}
-      </a>
+      </Link>
       <div className="mt-1 truncate text-xs text-muted">
         {task.clientName ?? "—"} · {task.projectTitle}
       </div>
@@ -213,7 +214,7 @@ export function ProjectsDashboard({
         </div>
 
         {teamLoad && (
-          <a
+          <Link
             href="/mi-area"
             className="block rounded-lg border border-line bg-glass p-4 backdrop-blur-xl transition hover:border-line-strong hover:shadow-raised"
           >
@@ -234,7 +235,7 @@ export function ProjectsDashboard({
               {" · "}
               <span className="text-ink underline">Ver Mi área</span>
             </p>
-          </a>
+          </Link>
         )}
       </div>
     </div>

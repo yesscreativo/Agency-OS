@@ -3,6 +3,7 @@
 // equipo" se eliminó de aquí — ahora vive en /mi-area, con el alcance correcto
 // (gerente del área, no cualquiera con project.manage).
 
+import Link from "next/link";
 import { Button, Input, Label } from "@agency-os/ui";
 import { formatDuration } from "@agency-os/domain";
 import { ClientTimeMasterDetail } from "./client-time-master-detail";
@@ -51,9 +52,9 @@ export function TimeReport({ entries, filters }: TimeReportProps) {
           Filtrar
         </Button>
         {hasFilters && (
-          <a href="/proyectos/tiempos" className="text-sm text-muted transition hover:text-ink">
+          <Link href="/proyectos/tiempos" className="text-sm text-muted transition hover:text-ink">
             Limpiar filtros
-          </a>
+          </Link>
         )}
       </form>
 

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import {
   getProject,
   listOrgUsers,
@@ -109,9 +110,9 @@ export default async function ProjectDetailPage({
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <a href="/proyectos" className="text-sm text-muted transition hover:text-ink">
+          <Link href="/proyectos" className="text-sm text-muted transition hover:text-ink">
             ← Proyectos
-          </a>
+          </Link>
           <div className="mt-1 flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{project.title}</h1>
             <Badge tone={state.tone}>{state.label}</Badge>

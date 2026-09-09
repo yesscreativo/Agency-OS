@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Badge, Button, Input, Table, Td, Th } from "@agency-os/ui";
 import { projectHref } from "@/lib/project-paths";
@@ -94,12 +95,12 @@ export function ProjectsList({
           Buscar
         </Button>
         {q && (
-          <a
+          <Link
             href={pathname}
             className="self-center text-sm font-semibold text-green hover:underline"
           >
             Limpiar
-          </a>
+          </Link>
         )}
       </form>
 
@@ -137,7 +138,7 @@ export function ProjectsList({
                 return (
                   <tr key={p.id} className="transition hover:bg-surface-2">
                     <Td>
-                      <a
+                      <Link
                         href={projectHref(
                           p.clientId ? { id: p.clientId, name: p.clientName } : null,
                           { id: p.id, title: p.title },
@@ -145,7 +146,7 @@ export function ProjectsList({
                         className="max-w-[32ch] truncate whitespace-nowrap font-semibold text-ink hover:text-green"
                       >
                         {p.title}
-                      </a>
+                      </Link>
                     </Td>
                     <Td>
                       <div className="max-w-[28ch] truncate text-sm">{p.clientName}</div>

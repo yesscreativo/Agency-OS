@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button, Chip, Input } from "@agency-os/ui";
 import type { ClientSpaceRow } from "@agency-os/db";
@@ -51,7 +52,7 @@ export function ProjectsSidebar({
 
   return (
     <aside className="w-full shrink-0 sm:w-[240px]">
-      <a
+      <Link
         href="/proyectos"
         className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
           rootActive
@@ -60,7 +61,7 @@ export function ProjectsSidebar({
         }`}
       >
         Todos los proyectos
-      </a>
+      </Link>
 
       {canManage && (
         <Button
@@ -104,7 +105,7 @@ export function ProjectsSidebar({
             const href = clientHref(c);
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (
-              <a
+              <Link
                 key={c.id}
                 href={href}
                 className={`flex items-center justify-between gap-2 rounded-lg px-3.5 py-2 text-sm transition ${
@@ -122,7 +123,7 @@ export function ProjectsSidebar({
                 >
                   {c.projectCount}
                 </span>
-              </a>
+              </Link>
             );
           })
         )}
@@ -130,7 +131,7 @@ export function ProjectsSidebar({
 
       <div className="mt-5 space-y-0.5 border-t border-line pt-4">
         {canManageAccess && (
-          <a
+          <Link
             href="/proyectos/usuarios"
             className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
               pathname === "/proyectos/usuarios"
@@ -139,9 +140,9 @@ export function ProjectsSidebar({
             }`}
           >
             Accesos
-          </a>
+          </Link>
         )}
-        <a
+        <Link
           href="/proyectos/tiempos"
           className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
             pathname === "/proyectos/tiempos"
@@ -150,7 +151,7 @@ export function ProjectsSidebar({
           }`}
         >
           Mis tiempos
-        </a>
+        </Link>
       </div>
 
       {canManage && (
