@@ -96,6 +96,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
     return { date, label, tasks: rankAgendaTasks((agenda.byDate[date] ?? []).map(toAgendaTaskView)) };
   });
   const overdueTasks = rankAgendaTasks(agenda.overdue.map(toAgendaTaskView));
+  const undatedTasks = agenda.undated.map(toAgendaTaskView);
 
   const [projects, clientsPage] = await Promise.all([
     organizationId
@@ -131,6 +132,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
         tomorrowCount={agenda.tomorrowCount}
         days={days}
         overdueTasks={overdueTasks}
+        undatedTasks={undatedTasks}
+        canEdit={hasPermission(user, "project.manage")}
       />
       <ProjectsList
         rows={rows}

@@ -4,8 +4,11 @@
 // ordenada por prioridad/duración estimada (heurística sin IA, ver
 // packages/domain/src/agenda.ts). Vive arriba de <ProjectsList>, misma página.
 
-import { Badge } from "@agency-os/ui";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Badge, Input } from "@agency-os/ui";
 import { formatDuration, type WorkItemPriority } from "@agency-os/domain";
+import { saveWorkItem } from "@/lib/project-actions";
 import { PriorityBadge } from "./work-item-fields";
 
 export interface AgendaTaskView {
@@ -54,6 +57,51 @@ function AgendaCard({ task, overdue }: { task: AgendaTaskView; overdue?: boolean
   );
 }
 
+function UndatedRow({ task, onSaved }: { task: AgendaTaskView; onSaved: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const onChangeDate = (dueDate: string) => {
+    if (!dueDate) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await saveWorkItem({
+        id: task.id,
+        projectId: task.projectId,
+        title: task.title,
+        description: task.description,
+        statusId: task.statusId,
+        priority: task.priority,
+        startDate: task.startDate,
+        dueDate,
+        estimatedMinutes: task.estimatedMinutes,
+      });
+      if (res.error) setError(res.error);
+      else onSaved();
+    });
+  };
+
+  return (
+    <div className="rounded-md border border-line bg-surface-2 p-2.5 text-sm">
+      <a href={task.href} className="block truncate font-medium text-ink hover:underline">
+        {task.title}
+      </a>
+      <div className="mt-1 truncate text-xs text-muted">
+        {task.clientName ?? "—"} · {task.projectTitle}
+      </div>
+      <div className="mt-1.5">
+        <Input
+          type="date"
+          disabled={isPending}
+          onChange={(e) => onChangeDate(e.target.value)}
+          aria-label={`Asignar fecha a "${task.title}"`}
+        />
+      </div>
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+    </div>
+  );
+}
+
 export function ProjectsDashboard({
   greeting,
   userName,
@@ -62,6 +110,8 @@ export function ProjectsDashboard({
   tomorrowCount,
   days,
   overdueTasks,
+  undatedTasks,
+  canEdit,
 }: {
   greeting: string;
   userName: string;
@@ -70,7 +120,10 @@ export function ProjectsDashboard({
   tomorrowCount: number;
   days: AgendaDay[];
   overdueTasks: AgendaTaskView[];
+  undatedTasks: AgendaTaskView[];
+  canEdit: boolean;
 }) {
+  const router = useRouter();
   return (
     <div className="mb-8">
       <h1 className="text-2xl font-bold tracking-tight text-ink">
@@ -80,27 +133,46 @@ export function ProjectsDashboard({
         {todayCount} para hoy · {tomorrowCount} vencen mañana
       </p>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
-        {days.map((day) => {
-          const isToday = day.date === today;
-          const tasks = isToday ? [...overdueTasks, ...day.tasks] : day.tasks;
-          return (
-            <div key={day.date} className="rounded-lg border border-line bg-glass p-3 backdrop-blur-xl">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">
-                {day.label}
+      <div className="mt-4 flex flex-col gap-4 lg:flex-row">
+        <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-5">
+          {days.map((day) => {
+            const isToday = day.date === today;
+            const tasks = isToday ? [...overdueTasks, ...day.tasks] : day.tasks;
+            return (
+              <div key={day.date} className="rounded-lg border border-line bg-glass p-3 backdrop-blur-xl">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">
+                  {day.label}
+                </div>
+                <div className="mt-2 space-y-2">
+                  {tasks.length === 0 ? (
+                    <p className="text-xs text-faint">Sin tareas.</p>
+                  ) : (
+                    tasks.map((t) => (
+                      <AgendaCard key={t.id} task={t} overdue={isToday && overdueTasks.includes(t)} />
+                    ))
+                  )}
+                </div>
               </div>
-              <div className="mt-2 space-y-2">
-                {tasks.length === 0 ? (
-                  <p className="text-xs text-faint">Sin tareas.</p>
-                ) : (
-                  tasks.map((t) => (
-                    <AgendaCard key={t.id} task={t} overdue={isToday && overdueTasks.includes(t)} />
-                  ))
-                )}
-              </div>
+            );
+          })}
+        </div>
+
+        {canEdit && (
+          <div className="rounded-lg border border-line bg-glass p-3 backdrop-blur-xl lg:w-[260px]">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">
+              Sin fecha · {undatedTasks.length}
             </div>
-          );
-        })}
+            <div className="mt-2 space-y-2">
+              {undatedTasks.length === 0 ? (
+                <p className="text-xs text-faint">Todo tiene fecha.</p>
+              ) : (
+                undatedTasks.map((t) => (
+                  <UndatedRow key={t.id} task={t} onSaved={() => router.refresh()} />
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
