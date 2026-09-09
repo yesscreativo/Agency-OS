@@ -180,6 +180,15 @@ export async function assignPersonAreaAction(
 
   try {
     const admin = createSupabaseServiceRoleClient();
+    if (areaId) {
+      const { data: area } = await admin
+        .from("areas")
+        .select("id")
+        .eq("id", areaId)
+        .eq("organization_id", auth.organizationId)
+        .maybeSingle();
+      if (!area) return { error: "El área no existe o no pertenece a tu organización." };
+    }
     const { error } = await admin
       .from("people")
       .update({ area_id: areaId })
