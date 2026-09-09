@@ -26,6 +26,7 @@ import {
 import { validateWorkItemTitle } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveTaskLink } from "@/lib/resolve-task-link";
 
 export type IdResult = { id: string; error?: never } | { id?: never; error: string };
 export type ActionResult = { ok: true; error?: never } | { ok?: never; error: string };
@@ -669,7 +670,11 @@ export async function uploadWorkItemAttachment(
       created_by: auth.userId,
     });
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const { data: taskRow } = await db.from("work_items").select("title").eq("id", workItemId).maybeSingle();
+    const link = taskRow
+      ? await resolveTaskLink(db, projectId, { id: workItemId, title: taskRow.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
   } catch (error) {
     console.error("uploadWorkItemAttachment", error);
@@ -719,7 +724,17 @@ export async function deleteWorkItemAttachment(id: string): Promise<ActionResult
     await deleteAttachmentRow(db, id);
 
     const projectId = await assertWorkItemInOrg(db, attachment.work_item_id, auth.organizationId);
-    if (projectId) revalidatePath(`/proyectos/${projectId}`);
+    if (projectId) {
+      const { data: taskRow } = await db
+        .from("work_items")
+        .select("title")
+        .eq("id", attachment.work_item_id)
+        .maybeSingle();
+      const link = taskRow
+        ? await resolveTaskLink(db, projectId, { id: attachment.work_item_id, title: taskRow.title })
+        : null;
+      revalidatePath(link ?? "/proyectos");
+    }
     return { ok: true };
   } catch (error) {
     console.error("deleteWorkItemAttachment", error);
@@ -779,7 +794,15 @@ export async function uploadCommentAttachment(
       created_by: user.id,
     });
 
-    revalidatePath("/proyectos");
+    const { data: taskRow } = await db
+      .from("work_items")
+      .select("title, project_id")
+      .eq("id", comment.work_item_id)
+      .maybeSingle();
+    const link = taskRow
+      ? await resolveTaskLink(db, taskRow.project_id, { id: comment.work_item_id, title: taskRow.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { attachment: toAttachment(row, await signedAttachmentUrl(db, path)) };
   } catch (error) {
     console.error("uploadCommentAttachment", error);
