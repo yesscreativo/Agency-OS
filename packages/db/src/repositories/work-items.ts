@@ -488,3 +488,151 @@ export async function setAssignees(
   );
   if (insertError) throw insertError;
 }
+
+export interface AgendaTask {
+  id: string;
+  projectId: string;
+  title: string;
+  /** No se muestra en la tarjeta; se reenvía a `saveWorkItem` al asignar fecha
+   * desde el sidebar "Sin fecha" (mismo patrón que work-item-fields-panel.tsx:
+   * la action reescribe el estado completo del work item). */
+  description: string | null;
+  statusId: string | null;
+  startDate: string | null;
+  priority: Enums<"work_item_priority">;
+  dueDate: string | null;
+  estimatedMinutes: number | null;
+  projectTitle: string;
+  clientId: string | null;
+  clientName: string | null;
+}
+
+export interface MyAgenda {
+  /** Tareas con due_date = hoy (independiente de si hoy cae en el rango
+   * lunes-viernes de `byDate` — así el saludo funciona aunque hoy sea findesemana). */
+  todayCount: number;
+  tomorrowCount: number;
+  /** due_date < today, todavía abiertas. */
+  overdue: AgendaTask[];
+  /** due_date entre today y weekEnd (inclusive), agrupadas por fecha "YYYY-MM-DD". */
+  byDate: Record<string, AgendaTask[]>;
+  /** due_date null. */
+  undated: AgendaTask[];
+}
+
+type AgendaWorkItemRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  status_id: string | null;
+  start_date: string | null;
+  priority: Enums<"work_item_priority">;
+  due_date: string | null;
+  estimated_minutes: number | null;
+  project_id: string;
+  status: { is_done: boolean } | null;
+  assignees: { user_id: string }[];
+};
+
+const AGENDA_SELECT =
+  "id, title, description, status_id, start_date, priority, due_date, estimated_minutes, project_id, status:work_item_statuses!work_items_status_fk(is_done), assignees:work_item_assignees(user_id)";
+
+/** "Mis tareas" para el dashboard de /proyectos: abiertas (no "hecho", no
+ * borradas), asignadas al usuario, sin importar el proyecto/cliente. Escanea
+ * los work items abiertos de la org paginado y filtra en memoria — mismo
+ * patrón ya usado en `countOpenTasksByAssignee` (PostgREST no permite filtrar
+ * por "algún assignee = X" sin un !inner join más complejo; este monorepo ya
+ * acepta el trade-off de escanear y filtrar para este tipo de consulta). */
+export async function listMyAgenda(
+  db: Db,
+  opts: {
+    organizationId: string;
+    userId: string;
+    today: string;
+    tomorrow: string;
+    weekStart: string;
+    weekEnd: string;
+  },
+): Promise<MyAgenda> {
+  const mine: AgendaWorkItemRow[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("work_items")
+      .select(AGENDA_SELECT)
+      .eq("organization_id", opts.organizationId)
+      .in("type", ["task", "subtask"])
+      .is("deleted_at", null)
+      .range(from, from + pageSize - 1)
+      .returns<AgendaWorkItemRow[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.status?.is_done) continue;
+      if (!row.assignees.some((a) => a.user_id === opts.userId)) continue;
+      mine.push(row);
+    }
+    if (!data || data.length < pageSize) break;
+  }
+
+  // Resuelve título de proyecto + cliente para las tareas encontradas.
+  // `work_items.project_id` es una columna plana sin FK (ver comentario de
+  // `ProjectRow` más arriba), así que no se puede embeber — se resuelve aparte.
+  const projectIds = Array.from(new Set(mine.map((r) => r.project_id)));
+  const projectInfo = new Map<string, { title: string; clientId: string | null; clientName: string | null }>();
+  if (projectIds.length > 0) {
+    const { data: projects, error: projError } = await db
+      .from("work_items")
+      .select("id, title, client:clients(id, name)")
+      .eq("type", "project")
+      .in("id", projectIds)
+      .returns<{ id: string; title: string; client: { id: string; name: string } | null }[]>();
+    if (projError) throw projError;
+    for (const p of projects ?? []) {
+      projectInfo.set(p.id, {
+        title: p.title,
+        clientId: p.client?.id ?? null,
+        clientName: p.client?.name ?? null,
+      });
+    }
+  }
+
+  const toAgendaTask = (row: AgendaWorkItemRow): AgendaTask => {
+    const info = projectInfo.get(row.project_id);
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      description: row.description,
+      statusId: row.status_id,
+      startDate: row.start_date,
+      priority: row.priority,
+      dueDate: row.due_date,
+      estimatedMinutes: row.estimated_minutes,
+      projectTitle: info?.title ?? "—",
+      clientId: info?.clientId ?? null,
+      clientName: info?.clientName ?? null,
+    };
+  };
+
+  let todayCount = 0;
+  let tomorrowCount = 0;
+  const overdue: AgendaTask[] = [];
+  const byDate: Record<string, AgendaTask[]> = {};
+  const undated: AgendaTask[] = [];
+
+  for (const row of mine) {
+    if (row.due_date === opts.today) todayCount += 1;
+    if (row.due_date === opts.tomorrow) tomorrowCount += 1;
+
+    if (row.due_date && row.due_date < opts.today) {
+      overdue.push(toAgendaTask(row));
+    } else if (row.due_date && row.due_date >= opts.today && row.due_date <= opts.weekEnd) {
+      (byDate[row.due_date] ??= []).push(toAgendaTask(row));
+    } else if (!row.due_date) {
+      undated.push(toAgendaTask(row));
+    }
+    // else: due_date > weekEnd — fuera de la semana visible, no se muestra en esta v0.
+  }
+
+  return { todayCount, tomorrowCount, overdue, byDate, undated };
+}
