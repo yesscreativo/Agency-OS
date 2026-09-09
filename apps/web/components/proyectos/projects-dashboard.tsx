@@ -102,6 +102,11 @@ function UndatedRow({ task, onSaved }: { task: AgendaTaskView; onSaved: () => vo
   );
 }
 
+export interface TeamLoadSummary {
+  overloadedCount: number;
+  totalCount: number;
+}
+
 export function ProjectsDashboard({
   greeting,
   userName,
@@ -112,6 +117,7 @@ export function ProjectsDashboard({
   overdueTasks,
   undatedTasks,
   canEdit,
+  teamLoad,
 }: {
   greeting: string;
   userName: string;
@@ -122,6 +128,7 @@ export function ProjectsDashboard({
   overdueTasks: AgendaTaskView[];
   undatedTasks: AgendaTaskView[];
   canEdit: boolean;
+  teamLoad: TeamLoadSummary | null;
 }) {
   const router = useRouter();
   return (
@@ -172,6 +179,25 @@ export function ProjectsDashboard({
               )}
             </div>
           </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-lg border border-line bg-glass p-4 backdrop-blur-xl">
+        <h2 className="font-semibold text-ink">Atención</h2>
+        <p className="mt-1 text-sm text-muted">
+          {overdueTasks.length === 0
+            ? "Sin tareas vencidas."
+            : `${overdueTasks.length} tarea${overdueTasks.length === 1 ? "" : "s"} vencida${overdueTasks.length === 1 ? "" : "s"}.`}
+        </p>
+        {teamLoad && (
+          <p className="mt-1 text-sm text-muted">
+            {teamLoad.overloadedCount === 0
+              ? "Tu equipo está al día."
+              : `${teamLoad.overloadedCount} persona${teamLoad.overloadedCount === 1 ? "" : "s"} con más de 5 tareas abiertas.`}{" "}
+            <a href="/mi-area" className="text-ink underline hover:no-underline">
+              Ver Mi área
+            </a>
+          </p>
         )}
       </div>
     </div>

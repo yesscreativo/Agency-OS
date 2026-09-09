@@ -1,6 +1,15 @@
 import { redirect } from "next/navigation";
 import { addDays, currentWeekRange, projectProgress, rankAgendaTasks } from "@agency-os/domain";
-import { listClients, listMyAgenda, listProjects, type AgendaTask, type ProjectRow } from "@agency-os/db";
+import {
+  countOpenTasksByAssignee,
+  listAreasManagedBy,
+  listClients,
+  listMyAgenda,
+  listPeopleInArea,
+  listProjects,
+  type AgendaTask,
+  type ProjectRow,
+} from "@agency-os/db";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { projectHref, taskHref } from "@/lib/project-paths";
@@ -98,6 +107,18 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
   const overdueTasks = rankAgendaTasks(agenda.overdue.map(toAgendaTaskView));
   const undatedTasks = agenda.undated.map(toAgendaTaskView);
 
+  const managedAreas = organizationId ? await listAreasManagedBy(db, user.id) : [];
+  let teamLoad: { overloadedCount: number; totalCount: number } | null = null;
+  if (managedAreas.length > 0) {
+    const peopleByArea = await Promise.all(managedAreas.map((a) => listPeopleInArea(db, a.id)));
+    const userIds = Array.from(
+      new Set(peopleByArea.flat().map((p) => p.userId).filter((id): id is string => Boolean(id))),
+    );
+    const counts = await countOpenTasksByAssignee(db, { organizationId: organizationId!, userIds });
+    const overloadedCount = userIds.filter((id) => (counts[id] ?? 0) > 5).length;
+    teamLoad = { overloadedCount, totalCount: userIds.length };
+  }
+
   const [projects, clientsPage] = await Promise.all([
     organizationId
       ? listProjects(db, organizationId, { search: searchParams.q })
@@ -134,6 +155,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
         overdueTasks={overdueTasks}
         undatedTasks={undatedTasks}
         canEdit={hasPermission(user, "project.manage")}
+        teamLoad={teamLoad}
       />
       <ProjectsList
         rows={rows}
