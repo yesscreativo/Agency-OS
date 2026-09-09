@@ -26,7 +26,8 @@ import {
 import { validateWorkItemTitle } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { resolveTaskLink } from "@/lib/resolve-task-link";
+import { resolveProjectLink, resolveTaskLink } from "@/lib/resolve-task-link";
+import { taskHref } from "@/lib/project-paths";
 
 export type IdResult = { id: string; error?: never } | { id?: never; error: string };
 export type ActionResult = { ok: true; error?: never } | { ok?: never; error: string };
@@ -328,8 +329,13 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
       revalidateProjectId = projectId;
     }
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${revalidateProjectId}`);
+    const projectLink = await resolveProjectLink(db, revalidateProjectId);
+    if (projectLink) {
+      revalidatePath(projectLink);
+      revalidatePath(taskHref(projectLink, { id, title }));
+    } else {
+      revalidatePath("/proyectos");
+    }
     return { id };
   } catch (error) {
     console.error("saveWorkItem", error);
@@ -349,8 +355,8 @@ export async function deleteWorkItem(id: string): Promise<ActionResult> {
 
     await softDeleteWorkItem(db, id);
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteWorkItem", error);
@@ -393,8 +399,8 @@ export async function moveWorkItem(id: string, statusId: string): Promise<Action
       });
     }
 
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("moveWorkItem", error);
@@ -445,7 +451,8 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
       }
     }
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("setWorkItemAssignees", error);
@@ -500,7 +507,8 @@ export async function saveProjectStatus(input: ProjectStatusInput): Promise<IdRe
       id = row.id;
     }
 
-    revalidatePath(`/proyectos/${input.projectId}`);
+    const projectLink = await resolveProjectLink(db, input.projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { id };
   } catch (error) {
     console.error("saveProjectStatus", error);
@@ -521,7 +529,8 @@ export async function deleteProjectStatus(id: string): Promise<ActionResult> {
 
     await deleteStatus(db, id);
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteProjectStatus", error);
@@ -559,7 +568,8 @@ export async function reorderProjectStatuses(
 
     await reorderStatuses(db, orderedIds);
 
-    revalidatePath(`/proyectos/${projectId}`);
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("reorderProjectStatuses", error);
@@ -869,7 +879,15 @@ export async function deleteCommentAttachment(id: string): Promise<ActionResult>
     if (rmError) console.error("deleteCommentAttachment:storage", rmError);
     await deleteAttachmentRow(db, id);
 
-    revalidatePath("/proyectos");
+    const { data: taskRow } = await db
+      .from("work_items")
+      .select("title, project_id")
+      .eq("id", attachment.work_item_id)
+      .maybeSingle();
+    const link = taskRow
+      ? await resolveTaskLink(db, taskRow.project_id, { id: attachment.work_item_id, title: taskRow.title })
+      : null;
+    revalidatePath(link ?? "/proyectos");
     return { ok: true };
   } catch (error) {
     console.error("deleteCommentAttachment", error);
