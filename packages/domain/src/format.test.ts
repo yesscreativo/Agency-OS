@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDays,
   currentWeekRange,
   dateRangeLabel,
   daysOverdue,
@@ -193,5 +194,19 @@ describe("currentWeekRange", () => {
   });
   it("lunes (2026-08-31) -> desde ese mismo lunes", () => {
     expect(currentWeekRange(new Date(2026, 7, 31))).toEqual({ from: "2026-08-31", to: "2026-09-06" });
+  });
+});
+
+describe("addDays", () => {
+  it("suma días dentro del mismo mes", () => {
+    expect(addDays("2026-09-08", 1)).toBe("2026-09-09");
+  });
+
+  it("cruza el fin de mes", () => {
+    expect(addDays("2026-09-29", 4)).toBe("2026-10-03");
+  });
+
+  it("cruza el fin de año", () => {
+    expect(addDays("2026-12-30", 4)).toBe("2027-01-03");
   });
 });
