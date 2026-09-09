@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getProject, listOrgUsers, sumMinutesByProject, sumMinutesByTask } from "@agency-os/db";
-import { extractShortId, formatDuration, matchesShortId } from "@agency-os/domain";
+import { checklistProgress, extractShortId, formatDuration, matchesShortId } from "@agency-os/domain";
 import { Badge } from "@agency-os/ui";
 import { canAccessModule, getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -84,23 +84,30 @@ export default async function ProjectDetailPage({
   }));
 
   // Lista plana (tareas + subtareas); el árbol se arma en el board vía parentId.
-  const tasks: BoardTask[] = project.tasks.map((t) => ({
-    id: t.id,
-    parentId: t.parent_id,
-    type: t.type === "subtask" ? "subtask" : "task",
-    title: t.title,
-    description: t.description,
-    statusId: t.status_id,
-    priority: t.priority,
-    startDate: t.start_date,
-    dueDate: t.due_date,
-    assignees: t.assignees
-      .filter((a) => a.users)
-      .map((a) => ({
-        id: a.user_id,
-        name: a.users!.person?.full_name ?? a.users!.person?.email ?? "—",
-      })),
-  }));
+  const tasks: BoardTask[] = project.tasks.map((t) => {
+    const checklist = checklistProgress(
+      t.checklist_items.filter((c) => !c.deleted_at).map((c) => ({ isCompleted: c.is_completed })),
+    );
+    return {
+      id: t.id,
+      parentId: t.parent_id,
+      type: t.type === "subtask" ? "subtask" : "task",
+      title: t.title,
+      description: t.description,
+      statusId: t.status_id,
+      priority: t.priority,
+      startDate: t.start_date,
+      dueDate: t.due_date,
+      assignees: t.assignees
+        .filter((a) => a.users)
+        .map((a) => ({
+          id: a.user_id,
+          name: a.users!.person?.full_name ?? a.users!.person?.email ?? "—",
+        })),
+      checklistCompleted: checklist.completed,
+      checklistTotal: checklist.total,
+    };
+  });
 
   const orgUsers: BoardOrgUser[] = orgUserRows.map((u) => ({
     id: u.id,

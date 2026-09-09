@@ -32,6 +32,8 @@ export interface BoardTask {
   startDate: string | null;
   dueDate: string | null;
   assignees: BoardAssignee[];
+  checklistCompleted: number;
+  checklistTotal: number;
 }
 
 export interface BoardOrgUser {
@@ -315,6 +317,11 @@ export function ProjectBoard({
                                 {subCount} subtarea{subCount === 1 ? "" : "s"}
                               </span>
                             )}
+                            {t.checklistTotal > 0 && (
+                              <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
+                                ✓ {t.checklistCompleted}/{t.checklistTotal}
+                              </span>
+                            )}
                           </div>
                           <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
                         </div>
@@ -424,6 +431,11 @@ function ListView({
                     {formatDuration(minutesByTask![t.id])}
                   </span>
                 )}
+                {t.checklistTotal > 0 && (
+                  <span className="font-mono text-[12px] tabular-nums text-muted">
+                    ✓ {t.checklistCompleted}/{t.checklistTotal}
+                  </span>
+                )}
                 <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
               </div>
             </button>
@@ -455,6 +467,11 @@ function ListView({
                     {Boolean(minutesByTask?.[c.id]) && (
                       <span className="font-mono text-[12px] tabular-nums text-muted">
                         {formatDuration(minutesByTask![c.id])}
+                      </span>
+                    )}
+                    {c.checklistTotal > 0 && (
+                      <span className="font-mono text-[12px] tabular-nums text-muted">
+                        ✓ {c.checklistCompleted}/{c.checklistTotal}
                       </span>
                     )}
                     <AssigneeAvatars assignees={c.assignees} avatarByUserId={avatarByUserId} />
