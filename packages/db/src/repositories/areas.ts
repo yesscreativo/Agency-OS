@@ -48,6 +48,18 @@ export async function updateAreaManager(db: Db, id: string, managerUserId: strin
   if (error) throw error;
 }
 
+/** Umbral de "carga alta" (tareas abiertas) que dispara la alerta en /mi-area
+ * y en el dashboard de Proyectos. Se llama con service role desde la action
+ * (`areas_write` en RLS exige super admin; el gerente del área se valida en
+ * la action con `requireAreaManager` antes de llegar acá). */
+export async function updateAreaOverloadThreshold(db: Db, id: string, threshold: number): Promise<void> {
+  const { error } = await db
+    .from("areas")
+    .update({ overload_threshold: threshold, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function listAreasManagedBy(db: Db, userId: string): Promise<AreaRow[]> {
   const { data, error } = await db.from("areas").select("*").eq("manager_user_id", userId).order("name");
   if (error) throw error;

@@ -1,7 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assignPersonJobTitle, createJobTitle, getArea, renameJobTitle } from "@agency-os/db";
+import {
+  assignPersonJobTitle,
+  createJobTitle,
+  createSupabaseServiceRoleClient,
+  getArea,
+  renameJobTitle,
+  updateAreaOverloadThreshold,
+} from "@agency-os/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -57,6 +64,32 @@ export async function renameJobTitleAction(
   } catch (error) {
     console.error("renameJobTitleAction", error);
     return { error: "No se pudo renombrar el cargo. Intenta de nuevo." };
+  }
+}
+
+/** `areas_write` (RLS) exige super admin — el gerente de área no puede
+ * escribir en `areas` por ese camino. La pertenencia ya se valida arriba con
+ * `requireAreaManager` (misma puerta que el resto de este archivo), así que
+ * el UPDATE puntual va con service role, igual que `grantProjectRole`. */
+export async function updateAreaOverloadThresholdAction(
+  areaId: string,
+  threshold: number,
+): Promise<AccessActionResult> {
+  const auth = await requireAreaManager(areaId);
+  if (auth.error !== undefined) return { error: auth.error };
+  if (!Number.isInteger(threshold) || threshold <= 0) {
+    return { error: "El umbral debe ser un número entero mayor a 0." };
+  }
+
+  try {
+    const admin = createSupabaseServiceRoleClient();
+    await updateAreaOverloadThreshold(admin, areaId, threshold);
+    revalidatePath("/mi-area");
+    revalidatePath("/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("updateAreaOverloadThresholdAction", error);
+    return { error: "No se pudo actualizar el umbral. Intenta de nuevo." };
   }
 }
 
