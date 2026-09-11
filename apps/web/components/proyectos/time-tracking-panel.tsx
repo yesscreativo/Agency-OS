@@ -152,9 +152,10 @@ export function TimeTrackingPanel({
     if (parsed.minutes == null || parsed.minutes <= 0) {
       return setFormError("Ingresa una duración mayor a cero.");
     }
+    if (!note.trim()) return setFormError("La nota es obligatoria.");
     const minutes = parsed.minutes;
     startTransition(async () => {
-      const res = await addTimeEntry({ workItemId, minutes, spentOn, note: note.trim() || null });
+      const res = await addTimeEntry({ workItemId, minutes, spentOn, note: note.trim() });
       if (res.error) {
         setFormError(res.error);
         return;
@@ -185,9 +186,10 @@ export function TimeTrackingPanel({
     if (parsed.minutes == null || parsed.minutes <= 0) {
       return setEditError("Ingresa una duración mayor a cero.");
     }
+    if (!editNote.trim()) return setEditError("La nota es obligatoria.");
     const minutes = parsed.minutes;
     startTransition(async () => {
-      const res = await editTimeEntry({ id, minutes, spentOn: editSpentOn, note: editNote.trim() || null });
+      const res = await editTimeEntry({ id, minutes, spentOn: editSpentOn, note: editNote.trim() });
       if (res.error) {
         setEditError(res.error);
         return;
@@ -285,7 +287,7 @@ export function TimeTrackingPanel({
                   value={editNote}
                   onChange={(e) => setEditNote(e.target.value)}
                   rows={2}
-                  placeholder="Nota (opcional)"
+                  placeholder="Nota"
                   className="mt-2"
                 />
                 {editError && <p className="mt-1 text-sm text-danger">{editError}</p>}
@@ -363,7 +365,7 @@ export function TimeTrackingPanel({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={2}
-          placeholder="Nota (opcional)"
+          placeholder="Nota"
           className="mt-2"
           aria-label="Nota"
         />
