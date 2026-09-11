@@ -297,26 +297,24 @@ export function ProjectBoard({
                             {priority.label}
                           </Badge>
                         </div>
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 text-[12px] text-muted">
-                            {t.dueDate && (
-                              <span
-                                className={
-                                  overdue ? "font-semibold text-danger" : undefined
-                                }
-                                title={overdue ? "Retrasada" : undefined}
-                              >
-                                {overdue && "⚠ "}
-                                {formatDate(t.dueDate)}
-                              </span>
-                            )}
-                            {subCount > 0 && (
-                              <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
-                                {subCount} subtarea{subCount === 1 ? "" : "s"}
-                              </span>
-                            )}
+                        {t.dueDate && (
+                          <div
+                            className={`mt-2 text-[12px] ${overdue ? "font-semibold text-danger" : "text-muted"}`}
+                            title={overdue ? "Retrasada" : undefined}
+                          >
+                            {overdue && "⚠ "}
+                            {formatDate(t.dueDate)}
                           </div>
-                          <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
+                        )}
+                        <div className="mt-2 flex items-center gap-2">
+                          {subCount > 0 && (
+                            <span className="shrink-0 rounded-pill border border-line-strong px-2 py-0.5 text-[11px] text-muted">
+                              {subCount} subtarea{subCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          <div className="ml-auto">
+                            <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
+                          </div>
                         </div>
                       </button>
                     );

@@ -1,8 +1,13 @@
+"use client";
+
 // Resumen (KPIs) de cómo está el cliente frente a sus tareas. Se muestra bajo el
 // título en el space del cliente. Reusa el `KpiCard` del design system (mismo
 // esquema visual que los KPIs de Cotizaciones): glass + icono tintado + número.
+// Toggle "Todos/Mío" client-side sobre dos sets ya calculados en el server
+// (mismo patrón que el filtro Todos/Activos/Míos del sidebar de Proyectos).
 
-import { KpiCard, KpiDot } from "@agency-os/ui";
+import { useState } from "react";
+import { Chip, KpiCard, KpiDot } from "@agency-os/ui";
 
 const ICON_PROPS = {
   width: 18,
@@ -46,57 +51,72 @@ const AlertIcon = () => (
   </svg>
 );
 
-export function ClientKpis({
-  projectCount,
-  activeCount,
-  tasksTotal,
-  tasksDone,
-  tasksInProgress,
-  overdueCount,
-}: {
-  projectCount: number;
-  activeCount: number;
+export interface ClientTaskKpis {
   tasksTotal: number;
   tasksDone: number;
   tasksInProgress: number;
   overdueCount: number;
+}
+
+export function ClientKpis({
+  projectCount,
+  activeCount,
+  all,
+  mine,
+}: {
+  projectCount: number;
+  activeCount: number;
+  all: ClientTaskKpis;
+  mine: ClientTaskKpis;
 }) {
+  const [scope, setScope] = useState<"todos" | "mio">("todos");
+  const { tasksTotal, tasksDone, tasksInProgress, overdueCount } = scope === "mio" ? mine : all;
   const pct = tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-      <KpiCard
-        label="Proyectos"
-        value={projectCount}
-        hint={`${activeCount} activos`}
-        icon={<FolderIcon />}
-        tone="purple"
-        highlight
-      />
-      <KpiCard label="Tareas" value={tasksTotal} icon={<ListIcon />} tone="neutral" />
-      <KpiCard
-        label="Completado"
-        value={`${pct}%`}
-        icon={<CheckCircleIcon />}
-        tone="green"
-        sub={
-          <div className="flex items-center gap-2">
-            <KpiDot tone="green" />
-            <span className="font-mono text-[13px] text-muted">
-              {tasksDone}/{tasksTotal} tareas
-            </span>
-          </div>
-        }
-      />
-      <KpiCard label="En curso" value={tasksInProgress} icon={<ClockIcon />} tone="warn" />
-      <KpiCard
-        label="Retrasadas"
-        value={overdueCount}
-        icon={<AlertIcon />}
-        tone="danger"
-        highlight={overdueCount > 0}
-        hint={overdueCount > 0 ? "Requieren atención" : undefined}
-      />
+    <div>
+      <div className="mb-3 flex gap-2">
+        <Chip active={scope === "todos"} onClick={() => setScope("todos")}>
+          Todos
+        </Chip>
+        <Chip active={scope === "mio"} onClick={() => setScope("mio")}>
+          Mío
+        </Chip>
+      </div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+        <KpiCard
+          label="Proyectos"
+          value={projectCount}
+          hint={`${activeCount} activos`}
+          icon={<FolderIcon />}
+          tone="purple"
+          highlight
+        />
+        <KpiCard label="Tareas" value={tasksTotal} icon={<ListIcon />} tone="neutral" />
+        <KpiCard
+          label="Completado"
+          value={`${pct}%`}
+          icon={<CheckCircleIcon />}
+          tone="green"
+          sub={
+            <div className="flex items-center gap-2">
+              <KpiDot tone="green" />
+              <span className="font-mono text-[13px] text-muted">
+                {tasksDone}/{tasksTotal} tareas
+              </span>
+            </div>
+          }
+        />
+        <KpiCard label="En curso" value={tasksInProgress} icon={<ClockIcon />} tone="warn" />
+        <KpiCard
+          label="Retrasadas"
+          value={overdueCount}
+          icon={<AlertIcon />}
+          tone="danger"
+          highlight={overdueCount > 0}
+          hint={overdueCount > 0 ? "Requieren atención" : undefined}
+        />
+      </div>
     </div>
   );
 }
