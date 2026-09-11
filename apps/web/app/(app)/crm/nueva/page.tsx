@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { listClients, listKams } from "@agency-os/db";
 import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -35,9 +36,9 @@ export default async function NewQuotePage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <a href="/crm" className="text-sm text-muted transition hover:text-ink">
+          <Link href="/crm" className="text-sm text-muted transition hover:text-ink">
             ← Cotizaciones
-          </a>
+          </Link>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Nueva cotización</h1>
         </div>
       </div>

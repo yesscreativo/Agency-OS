@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import {
   calcQuote,
   formatDate,
@@ -141,12 +142,12 @@ export default async function QuotesListPage({
           </p>
         </div>
         {access.canCreate && (
-          <a
+          <Link
             href="/crm/nueva"
             className="rounded-pill bg-green px-[22px] py-[11px] text-sm font-semibold text-green-ink transition hover:brightness-105"
           >
             + Nueva cotización
-          </a>
+          </Link>
         )}
       </div>
 
@@ -181,17 +182,17 @@ export default async function QuotesListPage({
                   : "Aún no hay cotizaciones para mostrar."}
             </p>
             {hasFilters ? (
-              <a href="/crm" className="text-sm font-semibold text-green hover:underline">
+              <Link href="/crm" className="text-sm font-semibold text-green hover:underline">
                 Limpiar filtros
-              </a>
+              </Link>
             ) : (
               access.canCreate && (
-                <a
+                <Link
                   href="/crm/nueva"
                   className="mt-2 rounded-pill bg-green px-[22px] py-[11px] text-sm font-semibold text-green-ink transition hover:brightness-105"
                 >
                   + Nueva cotización
-                </a>
+                </Link>
               )
             )}
           </div>
@@ -215,12 +216,12 @@ export default async function QuotesListPage({
                 return (
                   <tr key={row.id} className="transition hover:bg-surface-2">
                     <Td>
-                      <a
+                      <Link
                         href={`/crm/${row.id}`}
                         className="whitespace-nowrap font-mono text-[13px] font-bold text-ink hover:text-green"
                       >
                         {row.code ?? "— borrador —"}
-                      </a>
+                      </Link>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-3">
@@ -265,12 +266,12 @@ export default async function QuotesListPage({
                     )}
                     <Td className="whitespace-nowrap text-muted">{formatDate(row.created_at)}</Td>
                     <Td className="text-right">
-                      <a
+                      <Link
                         href={`/crm/${row.id}`}
                         className="inline-block rounded-pill border border-line-strong px-4 py-1.5 text-xs font-semibold text-ink transition hover:border-green"
                       >
                         {access.canEdit ? "Editar" : "Ver"}
-                      </a>
+                      </Link>
                     </Td>
                   </tr>
                 );
@@ -297,22 +298,22 @@ export default async function QuotesListPage({
                   {item}
                 </span>
               ) : (
-                <a
+                <Link
                   key={item}
                   href={pageHref(searchParams, item)}
                   className="rounded-pill border border-line-strong px-4 py-2 font-medium text-ink transition hover:border-green"
                 >
                   {item}
-                </a>
+                </Link>
               ),
             )}
             {page < totalPages && (
-              <a
+              <Link
                 href={pageHref(searchParams, page + 1)}
                 className="rounded-pill border border-line-strong px-4 py-2 font-medium text-ink transition hover:border-green"
               >
                 Siguiente →
-              </a>
+              </Link>
             )}
           </div>
           <div>

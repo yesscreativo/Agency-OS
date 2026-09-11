@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Badge, Table, Td, Th } from "@agency-os/ui";
 import { formatDate, formatMoney } from "@agency-os/domain";
 
@@ -54,12 +55,12 @@ export function ClientQuoteHistory({ rows }: { rows: ClientQuoteHistoryRow[] }) 
           {pageRows.map((q) => (
             <tr key={q.id} className="transition hover:bg-surface-2">
               <Td>
-                <a
+                <Link
                   href={`/crm/${q.id}`}
                   className="whitespace-nowrap font-mono text-[13px] font-bold text-ink hover:text-green"
                 >
                   {q.code ?? "— borrador —"}
-                </a>
+                </Link>
               </Td>
               <Td>
                 <span className="max-w-[28ch] truncate text-sm">{q.quoteName ?? "—"}</span>
@@ -78,12 +79,12 @@ export function ClientQuoteHistory({ rows }: { rows: ClientQuoteHistoryRow[] }) 
               </Td>
               <Td className="whitespace-nowrap text-muted">{formatDate(q.createdAt)}</Td>
               <Td className="text-right">
-                <a
+                <Link
                   href={`/crm/${q.id}`}
                   className="inline-block rounded-pill border border-line-strong px-4 py-1.5 text-xs font-semibold text-ink transition hover:border-green"
                 >
                   Abrir
-                </a>
+                </Link>
               </Td>
             </tr>
           ))}

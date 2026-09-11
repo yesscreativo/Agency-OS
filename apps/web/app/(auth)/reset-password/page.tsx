@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import { Button, FieldError, Input, Label } from "@agency-os/ui";
 import { requestPasswordReset, type AuthActionState } from "@/lib/auth-actions";
@@ -46,12 +47,12 @@ export default function ResetPasswordPage() {
 
       <SubmitButton />
 
-      <a
+      <Link
         href="/login"
         className="block text-center text-[12.5px] text-[#71717a] transition hover:text-[#b8ff3c]"
       >
         Volver a login
-      </a>
+      </Link>
     </form>
   );
 }

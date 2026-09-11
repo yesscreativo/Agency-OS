@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { getClientById, listClientQuotes } from "@agency-os/db";
 import { calcQuote, formatMoney } from "@agency-os/domain";
 import { KpiCard, KpiDot, type KpiTone } from "@agency-os/ui";
@@ -92,9 +93,9 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
   return (
     <div>
       <div className="mb-6">
-        <a href="/crm/clientes" className="text-sm text-muted transition hover:text-ink">
+        <Link href="/crm/clientes" className="text-sm text-muted transition hover:text-ink">
           ← Clientes
-        </a>
+        </Link>
         <div className="mt-1 flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
           {client.code && (

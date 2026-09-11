@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { Button, FieldError, Input, Label } from "@agency-os/ui";
@@ -79,12 +80,12 @@ function LoginForm() {
 
         <SubmitButton />
 
-        <a
+        <Link
           href="/reset-password"
           className="block text-center text-[12.5px] text-[#71717a] transition hover:text-[#b8ff3c]"
         >
           ¿Olvidaste tu contraseña?
-        </a>
+        </Link>
       </form>
     </div>
   );

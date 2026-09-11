@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import {
   countOpenTasksByAssignee,
   listAreas,
@@ -68,7 +69,7 @@ export default async function MiAreaPage({
         {manageable.length > 1 && (
           <div className="flex flex-wrap gap-2">
             {manageable.map((a) => (
-              <a
+              <Link
                 key={a.id}
                 href={`/mi-area?area=${a.id}`}
                 className={`rounded-pill border px-3.5 py-2 text-sm font-semibold transition ${
@@ -78,7 +79,7 @@ export default async function MiAreaPage({
                 }`}
               >
                 {a.name}
-              </a>
+              </Link>
             ))}
           </div>
         )}
@@ -113,12 +114,12 @@ export default async function MiAreaPage({
             Filtrar
           </Button>
           {hasCustomRange && (
-            <a
+            <Link
               href={searchParams.area ? `/mi-area?area=${searchParams.area}` : "/mi-area"}
               className="text-sm text-muted transition hover:text-ink"
             >
               Volver a esta semana
-            </a>
+            </Link>
           )}
         </form>
 

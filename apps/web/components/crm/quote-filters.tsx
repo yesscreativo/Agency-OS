@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Input, Select } from "@agency-os/ui";
 
 interface QuoteFiltersProps {
@@ -101,9 +102,9 @@ export function QuoteFilters({
       >
         Filtrar
       </button>
-      <a href={action} className="pb-2.5 text-sm text-muted transition hover:text-ink">
+      <Link href={action} className="pb-2.5 text-sm text-muted transition hover:text-ink">
         Limpiar
-      </a>
+      </Link>
     </form>
   );
 }

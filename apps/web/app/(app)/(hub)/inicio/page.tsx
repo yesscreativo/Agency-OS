@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { listModules } from "@agency-os/db";
 import { getCurrentUser, canAccessModule } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -68,9 +69,9 @@ export default async function InicioPage() {
           );
 
           return accessible ? (
-            <a key={mod.code} href={href} className="block">
+            <Link key={mod.code} href={href} className="block">
               {card}
-            </a>
+            </Link>
           ) : (
             <div key={mod.code}>{card}</div>
           );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@agency-os/domain";
 import { fetchNotificationState, markNotificationsRead } from "@/lib/notification-actions";
@@ -93,7 +94,7 @@ function Toast({
   }, [item.id, onDismiss]);
 
   return (
-    <a
+    <Link
       href={hrefFor(item)}
       role="status"
       className={`pointer-events-auto flex gap-2.5 rounded-lg border border-line bg-glass-strong px-4 py-3 shadow-overlay backdrop-blur-xl transition-all duration-300 ${
@@ -107,7 +108,7 @@ function Toast({
           <span className="block truncate text-[13px] text-muted">{item.body}</span>
         )}
       </span>
-    </a>
+    </Link>
   );
 }
 
@@ -227,7 +228,7 @@ export function NotificationBell({
                   const href = hrefFor(n);
                   return (
                     <li key={n.id} className="border-b border-line last:border-0">
-                      <a
+                      <Link
                         href={href}
                         className="flex gap-2 px-4 py-3 transition hover:bg-surface-2"
                         onClick={() => setOpen(false)}
@@ -252,19 +253,19 @@ export function NotificationBell({
                             {formatDate(n.createdAt)}
                           </span>
                         </span>
-                      </a>
+                      </Link>
                     </li>
                   );
                 })}
               </ul>
             )}
-            <a
+            <Link
               href="/notificaciones"
               className="block border-t border-line px-4 py-2.5 text-center text-[13px] font-semibold text-green transition hover:bg-surface-2"
               onClick={() => setOpen(false)}
             >
               Ver todas
-            </a>
+            </Link>
           </div>
         </>
       )}

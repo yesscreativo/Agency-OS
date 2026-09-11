@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { extractClientCode } from "@agency-os/domain";
 import { Button, FieldError, Input, Label, Modal, Table, Td, Th } from "@agency-os/ui";
@@ -75,12 +76,12 @@ export function ClientsList({
           Buscar
         </Button>
         {q && (
-          <a
+          <Link
             href="/crm/clientes"
             className="self-center text-sm font-semibold text-green hover:underline"
           >
             Limpiar
-          </a>
+          </Link>
         )}
       </form>
 
@@ -113,12 +114,12 @@ export function ClientsList({
               {rows.map((c) => (
                 <tr key={c.id} className="transition hover:bg-surface-2">
                   <Td>
-                    <a
+                    <Link
                       href={`/crm/clientes/${c.id}`}
                       className="whitespace-nowrap font-mono text-[13px] font-bold text-ink hover:text-green"
                     >
                       {c.code ?? "—"}
-                    </a>
+                    </Link>
                   </Td>
                   <Td>
                     <div className="max-w-[28ch] truncate text-sm font-semibold">{c.name}</div>
@@ -131,12 +132,12 @@ export function ClientsList({
                   <Td className="whitespace-nowrap text-muted">{c.phone ?? "—"}</Td>
                   <Td className="text-right font-mono text-sm">{c.quoteCount}</Td>
                   <Td className="text-right">
-                    <a
+                    <Link
                       href={`/crm/clientes/${c.id}`}
                       className="inline-block rounded-pill border border-line-strong px-4 py-1.5 text-xs font-semibold text-ink transition hover:border-green"
                     >
                       Editar
-                    </a>
+                    </Link>
                   </Td>
                 </tr>
               ))}
@@ -149,20 +150,20 @@ export function ClientsList({
         <div className="mt-5 flex items-center justify-between gap-3 text-sm text-muted">
           <div className="flex gap-2">
             {page > 1 && (
-              <a
+              <Link
                 href={pageHref(page - 1)}
                 className="rounded-pill border border-line-strong px-4 py-2 font-medium text-ink transition hover:border-green"
               >
                 ← Anterior
-              </a>
+              </Link>
             )}
             {page < totalPages && (
-              <a
+              <Link
                 href={pageHref(page + 1)}
                 className="rounded-pill border border-line-strong px-4 py-2 font-medium text-ink transition hover:border-green"
               >
                 Siguiente →
-              </a>
+              </Link>
             )}
           </div>
           <div>
