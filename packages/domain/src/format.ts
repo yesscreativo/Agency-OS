@@ -151,6 +151,14 @@ export function addDays(date: string, days: number): string {
   return formatLocalDate(new Date(y, m - 1, d + days));
 }
 
+/** Lunes a viernes en UTC — mismo criterio que el cron `notify_missing_hours`
+ * (`0 21 * * 1-5`), para que la alerta visual y el aviso por notificación
+ * coincidan en qué días "cuentan". */
+export function isWeekday(date: Date = new Date()): boolean {
+  const day = date.getUTCDay();
+  return day >= 1 && day <= 5;
+}
+
 export function escapeHtml(value: string | null | undefined): string {
   if (!value) return "";
   return String(value)

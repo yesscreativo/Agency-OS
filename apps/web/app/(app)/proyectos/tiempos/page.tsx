@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { reportEntries } from "@agency-os/db";
+import { getAreaMinDailyMinutesForPerson, reportEntries, sumMinutesByUsersInRange } from "@agency-os/db";
+import { isWeekday } from "@agency-os/domain";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { TimeReport } from "@/components/proyectos/time-report";
@@ -16,12 +17,32 @@ export default async function ProyectosTiemposPage({
 
   const organizationId = user.organizationIds[0] ?? "";
   const db = await getSupabaseServerClient();
-  const entryRows = await reportEntries(db, {
-    organizationId,
-    userId: user.id,
-    from: searchParams.from || undefined,
-    to: searchParams.to || undefined,
-  });
+  const [entryRows, minDailyMinutes] = await Promise.all([
+    reportEntries(db, {
+      organizationId,
+      userId: user.id,
+      from: searchParams.from || undefined,
+      to: searchParams.to || undefined,
+    }),
+    user.personId ? getAreaMinDailyMinutesForPerson(db, user.personId) : Promise.resolve(null),
+  ]);
+
+  // Alerta de "horas no registradas": solo si el usuario pertenece a un área
+  // con umbral, hoy es día laborable, y aún no llega al mínimo.
+  let missingHours: { minutesLogged: number; minDailyMinutes: number } | null = null;
+  if (minDailyMinutes !== null && isWeekday()) {
+    const today = new Date().toISOString().slice(0, 10);
+    const minutesByUser = await sumMinutesByUsersInRange(db, {
+      organizationId,
+      userIds: [user.id],
+      from: today,
+      to: today,
+    });
+    const minutesLogged = minutesByUser[user.id] ?? 0;
+    if (minutesLogged < minDailyMinutes) {
+      missingHours = { minutesLogged, minDailyMinutes };
+    }
+  }
 
   const entries = entryRows.map((e) => ({
     id: e.id,
@@ -41,6 +62,7 @@ export default async function ProyectosTiemposPage({
   return (
     <TimeReport
       entries={entries}
+      missingHours={missingHours}
       filters={{
         from: searchParams.from ?? "",
         to: searchParams.to ?? "",

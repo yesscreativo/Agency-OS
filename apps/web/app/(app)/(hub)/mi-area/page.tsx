@@ -8,7 +8,7 @@ import {
   listPeopleInArea,
   sumMinutesByUsersInRange,
 } from "@agency-os/db";
-import { currentWeekRange } from "@agency-os/domain";
+import { currentWeekRange, isWeekday } from "@agency-os/domain";
 import { Button, Input, Label } from "@agency-os/ui";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -17,6 +17,7 @@ import { JobTitlesManager } from "@/components/mi-area/job-titles-manager";
 import { AreaCollaborators } from "@/components/mi-area/area-collaborators";
 import { TeamWorkloadCards } from "@/components/mi-area/team-workload-cards";
 import { OverloadThresholdEditor } from "@/components/mi-area/overload-threshold-editor";
+import { MinDailyHoursEditor } from "@/components/mi-area/min-daily-hours-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -57,10 +58,26 @@ export default async function MiAreaPage({
   const from = searchParams.from || defaultRange.from;
   const to = searchParams.to || defaultRange.to;
   const hasCustomRange = Boolean(searchParams.from || searchParams.to);
-  const [openTasksByUser, minutesByUser] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+  const todayIsWeekday = isWeekday();
+  const [openTasksByUser, minutesByUser, minutesTodayByUser] = await Promise.all([
     countOpenTasksByAssignee(db, { organizationId, userIds }),
     sumMinutesByUsersInRange(db, { organizationId, userIds, from, to }),
+    todayIsWeekday
+      ? sumMinutesByUsersInRange(db, { organizationId, userIds, from: today, to: today })
+      : Promise.resolve({} as Record<string, number>),
   ]);
+
+  // Colaboradores que hoy (día laborable) no llegan al mínimo del área —
+  // igual criterio que `notify_missing_hours`, sin incluir al propio gerente.
+  const missingToday = todayIsWeekday
+    ? people.filter(
+        (p) =>
+          p.userId &&
+          p.userId !== user.id &&
+          (minutesTodayByUser[p.userId] ?? 0) < selected.min_daily_minutes,
+      )
+    : [];
 
   return (
     <div>
@@ -97,8 +114,19 @@ export default async function MiAreaPage({
       <div className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-bold tracking-tight">Carga del equipo</h2>
-          <OverloadThresholdEditor areaId={selected.id} threshold={selected.overload_threshold} />
+          <div className="flex flex-wrap items-center gap-4">
+            <OverloadThresholdEditor areaId={selected.id} threshold={selected.overload_threshold} />
+            <MinDailyHoursEditor areaId={selected.id} minutes={selected.min_daily_minutes} />
+          </div>
         </div>
+
+        {missingToday.length > 0 && (
+          <div className="mt-3 rounded-md border border-danger/40 bg-glass px-4 py-2 text-sm text-danger backdrop-blur-xl">
+            {missingToday.length} colaborador{missingToday.length === 1 ? "" : "es"} no{" "}
+            {missingToday.length === 1 ? "ha registrado" : "han registrado"} suficiente tiempo hoy:{" "}
+            {missingToday.map((p) => p.fullName).join(", ")}.
+          </div>
+        )}
 
         <form method="get" className="mt-3 flex flex-wrap items-end gap-3">
           {searchParams.area && <input type="hidden" name="area" value={searchParams.area} />}

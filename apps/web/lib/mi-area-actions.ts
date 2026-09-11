@@ -7,6 +7,7 @@ import {
   createSupabaseServiceRoleClient,
   getArea,
   renameJobTitle,
+  updateAreaMinDailyMinutes,
   updateAreaOverloadThreshold,
 } from "@agency-os/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -90,6 +91,30 @@ export async function updateAreaOverloadThresholdAction(
   } catch (error) {
     console.error("updateAreaOverloadThresholdAction", error);
     return { error: "No se pudo actualizar el umbral. Intenta de nuevo." };
+  }
+}
+
+/** Mínimo diario de horas (guardado en minutos) que dispara la alerta de
+ * "horas no registradas". Mismo guard/patrón de service role que el umbral de
+ * carga alta: `areas_write` (RLS) exige super admin. */
+export async function updateAreaMinDailyMinutesAction(
+  areaId: string,
+  minutes: number,
+): Promise<AccessActionResult> {
+  const auth = await requireAreaManager(areaId);
+  if (auth.error !== undefined) return { error: auth.error };
+  if (!Number.isInteger(minutes) || minutes <= 0) {
+    return { error: "El mínimo debe ser mayor a 0." };
+  }
+
+  try {
+    const admin = createSupabaseServiceRoleClient();
+    await updateAreaMinDailyMinutes(admin, areaId, minutes);
+    revalidatePath("/mi-area");
+    return { ok: true };
+  } catch (error) {
+    console.error("updateAreaMinDailyMinutesAction", error);
+    return { error: "No se pudo actualizar el mínimo. Intenta de nuevo." };
   }
 }
 
