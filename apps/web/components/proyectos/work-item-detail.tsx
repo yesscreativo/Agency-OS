@@ -29,7 +29,6 @@ import {
   type PanelComment,
 } from "./work-item-activity-panel";
 import { TimeTrackingPanel } from "./time-tracking-panel";
-import { ChecklistPanel, type ChecklistItemView } from "./checklist-panel";
 
 export interface DetailAssignee {
   id: string;
@@ -72,7 +71,6 @@ export function WorkItemDetail({
   comments,
   activity,
   timeEntries,
-  checklistItems,
   activeTimer,
 }: {
   projectId: string;
@@ -90,7 +88,6 @@ export function WorkItemDetail({
   comments: PanelComment[];
   activity: PanelActivity[];
   timeEntries: TimeEntryDTO[];
-  checklistItems: ChecklistItemView[];
   /** Timer activo del usuario (en esta tarea u otra), para el cronómetro. */
   activeTimer?: ActiveTimerDTO | null;
 }) {
@@ -197,6 +194,8 @@ export function WorkItemDetail({
   };
 
   const statusById = new Map(statuses.map((s) => [s.id, s]));
+  const subtasksTotal = subtasks.length;
+  const subtasksDone = subtasks.filter((st) => statusById.get(st.statusId ?? "")?.isDone).length;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
@@ -271,26 +270,35 @@ export function WorkItemDetail({
           {saved && !isPending && <span className="mt-1 block text-sm text-green">Guardado ✓</span>}
         </section>
 
-        <ChecklistPanel
-          workItemId={task.id}
-          items={checklistItems}
-          canWrite={canManage || task.assignees.some((a) => a.id === currentUserId)}
-        />
-
         {task.type === "task" && (
           <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-ink">Subtareas</h2>
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => setCreatingSubtask(true)}
-                  className="text-xs font-semibold text-green hover:underline"
-                >
-                  + Agregar subtarea
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {subtasksTotal > 0 && (
+                  <span className="font-mono text-xs text-muted">
+                    {subtasksDone}/{subtasksTotal}
+                  </span>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => setCreatingSubtask(true)}
+                    className="text-xs font-semibold text-green hover:underline"
+                  >
+                    + Agregar subtarea
+                  </button>
+                )}
+              </div>
             </div>
+            {subtasksTotal > 0 && (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-pill bg-surface-2">
+                <div
+                  className="h-full rounded-pill bg-green transition-all"
+                  style={{ width: `${(subtasksDone / subtasksTotal) * 100}%` }}
+                />
+              </div>
+            )}
             {subtasks.length > 0 ? (
               <div className="mt-3 space-y-1.5">
                 {subtasks.map((st) => {

@@ -9,7 +9,7 @@
 ## Funcionalidades
 - Estados configurables
 - Dependencias
-- Checklist
+- Progreso de subtareas
 - Comentarios
 - Adjuntos
 - Participantes

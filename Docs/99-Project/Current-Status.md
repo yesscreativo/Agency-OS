@@ -187,7 +187,6 @@ La rama actual sigue expandiendo el módulo de Proyectos y mejorando la experien
 - time tracking completo
 - comentarios en work items
 - timeline de actividad
-- checklists
 - watchers / participants extendidos
 - custom fields en work items
 - tags
@@ -208,7 +207,6 @@ La rama actual sigue expandiendo el módulo de Proyectos y mejorando la experien
 ### Prioridad alta
 - comentarios y threads sobre work items
 - adjuntos ligados también a comentarios
-- checklists
 - activity timeline persistente
 - filtros operativos sólidos
 - búsqueda operativa

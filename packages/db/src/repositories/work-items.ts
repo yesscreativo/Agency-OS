@@ -174,15 +174,9 @@ export type WorkItemAssigneeRow = {
   } | null;
 };
 
-export type ChecklistItemSummary = Pick<
-  Tables<"checklist_items">,
-  "id" | "label" | "is_completed" | "deleted_at"
->;
-
 export type ProjectTaskRow = Tables<"work_items"> & {
   status: Pick<Tables<"work_item_statuses">, "id" | "label" | "color" | "is_done"> | null;
   assignees: WorkItemAssigneeRow[];
-  checklist_items: ChecklistItemSummary[];
 };
 
 export type ProjectDetail = Tables<"work_items"> & {
@@ -196,7 +190,7 @@ export type ProjectDetail = Tables<"work_items"> & {
 // queremos, y statuses.project_id→work_items.id, la inversa). Sin el nombre del
 // FK, PostgREST responde 300 (PGRST201) y la consulta lanza. Igual en countProjectTasks.
 const TASKS_SELECT =
-  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email))), checklist_items(id, label, is_completed, deleted_at)";
+  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email)))";
 
 /** Proyecto + sus columnas del tablero (`work_item_statuses`, ordenadas por
  * sort_order) + sus tareas/subtareas con assignees embebidos. Las tareas se
@@ -224,7 +218,6 @@ export async function getProject(db: Db, id: string): Promise<ProjectDetail | nu
       .in("type", ["task", "subtask"])
       .is("deleted_at", null)
       .order("sort_order")
-      .order("sort_order", { foreignTable: "checklist_items" })
       .returns<ProjectTaskRow[]>(),
   ]);
   if (tasksResult.error) throw tasksResult.error;
@@ -254,7 +247,6 @@ export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | 
     .eq("id", id)
     .in("type", ["task", "subtask"])
     .is("deleted_at", null)
-    .order("sort_order", { foreignTable: "checklist_items" })
     .maybeSingle<ProjectTaskRow>();
   if (error) throw error;
   if (!data) return null;
@@ -273,7 +265,6 @@ export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | 
       .eq("type", "subtask")
       .is("deleted_at", null)
       .order("sort_order")
-      .order("sort_order", { foreignTable: "checklist_items" })
       .returns<ProjectTaskRow[]>(),
   ]);
   if (projectResult.error) throw projectResult.error;

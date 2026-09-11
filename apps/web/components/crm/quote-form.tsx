@@ -610,7 +610,7 @@ export function QuoteForm({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         {/* Datos generales */}
         <section className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h2 className="text-lg font-bold tracking-tight">Datos generales</h2>

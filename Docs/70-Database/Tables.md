@@ -17,7 +17,6 @@ Operation:
 - work_items
 - comments
 - attachments
-- checklists
 - time_entries
 
 Platform:
