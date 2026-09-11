@@ -42,7 +42,7 @@ export default async function ProyectosLayout({ children }: { children: React.Re
   }));
 
   return (
-    <div className="flex flex-col gap-8 sm:flex-row">
+    <div className="flex flex-col gap-8 sm:flex-row sm:items-start">
       <ProjectsSidebar
         clients={clients}
         clientsForCreate={clientsForCreate}
