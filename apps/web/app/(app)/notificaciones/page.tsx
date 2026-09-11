@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { listNotifications } from "@agency-os/db";
 import { formatDate } from "@agency-os/domain";
 import { getCurrentUser } from "@/lib/auth";
@@ -70,9 +71,9 @@ export default async function NotificationsPage() {
               return (
                 <li key={n.id}>
                   {href ? (
-                    <a href={href} className="block">
+                    <Link href={href} className="block">
                       {Row}
-                    </a>
+                    </Link>
                   ) : (
                     Row
                   )}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export interface TabItem {
   key: string;
@@ -24,9 +25,9 @@ function TabEl({
 }) {
   if (item.href) {
     return (
-      <a href={item.href} className={className}>
+      <Link href={item.href} className={className}>
         {item.label}
-      </a>
+      </Link>
     );
   }
   return (

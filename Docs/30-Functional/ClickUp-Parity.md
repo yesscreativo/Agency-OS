@@ -424,7 +424,6 @@ Mapear las funcionalidades disponibles hoy en el MCP de ClickUp contra Agency OS
 El siguiente spec de implementación debe enfocarse en una **Fase B de ClickUp Parity Operacional** con este alcance:
 - comentarios
 - adjuntos
-- checklists
 - participantes/watchers
 - activity timeline
 - búsqueda/filtros operativos

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { countUnread, listNotifications } from "@agency-os/db";
 import { Avatar, ThemeToggle } from "@agency-os/ui";
 import { getCurrentUser } from "@/lib/auth";
@@ -40,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           así que el z-index del header compite directo contra el de esas sections. */}
       <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-4 px-8 py-3">
-          <a href="/inicio" className="flex items-center">
+          <Link href="/inicio" className="flex items-center">
             {/* Wordmark según tema: blanco sobre oscuro, negro sobre claro */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -55,7 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               aria-hidden="true"
               className="hidden h-5 w-auto [[data-theme=light]_&]:block"
             />
-          </a>
+          </Link>
           <div className="flex items-center gap-3 text-sm">
             <ThemeToggle />
             <NotificationBell

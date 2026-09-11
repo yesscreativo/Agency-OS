@@ -133,6 +133,59 @@ export async function countOverdueTasksInProjects(
   return overdue;
 }
 
+/** Tareas de un conjunto de proyectos asignadas a `userId`: total, completadas
+ * y retrasadas. Para el filtro "Mío" del dashboard de cliente. `total`/`done`
+ * cuentan solo `type='task'` (igual que `countProjectTasks`, que alimenta las
+ * KPIs "Tareas"/"Completado" de "Todos"); `overdue` incluye subtareas (igual
+ * que `countOverdueTasksInProjects`) — se replica la misma convención mixta ya
+ * existente en el dashboard, no una nueva. Mismo patrón de escanear+filtrar
+ * que `countOpenTasksByAssignee`/`listMyAgenda` (PostgREST no permite filtrar
+ * por "algún assignee = X" de forma simple). */
+export async function countAssignedTasksInProjects(
+  db: Db,
+  projectIds: string[],
+  userId: string,
+  today: string,
+): Promise<{ total: number; done: number; overdue: number }> {
+  if (projectIds.length === 0) return { total: 0, done: 0, overdue: 0 };
+  let total = 0;
+  let done = 0;
+  let overdue = 0;
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("work_items")
+      .select(
+        "id, type, due_date, status:work_item_statuses!work_items_status_fk(is_done), assignees:work_item_assignees(user_id)",
+      )
+      .in("type", ["task", "subtask"])
+      .is("deleted_at", null)
+      .in("project_id", projectIds)
+      .range(from, from + pageSize - 1)
+      .returns<
+        {
+          id: string;
+          type: string;
+          due_date: string | null;
+          status: { is_done: boolean } | null;
+          assignees: { user_id: string }[];
+        }[]
+      >();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (!row.assignees.some((a) => a.user_id === userId)) continue;
+      const isDone = row.status?.is_done ?? false;
+      if (row.type === "task") {
+        total += 1;
+        if (isDone) done += 1;
+      }
+      if (!isDone && row.due_date && row.due_date < today) overdue += 1;
+    }
+    if (!data || data.length < pageSize) break;
+  }
+  return { total, done, overdue };
+}
+
 /** Cuenta tareas/subtareas ABIERTAS (no "hecho", no borradas) asignadas a cada
  * usuario de `userIds`, sin importar el proyecto — para "Carga del equipo". */
 export async function countOpenTasksByAssignee(
@@ -174,15 +227,9 @@ export type WorkItemAssigneeRow = {
   } | null;
 };
 
-export type ChecklistItemSummary = Pick<
-  Tables<"checklist_items">,
-  "id" | "label" | "is_completed" | "deleted_at"
->;
-
 export type ProjectTaskRow = Tables<"work_items"> & {
   status: Pick<Tables<"work_item_statuses">, "id" | "label" | "color" | "is_done"> | null;
   assignees: WorkItemAssigneeRow[];
-  checklist_items: ChecklistItemSummary[];
 };
 
 export type ProjectDetail = Tables<"work_items"> & {
@@ -196,7 +243,7 @@ export type ProjectDetail = Tables<"work_items"> & {
 // queremos, y statuses.project_id→work_items.id, la inversa). Sin el nombre del
 // FK, PostgREST responde 300 (PGRST201) y la consulta lanza. Igual en countProjectTasks.
 const TASKS_SELECT =
-  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email))), checklist_items(id, label, is_completed, deleted_at)";
+  "*, status:work_item_statuses!work_items_status_fk(id, label, color, is_done), assignees:work_item_assignees(user_id, users(id, person:people(full_name, email)))";
 
 /** Proyecto + sus columnas del tablero (`work_item_statuses`, ordenadas por
  * sort_order) + sus tareas/subtareas con assignees embebidos. Las tareas se
@@ -224,7 +271,6 @@ export async function getProject(db: Db, id: string): Promise<ProjectDetail | nu
       .in("type", ["task", "subtask"])
       .is("deleted_at", null)
       .order("sort_order")
-      .order("sort_order", { foreignTable: "checklist_items" })
       .returns<ProjectTaskRow[]>(),
   ]);
   if (tasksResult.error) throw tasksResult.error;
@@ -254,7 +300,6 @@ export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | 
     .eq("id", id)
     .in("type", ["task", "subtask"])
     .is("deleted_at", null)
-    .order("sort_order", { foreignTable: "checklist_items" })
     .maybeSingle<ProjectTaskRow>();
   if (error) throw error;
   if (!data) return null;
@@ -273,7 +318,6 @@ export async function getWorkItem(db: Db, id: string): Promise<WorkItemDetail | 
       .eq("type", "subtask")
       .is("deleted_at", null)
       .order("sort_order")
-      .order("sort_order", { foreignTable: "checklist_items" })
       .returns<ProjectTaskRow[]>(),
   ]);
   if (projectResult.error) throw projectResult.error;
@@ -342,7 +386,6 @@ type SpaceClient = Pick<Tables<"clients">, "id" | "name" | "company" | "logo_pat
 type ProjectSpaceDbRow = {
   id: string;
   project_state: Enums<"project_state"> | null;
-  created_by: string | null;
   client: SpaceClient | null;
 };
 
@@ -356,7 +399,7 @@ export async function listClientSpaces(
 ): Promise<ClientSpaceRow[]> {
   const { data: projects, error } = await db
     .from("work_items")
-    .select("id, project_state, created_by, client:clients(id, name, company, logo_path)")
+    .select("id, project_state, client:clients(id, name, company, logo_path)")
     .eq("organization_id", orgId)
     .eq("type", "project")
     .is("deleted_at", null)
@@ -395,7 +438,7 @@ export async function listClientSpaces(
     }
     row.projectCount += 1;
     if (p.project_state === "active") row.activeCount += 1;
-    if (p.created_by === userId || myProjectIds.has(p.id)) row.mine = true;
+    if (myProjectIds.has(p.id)) row.mine = true;
   }
   return Array.from(byClient.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
 }

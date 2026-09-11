@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import Link from "next/link";
 
 /** Contenedor de menú lateral (ej. hub de Inicio/Usuarios/Mi perfil). */
 export function Sidebar({ className = "", ...props }: HTMLAttributes<HTMLElement>) {
@@ -19,7 +20,7 @@ export interface SidebarItemProps {
 
 export function SidebarItem({ href, label, icon, active = false }: SidebarItemProps) {
   return (
-    <a
+    <Link
       href={href}
       className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm transition ${
         active
@@ -29,6 +30,6 @@ export function SidebarItem({ href, label, icon, active = false }: SidebarItemPr
     >
       {icon && <span className="shrink-0">{icon}</span>}
       {label}
-    </a>
+    </Link>
   );
 }

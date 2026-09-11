@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { listKams, listPipelineQuotes } from "@agency-os/db";
 import { formatMoney } from "@agency-os/domain";
 import { KpiCard, KpiDot, Table, Td, Th, type KpiTone } from "@agency-os/ui";
@@ -252,19 +253,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
               Filtrar
             </button>
           </form>
-          <a
+          <Link
             href={dashHref(searchParams, { embudo: showEmbudo ? "" : "1" })}
             className={`rounded-pill border px-4 py-2 text-sm font-semibold transition ${
               showEmbudo ? "border-green text-green" : "border-line-strong text-muted hover:text-ink"
             }`}
           >
             Embudo
-          </a>
+          </Link>
           <div className="flex items-center gap-1 rounded-pill border border-line p-1">
             {PERIODS.map((p) => {
               const active = periodo === p.value;
               return (
-                <a
+                <Link
                   key={p.value}
                   href={dashHref(searchParams, { periodo: p.value })}
                   className={`rounded-pill px-3 py-1.5 text-sm font-semibold transition ${
@@ -272,7 +273,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
                   }`}
                 >
                   {p.label}
-                </a>
+                </Link>
               );
             })}
           </div>

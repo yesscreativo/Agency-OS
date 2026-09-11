@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import {
+  countAssignedTasksInProjects,
   countOverdueTasksInProjects,
   getProject,
   listClients,
@@ -99,11 +100,11 @@ export default async function ClienteSpacePage({
   // del server como YYYY-MM-DD, igual criterio que el job diario de pg_cron.
   const today = new Date();
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const overdueCount = await countOverdueTasksInProjects(
-    db,
-    allClientProjects.map((p) => p.id),
-    todayIso,
-  );
+  const clientProjectIds = allClientProjects.map((p) => p.id);
+  const [overdueCount, mine] = await Promise.all([
+    countOverdueTasksInProjects(db, clientProjectIds, todayIso),
+    countAssignedTasksInProjects(db, clientProjectIds, user.id, todayIso),
+  ]);
 
   const rows: ProjectListRow[] = projects.map((p) => ({
     id: p.id,
@@ -141,10 +142,18 @@ export default async function ClienteSpacePage({
       <ClientKpis
         projectCount={allClientProjects.length}
         activeCount={activeCount}
-        tasksTotal={tasksTotal}
-        tasksDone={tasksDone}
-        tasksInProgress={tasksTotal - tasksDone}
-        overdueCount={overdueCount}
+        all={{
+          tasksTotal,
+          tasksDone,
+          tasksInProgress: tasksTotal - tasksDone,
+          overdueCount,
+        }}
+        mine={{
+          tasksTotal: mine.total,
+          tasksDone: mine.done,
+          tasksInProgress: mine.total - mine.done,
+          overdueCount: mine.overdue,
+        }}
       />
       <ProjectsList
         rows={rows}

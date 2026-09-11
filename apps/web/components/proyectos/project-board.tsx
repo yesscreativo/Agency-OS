@@ -32,8 +32,6 @@ export interface BoardTask {
   startDate: string | null;
   dueDate: string | null;
   assignees: BoardAssignee[];
-  checklistCompleted: number;
-  checklistTotal: number;
 }
 
 export interface BoardOrgUser {
@@ -299,31 +297,24 @@ export function ProjectBoard({
                             {priority.label}
                           </Badge>
                         </div>
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 text-[12px] text-muted">
-                            {t.dueDate && (
-                              <span
-                                className={
-                                  overdue ? "font-semibold text-danger" : undefined
-                                }
-                                title={overdue ? "Retrasada" : undefined}
-                              >
-                                {overdue && "⚠ "}
-                                {formatDate(t.dueDate)}
-                              </span>
-                            )}
-                            {subCount > 0 && (
-                              <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
-                                {subCount} subtarea{subCount === 1 ? "" : "s"}
-                              </span>
-                            )}
-                            {t.checklistTotal > 0 && (
-                              <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px]">
-                                ✓ {t.checklistCompleted}/{t.checklistTotal}
-                              </span>
-                            )}
+                        {t.dueDate && (
+                          <div
+                            className={`mt-2 text-[12px] ${overdue ? "font-semibold text-danger" : "text-muted"}`}
+                            title={overdue ? "Retrasada" : undefined}
+                          >
+                            {overdue && "⚠ "}
+                            {formatDate(t.dueDate)}
                           </div>
-                          <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
+                        )}
+                        <div className="mt-2 flex items-center gap-2">
+                          {subCount > 0 && (
+                            <span className="shrink-0 rounded-pill border border-line-strong px-2 py-0.5 text-[11px] text-muted">
+                              {subCount} subtarea{subCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          <div className="ml-auto">
+                            <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
+                          </div>
                         </div>
                       </button>
                     );
@@ -431,11 +422,6 @@ function ListView({
                     {formatDuration(minutesByTask![t.id])}
                   </span>
                 )}
-                {t.checklistTotal > 0 && (
-                  <span className="font-mono text-[12px] tabular-nums text-muted">
-                    ✓ {t.checklistCompleted}/{t.checklistTotal}
-                  </span>
-                )}
                 <AssigneeAvatars assignees={t.assignees} avatarByUserId={avatarByUserId} />
               </div>
             </button>
@@ -467,11 +453,6 @@ function ListView({
                     {Boolean(minutesByTask?.[c.id]) && (
                       <span className="font-mono text-[12px] tabular-nums text-muted">
                         {formatDuration(minutesByTask![c.id])}
-                      </span>
-                    )}
-                    {c.checklistTotal > 0 && (
-                      <span className="font-mono text-[12px] tabular-nums text-muted">
-                        ✓ {c.checklistCompleted}/{c.checklistTotal}
                       </span>
                     )}
                     <AssigneeAvatars assignees={c.assignees} avatarByUserId={avatarByUserId} />

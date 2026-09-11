@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import {
   getQuoteById,
   listClients,
@@ -144,9 +145,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <a href="/crm" className="text-sm text-muted transition hover:text-ink">
+          <Link href="/crm" className="text-sm text-muted transition hover:text-ink">
             ← Cotizaciones
-          </a>
+          </Link>
           <div className="mt-1 flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">
               {quote.code ?? "Borrador"}
