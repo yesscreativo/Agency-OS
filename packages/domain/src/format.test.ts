@@ -11,6 +11,7 @@ import {
   formatRelative,
   initialsOf,
   isOverdue,
+  isWeekday,
   overdueLabel,
 } from "./format";
 
@@ -194,6 +195,17 @@ describe("currentWeekRange", () => {
   });
   it("lunes (2026-08-31) -> desde ese mismo lunes", () => {
     expect(currentWeekRange(new Date(2026, 7, 31))).toEqual({ from: "2026-08-31", to: "2026-09-06" });
+  });
+});
+
+describe("isWeekday", () => {
+  it("lunes a viernes (UTC) es día laborable", () => {
+    expect(isWeekday(new Date("2026-09-07T12:00:00Z"))).toBe(true); // lunes
+    expect(isWeekday(new Date("2026-09-11T12:00:00Z"))).toBe(true); // viernes
+  });
+  it("sábado y domingo (UTC) no son días laborables", () => {
+    expect(isWeekday(new Date("2026-09-12T12:00:00Z"))).toBe(false); // sábado
+    expect(isWeekday(new Date("2026-09-13T12:00:00Z"))).toBe(false); // domingo
   });
 });
 

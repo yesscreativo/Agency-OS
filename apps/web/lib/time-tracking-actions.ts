@@ -69,6 +69,8 @@ export async function addTimeEntry(input: {
   if (!Number.isFinite(input.minutes) || input.minutes <= 0) {
     return { error: "La duración debe ser mayor a cero." };
   }
+  const note = input.note?.trim() || null;
+  if (!note) return { error: "La nota es obligatoria." };
   try {
     const db = await getSupabaseServerClient();
     const workItem = await loadWorkItem(db, input.workItemId, organizationId);
@@ -80,7 +82,7 @@ export async function addTimeEntry(input: {
       user_id: user.id,
       minutes: Math.round(input.minutes),
       spent_on: input.spentOn,
-      note: input.note?.trim() || null,
+      note,
       source: "manual",
     });
     try {
@@ -119,6 +121,8 @@ export async function editTimeEntry(input: {
   if (!Number.isFinite(input.minutes) || input.minutes <= 0) {
     return { error: "La duración debe ser mayor a cero." };
   }
+  const note = input.note?.trim() || null;
+  if (!note) return { error: "La nota es obligatoria." };
   try {
     const db = await getSupabaseServerClient();
     const entry = await getTimeEntry(db, input.id);
@@ -131,7 +135,7 @@ export async function editTimeEntry(input: {
     await updateTimeEntry(db, input.id, {
       minutes: Math.round(input.minutes),
       spent_on: input.spentOn,
-      note: input.note?.trim() || null,
+      note,
     });
     const title = await workItemTitle(db, entry.work_item_id);
     const link = title

@@ -60,6 +60,30 @@ export async function updateAreaOverloadThreshold(db: Db, id: string, threshold:
   if (error) throw error;
 }
 
+/** Mínimo diario de minutos que dispara la alerta de "horas no registradas"
+ * (`notify_missing_hours`, cron diario). Mismo patrón/guard que el umbral de
+ * carga alta. */
+export async function updateAreaMinDailyMinutes(db: Db, id: string, minutes: number): Promise<void> {
+  const { error } = await db
+    .from("areas")
+    .update({ min_daily_minutes: minutes, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Umbral de horas mínimas del área a la que pertenece una persona — null si
+ * no tiene área asignada. Para la alerta visual en "Mis tiempos". */
+export async function getAreaMinDailyMinutesForPerson(db: Db, personId: string): Promise<number | null> {
+  const { data, error } = await db
+    .from("people")
+    .select("area:areas(min_daily_minutes)")
+    .eq("id", personId)
+    .maybeSingle()
+    .returns<{ area: { min_daily_minutes: number } | null } | null>();
+  if (error) throw error;
+  return data?.area?.min_daily_minutes ?? null;
+}
+
 export async function listAreasManagedBy(db: Db, userId: string): Promise<AreaRow[]> {
   const { data, error } = await db.from("areas").select("*").eq("manager_user_id", userId).order("name");
   if (error) throw error;

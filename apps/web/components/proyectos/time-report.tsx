@@ -26,9 +26,12 @@ export interface TimeReportEntry {
 interface TimeReportProps {
   entries: TimeReportEntry[];
   filters: { from: string; to: string };
+  /** Presente cuando hoy (día laborable) el usuario no llega al mínimo de
+   * horas de su área — ver `notify_missing_hours`. */
+  missingHours?: { minutesLogged: number; minDailyMinutes: number } | null;
 }
 
-export function TimeReport({ entries, filters }: TimeReportProps) {
+export function TimeReport({ entries, filters, missingHours }: TimeReportProps) {
   const totalMinutes = entries.reduce((n, e) => n + e.minutes, 0);
   const hasFilters = Boolean(filters.from || filters.to);
 
@@ -38,6 +41,14 @@ export function TimeReport({ entries, filters }: TimeReportProps) {
         <h1 className="text-3xl font-bold tracking-tight">Mis tiempos</h1>
         <p className="mt-1 text-sm text-muted">Tiempo que has registrado, por cliente.</p>
       </div>
+
+      {missingHours && (
+        <div className="mt-4 rounded-md border border-danger/40 bg-glass px-4 py-2 text-sm text-danger backdrop-blur-xl">
+          No has registrado suficiente tiempo hoy — llevas{" "}
+          {formatDuration(missingHours.minutesLogged) || "0m"} de{" "}
+          {formatDuration(missingHours.minDailyMinutes)} esperadas.
+        </div>
+      )}
 
       <form method="get" className="mt-6 flex flex-wrap items-end gap-3">
         <div>

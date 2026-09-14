@@ -22,6 +22,7 @@ export type Database = {
           created_at: string
           id: string
           manager_user_id: string | null
+          min_daily_minutes: number
           name: string
           organization_id: string
           overload_threshold: number
@@ -31,6 +32,7 @@ export type Database = {
           created_at?: string
           id?: string
           manager_user_id?: string | null
+          min_daily_minutes?: number
           name: string
           organization_id: string
           overload_threshold?: number
@@ -40,6 +42,7 @@ export type Database = {
           created_at?: string
           id?: string
           manager_user_id?: string | null
+          min_daily_minutes?: number
           name?: string
           organization_id?: string
           overload_threshold?: number
@@ -1548,6 +1551,7 @@ export type Database = {
         Args: { p_client_id: string; p_day: string }
         Returns: number
       }
+      notify_missing_hours: { Args: never; Returns: undefined }
       notify_overdue_work_items: { Args: never; Returns: undefined }
       reorder_quote_statuses: { Args: { p_ids: string[] }; Returns: undefined }
       seed_default_quote_statuses: {

@@ -44,21 +44,23 @@ function AgendaCard({ task, overdue }: { task: AgendaTaskView; overdue?: boolean
   return (
     <Link
       href={task.href}
-      className={`block rounded-md border border-l-[3px] bg-surface-2 p-2.5 text-sm transition hover:border-line-strong hover:shadow-raised ${
+      className={`flex flex-col gap-2 rounded-lg border border-l-[3px] bg-surface-2 p-3 text-sm transition hover:border-line-strong hover:shadow-raised ${
         overdue ? "border-danger border-l-danger" : `border-line ${PRIORITY_ACCENT[task.priority]}`
       }`}
     >
       {overdue && (
-        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-danger">
+        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-danger">
           <span className="h-1.5 w-1.5 rounded-pill bg-danger" />
           Retrasada
         </div>
       )}
-      <p className="truncate font-medium leading-snug text-ink">{task.title}</p>
-      <p className="mt-0.5 truncate text-xs text-muted">
-        {task.clientName ?? "—"} · {task.projectTitle}
-      </p>
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div>
+        <p className="line-clamp-2 font-medium leading-snug text-ink">{task.title}</p>
+        <p className="mt-1 truncate text-xs text-muted">
+          {task.clientName ?? "—"} · {task.projectTitle}
+        </p>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-2">
         <PriorityBadge priority={task.priority} />
         {task.estimatedMinutes !== null && (
           <span className="font-mono text-[11px] text-muted">
@@ -95,22 +97,22 @@ function UndatedRow({ task, onSaved }: { task: AgendaTaskView; onSaved: () => vo
   };
 
   return (
-    <div className="rounded-md border border-line bg-surface-2 p-2.5 text-sm">
-      <Link href={task.href} className="block truncate font-medium text-ink hover:underline">
-        {task.title}
-      </Link>
-      <div className="mt-1 truncate text-xs text-muted">
-        {task.clientName ?? "—"} · {task.projectTitle}
+    <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
+      <div>
+        <Link href={task.href} className="block line-clamp-2 font-medium leading-snug text-ink hover:underline">
+          {task.title}
+        </Link>
+        <div className="mt-1 truncate text-xs text-muted">
+          {task.clientName ?? "—"} · {task.projectTitle}
+        </div>
       </div>
-      <div className="mt-1.5">
-        <Input
-          type="date"
-          disabled={isPending}
-          onChange={(e) => onChangeDate(e.target.value)}
-          aria-label={`Asignar fecha a "${task.title}"`}
-        />
-      </div>
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+      <Input
+        type="date"
+        disabled={isPending}
+        onChange={(e) => onChangeDate(e.target.value)}
+        aria-label={`Asignar fecha a "${task.title}"`}
+      />
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }
@@ -163,7 +165,7 @@ export function ProjectsDashboard({
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">
                   {day.label}
                 </div>
-                <div className="mt-2 space-y-2">
+                <div className="mt-3 space-y-2.5">
                   {tasks.length === 0 ? (
                     <p className="text-xs text-faint">Sin tareas.</p>
                   ) : (
@@ -182,7 +184,7 @@ export function ProjectsDashboard({
             <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">
               Sin fecha · {undatedTasks.length}
             </div>
-            <div className="mt-2 space-y-2">
+            <div className="mt-3 space-y-2.5">
               {undatedTasks.length === 0 ? (
                 <p className="text-xs text-faint">Todo tiene fecha.</p>
               ) : (

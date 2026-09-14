@@ -51,7 +51,7 @@ export function ProjectsSidebar({
   const rootActive = pathname === "/proyectos";
 
   return (
-    <aside className="w-full shrink-0 sm:w-[240px]">
+    <aside className="w-full shrink-0 sm:sticky sm:top-[88px] sm:w-[240px] sm:max-h-[calc(100vh-104px)] sm:overflow-y-auto">
       <Link
         href="/proyectos"
         className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition ${
@@ -95,7 +95,7 @@ export function ProjectsSidebar({
         Clientes · {filtered.length}
       </div>
 
-      <div className="ds-scroll mt-1 max-h-[calc(100vh-360px)] space-y-0.5 overflow-y-auto pr-1">
+      <div className="ds-scroll mt-1 space-y-0.5 pr-1">
         {filtered.length === 0 ? (
           <p className="px-3.5 py-2 text-sm text-faint">
             {clients.length === 0 ? "Aún no hay clientes con proyectos." : "Sin resultados."}

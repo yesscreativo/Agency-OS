@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /** Ancho máximo del diálogo. `sm` (380px) es el valor histórico y sigue siendo
  * el default para no afectar a los modales existentes. */
@@ -25,8 +26,15 @@ export interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, description, children, footer, size = "sm" }: ModalProps) {
-  if (!open) return null;
-  return (
+  // Portal a document.body: si el modal se monta dentro de un ancestro con
+  // filter/backdrop-filter (ej. las tarjetas `backdrop-blur-xl` del DS), ese
+  // ancestro pasa a ser el containing block de los descendientes `fixed` y el
+  // overlay queda atrapado detrás de hermanos posteriores en vez de cubrir
+  // toda la pantalla. `mounted` evita el mismatch de SSR (no hay `document`).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!open || !mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
@@ -55,6 +63,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
         {children && <div className="overflow-y-auto px-6 pt-4">{children}</div>}
         {footer && <div className="flex gap-2.5 p-6 pt-6 [&>*]:flex-1">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

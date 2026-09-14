@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  createNotifications,
   createProject,
   createStatus,
+  createSupabaseServiceRoleClient,
   createWorkItem,
   deleteAttachmentRow,
   deleteStatus,
@@ -33,8 +35,8 @@ export type IdResult = { id: string; error?: never } | { id?: never; error: stri
 export type ActionResult = { ok: true; error?: never } | { ok?: never; error: string };
 
 type ManagerAuth =
-  | { organizationId: string; userId: string; error?: never }
-  | { organizationId?: never; userId?: never; error: string };
+  | { organizationId: string; userId: string; fullName: string; error?: never }
+  | { organizationId?: never; userId?: never; fullName?: never; error: string };
 
 async function requireProjectManager(): Promise<ManagerAuth> {
   const user = await getCurrentUser();
@@ -44,7 +46,7 @@ async function requireProjectManager(): Promise<ManagerAuth> {
   }
   const organizationId = user.organizationIds[0];
   if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
-  return { organizationId, userId: user.id };
+  return { organizationId, userId: user.id, fullName: user.fullName };
 }
 
 async function requireProjectAssigner(): Promise<ManagerAuth> {
@@ -55,7 +57,7 @@ async function requireProjectAssigner(): Promise<ManagerAuth> {
   }
   const organizationId = user.organizationIds[0];
   if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
-  return { organizationId, userId: user.id };
+  return { organizationId, userId: user.id, fullName: user.fullName };
 }
 
 /** Defensa en profundidad: `updateWorkItem`/`softDeleteWorkItem`/`setAssignees`
@@ -428,8 +430,10 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
 
     await setAssignees(db, id, auth.organizationId, userIds);
 
+    const addedIds: string[] = [];
     for (const uid of nextIds) {
       if (!prevIds.has(uid)) {
+        addedIds.push(uid);
         await safeActivity(db, {
           orgId: auth.organizationId,
           workItemId: id,
@@ -452,6 +456,39 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
     }
 
     const projectLink = await resolveProjectLink(db, projectId);
+
+    // Notificar a los nuevos asignados (menos a quien hizo el cambio), con
+    // service_role porque la RLS de notifications no permite insertar filas
+    // de otros usuarios.
+    const notifyIds = addedIds.filter((uid) => uid !== auth.userId);
+    if (notifyIds.length > 0) {
+      try {
+        const { data: workItem } = await db
+          .from("work_items")
+          .select("id, title")
+          .eq("id", id)
+          .maybeSingle();
+        if (workItem) {
+          const link = await resolveTaskLink(db, projectId, workItem);
+          const service = createSupabaseServiceRoleClient();
+          await createNotifications(
+            service,
+            notifyIds.map((uid) => ({
+              organization_id: auth.organizationId,
+              user_id: uid,
+              type: "assignment",
+              title: `${auth.fullName} te asignó "${workItem.title}"`,
+              body: null,
+              work_item_id: workItem.id,
+              link,
+            })),
+          );
+        }
+      } catch (error) {
+        console.error("setWorkItemAssignees:notify", error);
+      }
+    }
+
     revalidatePath(projectLink ?? "/proyectos");
     return { ok: true };
   } catch (error) {
