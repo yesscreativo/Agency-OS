@@ -20,6 +20,7 @@ import {
 } from "@agency-os/domain";
 import { Badge, Button, Input, Label, Select, Textarea } from "@agency-os/ui";
 import {
+  attachExistingBrief,
   deleteQuote,
   saveCommercialDocs,
   saveQuoteDraft,
@@ -37,6 +38,7 @@ import {
   summarizeClientResponse,
   type QuoteItemStatus,
 } from "@/lib/quote-item-status";
+import { ExistingBriefPicker } from "@/components/crm/existing-brief-picker";
 
 export interface QuoteFormInitial {
   id: string;
@@ -152,6 +154,14 @@ const parseThousands = (s: string) => {
   return digits ? parseInt(digits, 10) : 0;
 };
 
+// La ruta guardada es `<quote_id>/<timestamp>-<archivo>`; se muestra solo el
+// nombre original al usuario.
+const briefDisplayName = (path: string | null) => {
+  if (!path) return null;
+  const segment = path.split("/").pop() ?? path;
+  return segment.replace(/^\d+[-_]/, "");
+};
+
 export function QuoteForm({
   initial,
   clients,
@@ -202,6 +212,14 @@ export function QuoteForm({
   const [recipients, setRecipients] = useState<QuoteRecipientInput[]>(initial?.recipients ?? []);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "clean" });
   const [briefUrl, setBriefUrl] = useState(briefSignedUrl);
+  const [briefName, setBriefName] = useState(briefDisplayName(initial?.briefPath ?? null));
+
+  // Tras un `router.refresh()` (tras subir un brief nuevo), la página vuelve a
+  // firmar la URL y a leer la ruta guardada: sincronizamos el estado local.
+  useEffect(() => {
+    setBriefUrl(briefSignedUrl);
+    setBriefName(briefDisplayName(initial?.briefPath ?? null));
+  }, [briefSignedUrl, initial?.briefPath]);
   const [isPending, startTransition] = useTransition();
 
   // Estado / documentos comerciales / eliminar (solo cuando la cotización ya existe).
@@ -417,8 +435,9 @@ export function QuoteForm({
         if (result.error) {
           setSaveState({ kind: "error", message: result.error });
         } else {
-          setBriefUrl(file.name);
+          setBriefName(file.name);
           setSaveState({ kind: "saved", at: nowLabel() });
+          router.refresh();
         }
       });
     };
@@ -434,6 +453,38 @@ export function QuoteForm({
         }
         setQuoteId(result.id);
         doUpload(result.id);
+      });
+    }
+  };
+
+  const [briefPickerOpen, setBriefPickerOpen] = useState(false);
+
+  // Adjunta un brief ya subido a otra cotización, sin volver a subir el archivo
+  // (mismo patrón que onBriefSelected: si no hay cotización aún, primero crea el borrador).
+  const onExistingBriefSelected = (path: string, fileName: string) => {
+    const doAttach = (id: string) => {
+      startTransition(async () => {
+        const result = await attachExistingBrief(id, path);
+        if (result.error) {
+          setSaveState({ kind: "error", message: result.error });
+        } else {
+          setBriefName(fileName);
+          setSaveState({ kind: "saved", at: nowLabel() });
+          router.refresh();
+        }
+      });
+    };
+    if (quoteId) {
+      doAttach(quoteId);
+    } else if (clientId) {
+      startTransition(async () => {
+        const result = await saveQuoteDraft(buildInput());
+        if (result.error || !result.id) {
+          setSaveState({ kind: "error", message: result.error ?? "No se pudo guardar." });
+          return;
+        }
+        setQuoteId(result.id);
+        doAttach(result.id);
       });
     }
   };
@@ -1339,7 +1390,15 @@ export function QuoteForm({
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Brief</h3>
           {briefUrl ? (
             <p className="mt-3 truncate text-sm text-ink">
-              📎 <span className="text-muted">{briefUrl.split("/").pop()}</span>
+              📎{" "}
+              <a
+                href={briefUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted underline hover:text-ink"
+              >
+                {briefName}
+              </a>
             </p>
           ) : (
             <p className="mt-3 text-[13px] text-muted">
@@ -1353,15 +1412,33 @@ export function QuoteForm({
             onChange={onBriefSelected}
             aria-label="Adjuntar brief"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3 w-full"
-            disabled={!clientId || isPending}
-            onClick={() => fileInput.current?.click()}
-          >
-            {briefUrl ? "Reemplazar brief" : "Adjuntar brief"}
-          </Button>
+          <div className="mt-3 flex gap-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              disabled={!clientId || isPending}
+              onClick={() => fileInput.current?.click()}
+            >
+              {briefUrl ? "Reemplazar brief" : "Subir archivo"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              disabled={!clientId || isPending}
+              onClick={() => setBriefPickerOpen(true)}
+            >
+              Archivos existentes
+            </Button>
+          </div>
+          <ExistingBriefPicker
+            open={briefPickerOpen}
+            onClose={() => setBriefPickerOpen(false)}
+            quoteId={quoteId}
+            clientId={clientId}
+            onSelect={onExistingBriefSelected}
+          />
         </div>
         )}
 

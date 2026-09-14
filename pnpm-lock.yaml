@@ -124,12 +124,18 @@ importers:
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.31
+      '@types/react-dom':
+        specifier: ^18.3.5
+        version: 18.3.7(@types/react@18.3.31)
       next:
         specifier: ^14.2.21
         version: 14.2.35(@playwright/test@1.61.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

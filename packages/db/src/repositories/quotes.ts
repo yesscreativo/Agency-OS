@@ -272,6 +272,56 @@ export async function setQuoteItemResponses(db: Db, responses: QuoteItemResponse
   }
 }
 
+/** Fila de un brief ya subido a alguna cotización (candidato para reutilizar en otra). */
+export interface ExistingBriefRow {
+  quoteId: string;
+  code: string | null;
+  clientName: string | null;
+  briefPath: string;
+  /** Derivada del prefijo `<timestamp>-` del path; null si no matchea el patrón. */
+  uploadedAt: string | null;
+}
+
+const parseBriefUploadedAt = (path: string): string | null => {
+  const match = path.split("/").pop()?.match(/^(\d+)[-_]/);
+  if (!match) return null;
+  const ts = Number(match[1]);
+  return Number.isFinite(ts) ? new Date(ts).toISOString() : null;
+};
+
+/** Briefs ya subidos a otras cotizaciones de la organización (RLS de `quotes`
+ * ya scopea por org), para reutilizarlos sin volver a subir el mismo archivo.
+ * `clientId` filtra al cliente de la cotización actual; sin filtro trae todos. */
+export async function listExistingBriefs(
+  db: Db,
+  options: { excludeQuoteId?: string; clientId?: string } = {},
+): Promise<ExistingBriefRow[]> {
+  let query = db
+    .from("quotes")
+    .select("id, code, brief_url, client:clients(name)")
+    .is("deleted_at", null)
+    .not("brief_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (options.excludeQuoteId) query = query.neq("id", options.excludeQuoteId);
+  if (options.clientId) query = query.eq("client_id", options.clientId);
+
+  const { data, error } = await query.returns<
+    { id: string; code: string | null; brief_url: string | null; client: { name: string } | null }[]
+  >();
+  if (error) throw error;
+
+  return (data ?? [])
+    .filter((row): row is typeof row & { brief_url: string } => Boolean(row.brief_url))
+    .map((row) => ({
+      quoteId: row.id,
+      code: row.code,
+      clientName: row.client?.name ?? null,
+      briefPath: row.brief_url,
+      uploadedAt: parseBriefUploadedAt(row.brief_url),
+    }));
+}
+
 /** Consecutivo atómico por cliente/día para la numeración MES+CLIENTE+DDMMAAAA-NN. */
 export async function nextQuoteSeq(db: Db, clientId: string, day: string): Promise<number> {
   const { data, error } = await db.rpc("next_quote_seq", { p_client_id: clientId, p_day: day });

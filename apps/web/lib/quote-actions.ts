@@ -7,6 +7,7 @@ import {
   createQuoteVersion,
   createSupabaseServiceRoleClient,
   getQuoteById,
+  listExistingBriefs,
   nextQuoteSeq,
   replaceQuoteItems,
   replaceQuoteRecipients,
@@ -424,6 +425,102 @@ export async function uploadBrief(quoteId: string, formData: FormData): Promise<
   } catch (error) {
     console.error("uploadBrief:update", error);
     return { error: "El archivo subió pero no se pudo enlazar a la cotización." };
+  }
+
+  revalidatePath(`/crm/${quoteId}`);
+  return { id: quoteId };
+}
+
+export interface ExistingBriefOption {
+  quoteId: string;
+  code: string | null;
+  clientName: string | null;
+  briefPath: string;
+  fileName: string;
+  uploadedAt: string | null;
+  /** Signed URL de vista previa; solo se genera para extensiones de imagen. */
+  previewUrl: string | null;
+}
+
+const BRIEF_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif", "svg"]);
+
+/** Lista briefs ya subidos a otras cotizaciones de la organización para el picker
+ * "Archivos existentes" (reutilizar en vez de volver a subir el mismo archivo). */
+export async function fetchExistingBriefs(
+  quoteId: string | null,
+  clientId: string | null,
+): Promise<{ items: ExistingBriefOption[]; error?: never } | { items?: never; error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "quote.approve")) {
+    return { error: "No tienes permiso para ver los briefs existentes." };
+  }
+
+  const db = await getSupabaseServerClient();
+  const rows = await listExistingBriefs(db, {
+    excludeQuoteId: quoteId ?? undefined,
+    clientId: clientId ?? undefined,
+  });
+
+  const imagePaths = rows
+    .filter((r) => BRIEF_IMAGE_EXTENSIONS.has(r.briefPath.split(".").pop()?.toLowerCase() ?? ""))
+    .map((r) => r.briefPath);
+
+  const previews = new Map<string, string>();
+  if (imagePaths.length > 0) {
+    const { data } = await db.storage.from("briefs").createSignedUrls(imagePaths, 60 * 10);
+    for (const item of data ?? []) {
+      if (item.path && item.signedUrl) previews.set(item.path, item.signedUrl);
+    }
+  }
+
+  return {
+    items: rows.map((r) => ({
+      quoteId: r.quoteId,
+      code: r.code,
+      clientName: r.clientName,
+      briefPath: r.briefPath,
+      fileName: r.briefPath.split("/").pop()?.replace(/^\d+[-_]/, "") ?? r.briefPath,
+      uploadedAt: r.uploadedAt,
+      previewUrl: previews.get(r.briefPath) ?? null,
+    })),
+  };
+}
+
+/** Adjunta a `quoteId` un brief que ya existe en el bucket (subido originalmente a
+ * otra cotización), sin duplicar el archivo: solo referencia la misma ruta. */
+export async function attachExistingBrief(
+  quoteId: string,
+  briefPath: string,
+): Promise<QuoteSaveResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "quote.approve")) {
+    return { error: "No tienes permiso para adjuntar archivos." };
+  }
+
+  const db = await getSupabaseServerClient();
+
+  // Confirma que el path pertenece a una cotización visible para el usuario
+  // (RLS de `quotes` ya scopea por organización) antes de referenciarlo — evita
+  // que un path arbitrario, fuera de la UI, quede enlazado sin validar.
+  const { data: owner, error: ownerError } = await db
+    .from("quotes")
+    .select("id")
+    .eq("brief_url", briefPath)
+    .limit(1)
+    .maybeSingle();
+  if (ownerError) {
+    console.error("attachExistingBrief:lookup", ownerError);
+    return { error: "No se pudo validar el archivo." };
+  }
+  if (!owner) return { error: "El archivo ya no está disponible." };
+
+  try {
+    await updateQuote(db, quoteId, { brief_url: briefPath });
+  } catch (error) {
+    console.error("attachExistingBrief:update", error);
+    return { error: "No se pudo adjuntar el brief." };
   }
 
   revalidatePath(`/crm/${quoteId}`);
