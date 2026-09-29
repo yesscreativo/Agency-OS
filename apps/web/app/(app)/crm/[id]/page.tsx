@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  getQuoteById,
+  getQuoteByIdMasked,
   listClients,
   listKams,
   listQuoteVersions,
@@ -22,7 +22,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const access = quoteAccess(user);
 
   const db = await getSupabaseServerClient();
-  const quote = await getQuoteById(db, params.id);
+  const quote = await getQuoteByIdMasked(db, params.id);
   if (!quote) notFound();
 
   const [{ rows: clients }, versions, kams, statusMap, supplierOrderRows] = await Promise.all([
@@ -126,8 +126,8 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
       id: item.id,
       description: item.description,
       quantity: item.quantity,
-      clientPrice: access.seeClientPrice ? item.client_price : 0,
-      costPrice: access.seeCost ? item.cost_price : 0,
+      clientPrice: access.seeClientPrice ? (item.client_price ?? 0) : 0,
+      costPrice: access.seeCost ? (item.cost_price ?? 0) : 0,
       supplier: item.supplier ?? "",
       isGroup: item.is_group,
       status: item.status,

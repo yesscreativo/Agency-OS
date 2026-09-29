@@ -30,8 +30,8 @@ interface SearchParams {
 function quoteCalc(row: QuoteListRow, role: string): QuoteCalcResult {
   return calcQuote(
     row.quote_items.map((item) => ({
-      clientPrice: item.client_price,
-      costPrice: item.cost_price,
+      clientPrice: item.client_price ?? 0,
+      costPrice: item.cost_price ?? 0,
       quantity: item.quantity,
       isGroup: item.is_group,
     })),
@@ -118,8 +118,8 @@ export default async function QuotesListPage({
       hasIva: r.has_iva,
       ivaPercentage: r.iva_percentage,
       items: r.quote_items.map((i) => ({
-        clientPrice: i.client_price,
-        costPrice: i.cost_price,
+        clientPrice: i.client_price ?? 0,
+        costPrice: i.cost_price ?? 0,
         quantity: i.quantity,
         isGroup: i.is_group,
       })),

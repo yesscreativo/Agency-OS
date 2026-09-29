@@ -56,8 +56,8 @@ export default async function KanbanPage({ searchParams }: { searchParams: Searc
       hasIva: r.has_iva,
       ivaPercentage: r.iva_percentage,
       items: r.quote_items.map((i) => ({
-        clientPrice: i.client_price,
-        costPrice: i.cost_price,
+        clientPrice: i.client_price ?? 0,
+        costPrice: i.cost_price ?? 0,
         quantity: i.quantity,
         isGroup: i.is_group,
       })),
@@ -68,8 +68,8 @@ export default async function KanbanPage({ searchParams }: { searchParams: Searc
   const cards: KanbanCard[] = quotes.map((q) => {
     const totals = calcQuote(
       q.quote_items.map((i) => ({
-        clientPrice: i.client_price,
-        costPrice: i.cost_price,
+        clientPrice: i.client_price ?? 0,
+        costPrice: i.cost_price ?? 0,
         quantity: i.quantity,
         isGroup: i.is_group,
       })),

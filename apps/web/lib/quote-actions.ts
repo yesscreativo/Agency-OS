@@ -7,6 +7,7 @@ import {
   createQuoteVersion,
   createSupabaseServiceRoleClient,
   getQuoteById,
+  getQuoteByIdMasked,
   listExistingBriefs,
   nextQuoteSeq,
   replaceQuoteItems,
@@ -88,14 +89,20 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   // Precios enmascarados: quien no ve un precio no puede sobrescribirlo; se conserva
   // el valor almacenado (buscado por id ESTABLE de ítem). El status/comentario del
-  // cliente NO se toca aquí: replaceQuoteItems hace upsert sin esas columnas, así el
-  // valor existente se mantiene y los ítems nuevos quedan en `pending`.
+  // cliente NO se toca aquí: replaceQuoteItems no los incluye en el insert/update,
+  // así el valor existente se mantiene y los ítems nuevos quedan en `pending`.
+  // Se lee con service-role (valor REAL, no enmascarado): si se leyera con el
+  // cliente de sesión de un usuario sin el permiso, `quote_items_secure` devolvería
+  // null y este guardado borraría a cero el precio que no puede ver.
   const access = quoteAccess(user);
   const stored = new Map<string, { client_price: number; cost_price: number }>();
   if (input.id && (!access.seeClientPrice || !access.seeCost)) {
-    const existing = await getQuoteById(db, input.id);
-    for (const it of existing?.quote_items ?? []) {
-      stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
+    const service = createSupabaseServiceRoleClient();
+    const existing = await getQuoteById(service, input.id);
+    if (existing && user.organizationIds.includes(existing.organization_id)) {
+      for (const it of existing.quote_items) {
+        stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
+      }
     }
   }
   const resolveClientPrice = (item: QuoteItemInput) =>
@@ -183,8 +190,15 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
   const db = await getSupabaseServerClient();
 
   try {
-    const quote = await getQuoteById(db, quoteId);
-    if (!quote) return { error: "La cotización no existe." };
+    // Service-role: el snapshot de versión debe guardar el precio REAL de cada
+    // ítem sin importar si quien envía tiene quote.see_costs/see_client_price
+    // (ver 045_quote_items_price_masking.sql). Se valida la organización a mano
+    // porque el service-role no pasa por RLS.
+    const service = createSupabaseServiceRoleClient();
+    const quote = await getQuoteById(service, quoteId);
+    if (!quote || !user.organizationIds.includes(quote.organization_id)) {
+      return { error: "La cotización no existe." };
+    }
 
     const validation = validateQuote({
       items: quote.quote_items,
@@ -317,7 +331,7 @@ export async function setQuoteStatus(
     // Notifica en la plataforma a quien envió + KAM vinculado (excepto el actor).
     // Se usa service_role: insertar filas de otros usuarios no lo permite la RLS.
     try {
-      const quote = await getQuoteById(db, quoteId);
+      const quote = await getQuoteByIdMasked(db, quoteId);
       if (quote) {
         const notifyIds = await resolveQuoteNotifyUserIds(db, quote, user.id);
         if (notifyIds.length > 0) {

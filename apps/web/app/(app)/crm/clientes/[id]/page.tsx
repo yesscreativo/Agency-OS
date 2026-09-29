@@ -59,8 +59,8 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
   const historyRows: ClientQuoteHistoryRow[] = quotes.map((q) => {
     const totals = calcQuote(
       q.quote_items.map((i) => ({
-        clientPrice: i.client_price,
-        costPrice: i.cost_price,
+        clientPrice: i.client_price ?? 0,
+        costPrice: i.cost_price ?? 0,
         quantity: i.quantity,
         isGroup: i.is_group,
       })),

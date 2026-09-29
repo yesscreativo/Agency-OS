@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getQuoteById, upsertSupplierOrder } from "@agency-os/db";
+import { createSupabaseServiceRoleClient, getQuoteById, upsertSupplierOrder } from "@agency-os/db";
 import { SUPPLIER_TOKEN_EXPIRY_DAYS } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -33,8 +33,15 @@ export async function sendSupplierOrder(
 
   const db = await getSupabaseServerClient();
   try {
-    const quote = await getQuoteById(db, quoteId);
-    if (!quote) return { error: "La cotización no existe." };
+    // Service-role: la orden de compra necesita el costo REAL del ítem sin
+    // importar si quien la envía tiene quote.see_costs — hoy coincide que todos
+    // los roles con quote.supplier_order también lo tienen (015_supplier_order_permission.sql),
+    // pero no hay que depender de esa coincidencia (ver 045_quote_items_price_masking.sql).
+    const service = createSupabaseServiceRoleClient();
+    const quote = await getQuoteById(service, quoteId);
+    if (!quote || !user.organizationIds.includes(quote.organization_id)) {
+      return { error: "La cotización no existe." };
+    }
     if (quote.status !== "accepted") {
       return { error: "Solo se envían órdenes cuando la cotización está aceptada." };
     }
