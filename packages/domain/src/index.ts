@@ -14,3 +14,4 @@ export * from "./work-item";
 export * from "./work-item-duration";
 export * from "./work-item-time";
 export * from "./permission-groups";
+export * from "./project-folders";

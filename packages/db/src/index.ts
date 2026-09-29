@@ -19,6 +19,7 @@ export * from "./repositories/quote-presence";
 export * from "./repositories/supplier-orders";
 export * from "./repositories/notifications";
 export * from "./repositories/work-items";
+export * from "./repositories/project-folders";
 export * from "./repositories/work-item-statuses";
 export * from "./repositories/work-item-attachments";
 export * from "./repositories/work-item-comments";

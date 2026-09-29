@@ -4,6 +4,7 @@ import {
   countOverdueTasksInProjects,
   getProject,
   listClients,
+  listProjectFolders,
   listProjects,
   resolveClientByShortId,
   type ProjectRow,
@@ -17,6 +18,11 @@ import {
   type ClientOption,
   type ProjectListRow,
 } from "@/components/proyectos/projects-list";
+import {
+  ProjectsByFolder,
+  type FolderProjectRow,
+  type ProjectFolderView,
+} from "@/components/proyectos/projects-by-folder";
 import { ClientLogoUploader } from "@/components/proyectos/client-logo";
 import { ClientKpis } from "@/components/proyectos/client-kpis";
 import { NoAccessPanel } from "@/components/no-access-panel";
@@ -82,12 +88,15 @@ export default async function ClienteSpacePage({
 
   // KPIs del cliente = sobre TODOS sus proyectos (no el subconjunto filtrado por
   // búsqueda). Si hay búsqueda, se corre aparte en paralelo con la lista
-  // filtrada en vez de esperar a que esta termine.
-  const [projects, allClientProjectsIfSearch] = await Promise.all([
+  // filtrada en vez de esperar a que esta termine. Las carpetas solo hacen
+  // falta para la vista agrupada (sin búsqueda), pero pedirlas siempre en el
+  // mismo Promise.all no cuesta un round-trip extra.
+  const [projects, allClientProjectsIfSearch, folders] = await Promise.all([
     listProjects(db, organizationId, { search: searchParams.q, clientId: client.id }),
     searchParams.q
       ? listProjects(db, organizationId, { clientId: client.id })
       : Promise.resolve(null),
+    listProjectFolders(db, client.id),
   ]);
   const allClientProjects = allClientProjectsIfSearch ?? projects;
   const tasksTotal = allClientProjects.reduce((n, p) => n + p.tasks_count, 0);
@@ -112,6 +121,22 @@ export default async function ClienteSpacePage({
     clientId: p.client?.id ?? client.id,
     clientName: p.client?.name ?? client.name,
     clientCompany: p.client?.company ?? client.company,
+    tasksCount: p.tasks_count,
+    progress: progressOf(p),
+    projectState: p.project_state ?? "active",
+  }));
+
+  const folderViews: ProjectFolderView[] = folders.map((f) => ({
+    id: f.id,
+    name: f.name,
+    color: f.color,
+    sortOrder: f.sort_order,
+  }));
+
+  const folderRows: FolderProjectRow[] = projects.map((p) => ({
+    id: p.id,
+    title: p.title,
+    folderId: p.folder_id,
     tasksCount: p.tasks_count,
     progress: progressOf(p),
     projectState: p.project_state ?? "active",
@@ -155,14 +180,23 @@ export default async function ClienteSpacePage({
           overdueCount: mine.overdue,
         }}
       />
-      <ProjectsList
-        rows={rows}
-        q={searchParams.q ?? ""}
-        clients={allClients}
-        defaultClient={defaultClient}
-        canManage={hasPermission(user, "project.manage")}
-        hideHeading
-      />
+      {searchParams.q ? (
+        <ProjectsList
+          rows={rows}
+          q={searchParams.q ?? ""}
+          clients={allClients}
+          defaultClient={defaultClient}
+          canManage={hasPermission(user, "project.manage")}
+          hideHeading
+        />
+      ) : (
+        <ProjectsByFolder
+          client={{ id: client.id, name: client.name }}
+          folders={folderViews}
+          rows={folderRows}
+          canManage={hasPermission(user, "project.manage")}
+        />
+      )}
     </div>
   );
 }

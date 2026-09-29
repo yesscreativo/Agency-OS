@@ -718,3 +718,14 @@ export async function resolveTaskByShortId(
   if (error) throw error;
   return data?.id ?? null;
 }
+
+/** Mueve un proyecto a otra carpeta (o a "Sin carpeta" con `folderId: null`) —
+ * lo dispara el onDrop de <ProjectsByFolder>. */
+export async function setProjectFolder(
+  db: Db,
+  projectId: string,
+  folderId: string | null,
+): Promise<void> {
+  const { error } = await db.from("work_items").update({ folder_id: folderId }).eq("id", projectId);
+  if (error) throw error;
+}
