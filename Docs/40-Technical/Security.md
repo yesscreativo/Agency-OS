@@ -48,6 +48,12 @@ Pregunta de Yesid: con varias personas editando la MISMA cotización a la vez (m
 
 **Limitación aceptada, no resuelta:** si dos personas editan el MISMO ítem casi al mismo tiempo, sigue ganando el último guardado para ESE ítem puntual (no hay merge de campos). Y el `sort_order` de ítems agregados por dos personas en paralelo puede quedar despeinado (no hay colisión de datos, solo de orden visual). Resolver esto del todo requeriría edición colaborativa en tiempo real (tipo Google Docs) — evaluar si vale la pena más adelante según cuánta gente realmente edita la misma cotización a la vez.
 
+## Riesgo aceptado: "Leaked Password Protection" desactivado (verificado 2026-09-29)
+
+Supabase Auth puede rechazar contraseñas ya filtradas (API de HaveIBeenPwned.org), pero es una feature exclusiva de **plan Pro+**. Confirmado con el MCP (`get_organization`) que la organización `laburuagencia` está en **plan free** — no se puede activar sin subir de plan.
+
+**Decisión:** no justifica el upgrade solo por esto. Agency OS no tiene registro público (las cuentas las crea el equipo), así que el riesgo de credential stuffing con contraseñas filtradas es bajo. Queda como riesgo aceptado y documentado, a revisar si se sube a Pro por otra razón (límites de proyecto, uso, etc.).
+
 ## Pendiente (encontrado en QA, no corregido todavía)
 
 - **Color de notificación según estado:** pedido de UX, no bloqueante — la notificación de "cliente respondió" no refleja visualmente si fue aceptado/rechazado/con cambios.
