@@ -177,7 +177,7 @@ export function QuoteForm({
     seeCost,
     seeClientPrice,
     seeMargin,
-    canEdit,
+    canEdit: canEditPermission,
     canSend,
     canManageInternal,
     canSendSupplierOrder,
@@ -225,6 +225,11 @@ export function QuoteForm({
 
   // Estado / documentos comerciales / eliminar (solo cuando la cotización ya existe).
   const [status, setStatus] = useState(initial?.status ?? "draft");
+  // Aceptada o cerrada: la respuesta del cliente/el trabajo ya quedó fijado, no se
+  // debe poder editar ítems/precios/datos generales aunque el usuario tenga
+  // quote.update (el servidor aplica el mismo bloqueo en saveQuoteDraft).
+  const locked = status === "accepted" || status === "closed";
+  const canEdit = canEditPermission && !locked;
   const [purchaseOrder, setPurchaseOrder] = useState(initial?.purchaseOrder ?? "");
   const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);

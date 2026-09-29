@@ -10,6 +10,7 @@ import {
   getQuoteByIdMasked,
   listExistingBriefs,
   nextQuoteSeq,
+  renewQuoteRecipientLinks,
   replaceQuoteItems,
   replaceQuoteRecipients,
   resolveQuoteNotifyUserIds,
@@ -17,7 +18,13 @@ import {
   updateQuote,
   type TablesUpdate,
 } from "@agency-os/db";
-import { buildQuoteCode, calcQuote, validateBriefSize, validateQuote } from "@agency-os/domain";
+import {
+  buildQuoteCode,
+  calcQuote,
+  CLIENT_TOKEN_EXPIRY_DAYS,
+  validateBriefSize,
+  validateQuote,
+} from "@agency-os/domain";
 import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
@@ -87,6 +94,22 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   const db = await getSupabaseServerClient();
 
+  // Aceptada/cerrada: la respuesta del cliente/el trabajo ya quedó fijado, no se
+  // permite editar (mismo bloqueo que aplica en la UI — ver quote-form.tsx —
+  // pero exigido aquí también porque un guardado no depende de la UI).
+  const access = quoteAccess(user);
+  let existing: Awaited<ReturnType<typeof getQuoteById>> = null;
+  if (input.id) {
+    const service = createSupabaseServiceRoleClient();
+    existing = await getQuoteById(service, input.id);
+    if (!existing || !user.organizationIds.includes(existing.organization_id)) {
+      return { error: "La cotización no existe." };
+    }
+    if (existing.status === "accepted" || existing.status === "closed") {
+      return { error: "La cotización ya fue aceptada y no se puede editar." };
+    }
+  }
+
   // Precios enmascarados: quien no ve un precio no puede sobrescribirlo; se conserva
   // el valor almacenado (buscado por id ESTABLE de ítem). El status/comentario del
   // cliente NO se toca aquí: replaceQuoteItems no los incluye en el insert/update,
@@ -94,15 +117,10 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
   // Se lee con service-role (valor REAL, no enmascarado): si se leyera con el
   // cliente de sesión de un usuario sin el permiso, `quote_items_secure` devolvería
   // null y este guardado borraría a cero el precio que no puede ver.
-  const access = quoteAccess(user);
   const stored = new Map<string, { client_price: number; cost_price: number }>();
-  if (input.id && (!access.seeClientPrice || !access.seeCost)) {
-    const service = createSupabaseServiceRoleClient();
-    const existing = await getQuoteById(service, input.id);
-    if (existing && user.organizationIds.includes(existing.organization_id)) {
-      for (const it of existing.quote_items) {
-        stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
-      }
+  if (existing && (!access.seeClientPrice || !access.seeCost)) {
+    for (const it of existing.quote_items) {
+      stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
     }
   }
   const resolveClientPrice = (item: QuoteItemInput) =>
@@ -258,6 +276,14 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       sent_at: new Date().toISOString(),
       sent_by: user.id,
     });
+
+    // Renueva el enlace público del cliente en cada envío/reenvío (mismo patrón
+    // que supplier_orders) — sin esto, reenviar una cotización con un
+    // destinatario de hace más de 5 días manda un enlace ya vencido.
+    const recipientExpiresAt = new Date(
+      Date.now() + CLIENT_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    await renewQuoteRecipientLinks(service, quoteId, recipientExpiresAt);
 
     const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     const totals = calcQuote(

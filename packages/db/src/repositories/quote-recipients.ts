@@ -62,6 +62,19 @@ export async function getRecipientByToken(
   return data;
 }
 
+/** Renueva la expiración del enlace público de TODOS los destinatarios de la
+ * cotización (se llama en cada envío/reenvío desde `sendQuote`) — mismo patrón
+ * que `supplier_orders`, que renueva su expiración de 30 días en cada reenvío.
+ * Conserva el token, `viewed_at` y el comentario del cliente; solo mueve
+ * `expires_at` hacia adelante, así un reenvío no manda un enlace ya vencido. */
+export async function renewQuoteRecipientLinks(db: Db, quoteId: string, expiresAt: string) {
+  const { error } = await db
+    .from("quote_recipients")
+    .update({ expires_at: expiresAt })
+    .eq("quote_id", quoteId);
+  if (error) throw error;
+}
+
 /** Marca la primera vez que el cliente abre el enlace (no lo sobreescribe en visitas
  * posteriores). */
 export async function markRecipientViewed(db: Db, id: string) {

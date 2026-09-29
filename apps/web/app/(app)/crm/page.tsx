@@ -270,7 +270,9 @@ export default async function QuotesListPage({
                         href={`/crm/${row.id}`}
                         className="inline-block rounded-pill border border-line-strong px-4 py-1.5 text-xs font-semibold text-ink transition hover:border-green"
                       >
-                        {access.canEdit ? "Editar" : "Ver"}
+                        {access.canEdit && row.status !== "accepted" && row.status !== "closed"
+                          ? "Editar"
+                          : "Ver"}
                       </Link>
                     </Td>
                   </tr>
