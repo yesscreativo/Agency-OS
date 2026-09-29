@@ -82,10 +82,14 @@ export type QuoteSaveResult = { id: string; error?: never } | { id?: never; erro
 
 /** Como QuoteSaveResult, pero además devuelve el `updated_at` real tras
  * guardar — el formulario lo usa como nueva base para el chequeo de
- * concurrencia del siguiente guardado (ver saveQuoteDraft). */
+ * concurrencia del siguiente guardado (ver saveQuoteDraft). Si el rechazo es
+ * por concurrencia (alguien más guardó primero), `currentUpdatedAt` trae la
+ * fecha real actual — el formulario la toma de inmediato para que el botón
+ * "Guardar borrador" ya existente funcione al reintentar, sin recargar la
+ * página (que borraría lo que el usuario tenía escrito sin guardar). */
 export type QuoteDraftSaveResult =
-  | { id: string; updatedAt: string; error?: never }
-  | { id?: never; updatedAt?: never; error: string };
+  | { id: string; updatedAt: string; error?: never; currentUpdatedAt?: never }
+  | { id?: never; updatedAt?: never; error: string; currentUpdatedAt?: string };
 
 function sanitizeNumber(value: unknown, fallback = 0): number {
   const n = Number(value);
@@ -129,7 +133,8 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteDraft
     // 2026-09-29; el usuario debe recargar para ver lo último y reintentar).
     if (input.updatedAt && input.updatedAt !== existing.updated_at) {
       return {
-        error: "Esta cotización fue modificada por otra persona. Recarga la página para ver los cambios más recientes.",
+        error: "Esta cotización fue modificada por otra persona. Vuelve a intentar guardar.",
+        currentUpdatedAt: existing.updated_at,
       };
     }
   }

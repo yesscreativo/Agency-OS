@@ -14,6 +14,7 @@ import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { QuoteForm, type QuoteFormInitial } from "@/components/crm/quote-form";
+import { QuotePresence } from "@/components/crm/quote-presence";
 
 export const dynamic = "force-dynamic";
 
@@ -172,6 +173,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           </div>
           {quote.quote_name && <p className="mt-1 text-sm text-muted">{quote.quote_name}</p>}
         </div>
+        <QuotePresence quoteId={quote.id} />
       </div>
       <QuoteForm
         initial={initial}

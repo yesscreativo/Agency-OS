@@ -325,6 +325,11 @@ export function QuoteForm({
     startTransition(async () => {
       const result = await saveQuoteDraft(input);
       if (result.error || !result.updatedAt) {
+        // Si el rechazo es por concurrencia, el servidor manda la fecha real
+        // actual — se toma de inmediato para que el botón "Guardar borrador"
+        // funcione al reintentar sin recargar (recargar perdería lo que el
+        // usuario tiene escrito sin guardar en este tab).
+        if (result.currentUpdatedAt) updatedAtRef.current = result.currentUpdatedAt;
         setSaveState({ kind: "error", message: result.error ?? "No se pudo guardar." });
         return;
       }
@@ -525,6 +530,7 @@ export function QuoteForm({
     startTransition(async () => {
       const saved = await saveQuoteDraft(input);
       if (saved.error || !saved.id) {
+        if (saved.currentUpdatedAt) updatedAtRef.current = saved.currentUpdatedAt;
         setSaveState({ kind: "error", message: saved.error ?? "No se pudo guardar." });
         return;
       }
