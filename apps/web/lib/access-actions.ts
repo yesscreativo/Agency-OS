@@ -11,22 +11,9 @@ import {
 import { isAllowedEmailDomain } from "@agency-os/domain";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { requireSuperAdmin } from "@/lib/access-guard";
 
 export type AccessActionResult = { ok: true; error?: never } | { ok?: never; error: string };
-
-// Asignar accesos y crear usuarios es exclusivo del Administrador de sistema
-// (is_super) — no del permiso puntual users.manage, que hoy también podría
-// tener un admin de un módulo (ej. CRM) sin que eso le dé control global.
-async function requireSuperAdmin() {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." } as const;
-  if (!user.isSuper) {
-    return { error: "Solo un Administrador de sistema puede gestionar accesos." } as const;
-  }
-  const organizationId = user.organizationIds[0];
-  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." } as const;
-  return { organizationId } as const;
-}
 
 export async function grantRole(userId: string, roleId: string): Promise<AccessActionResult> {
   const auth = await requireSuperAdmin();

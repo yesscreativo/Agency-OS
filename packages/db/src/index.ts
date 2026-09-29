@@ -10,6 +10,7 @@ export * from "./repositories/clients";
 export * from "./repositories/kams";
 export * from "./repositories/modules";
 export * from "./repositories/roles";
+export * from "./repositories/permissions";
 export * from "./repositories/users";
 export * from "./repositories/people";
 export * from "./repositories/quote-versions";

@@ -87,6 +87,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@agency-os/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@supabase/ssr':
         specifier: ^0.12.3
         version: 0.12.3(@supabase/supabase-js@2.110.3)
