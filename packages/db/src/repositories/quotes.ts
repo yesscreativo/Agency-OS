@@ -322,23 +322,31 @@ export async function softDeleteQuote(db: Db, id: string) {
  * de ítems existentes tampoco los toca, así se conserva la respuesta del
  * cliente. Los ids estables evitan que un reguardado/autosave la pierda o
  * pierda los precios preservados por rol. */
+/** `originalIds`: los ids de ítem que el llamador tenía cargados ANTES de este
+ * guardado (no lo que hay hoy en la base de datos). Solo se borran los ítems que
+ * el usuario realmente quitó de su lista (`originalIds` menos lo que manda ahora)
+ * — nunca "lo que exista en la BD y no venga en el payload". Con varias personas
+ * editando la misma cotización a la vez, un ítem que otra persona agregó después
+ * de que este usuario cargó la página no está en `originalIds`, así que no se
+ * borra solo por no estar en la lista de este guardado (antes sí se borraba:
+ * bug real de concurrencia encontrado en QA, 2026-09-29). */
 export async function replaceQuoteItems(
   db: Db,
   quoteId: string,
   items: (Omit<TablesInsert<"quote_items">, "quote_id"> & { id: string })[],
+  originalIds: string[],
 ) {
-  if (items.length === 0) {
-    const { error } = await db.from("quote_items").delete().eq("quote_id", quoteId);
-    if (error) throw error;
-    return [];
+  const currentIds = new Set(items.map((i) => i.id));
+  const idsToDelete = originalIds.filter((id) => !currentIds.has(id));
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await db
+      .from("quote_items")
+      .delete()
+      .eq("quote_id", quoteId)
+      .in("id", idsToDelete);
+    if (deleteError) throw deleteError;
   }
-  const ids = items.map((i) => i.id);
-  const { error: deleteError } = await db
-    .from("quote_items")
-    .delete()
-    .eq("quote_id", quoteId)
-    .not("id", "in", `(${ids.join(",")})`);
-  if (deleteError) throw deleteError;
+  if (items.length === 0) return [];
 
   const { data: existingRows, error: existingError } = await db
     .from("quote_items")

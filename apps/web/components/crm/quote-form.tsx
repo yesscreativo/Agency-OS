@@ -42,6 +42,9 @@ import { ExistingBriefPicker } from "@/components/crm/existing-brief-picker";
 
 export interface QuoteFormInitial {
   id: string;
+  /** `quotes.updated_at` real al momento de cargar — base para el chequeo de
+   * concurrencia del guardado (ver saveQuoteDraft). */
+  updatedAt: string;
   code: string | null;
   status: string;
   clientId: string;
@@ -230,6 +233,19 @@ export function QuoteForm({
   // quote.update (el servidor aplica el mismo bloqueo en saveQuoteDraft).
   const locked = status === "accepted" || status === "closed";
   const canEdit = canEditPermission && !locked;
+
+  // Concurrencia (varias personas editando la misma cotización a la vez, ver
+  // Docs/40-Technical/Security.md): `updatedAtRef` es el `updated_at` real más
+  // reciente que este tab conoce — el servidor lo compara antes de guardar y
+  // rechaza si alguien más guardó primero, en vez de pisarlo en silencio.
+  // `originalItemIdsRef` son los ids que HABÍA al abrir el formulario — se
+  // congela una sola vez (no se actualiza en cada guardado) para que borrar un
+  // ítem propio nunca se lleve por delante uno que otra persona haya agregado
+  // después de que este tab cargó la página (ver replaceQuoteItems).
+  const updatedAtRef = useRef(initial?.updatedAt ?? null);
+  const originalItemIdsRef = useRef(
+    (initial?.items ?? []).map((it) => it.id).filter((id): id is string => Boolean(id)),
+  );
   const [purchaseOrder, setPurchaseOrder] = useState(initial?.purchaseOrder ?? "");
   const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -258,6 +274,8 @@ export function QuoteForm({
   const buildInput = useCallback((): QuoteDraftInput => {
     return {
       id: quoteId ?? undefined,
+      updatedAt: updatedAtRef.current,
+      originalItemIds: originalItemIdsRef.current,
       clientId,
       kamId,
       quoteType: quoteType === "proyecto" || quoteType === "evolutivo" ? quoteType : "",
@@ -306,13 +324,14 @@ export function QuoteForm({
     setSaveState({ kind: "saving" });
     startTransition(async () => {
       const result = await saveQuoteDraft(input);
-      if (result.error) {
-        setSaveState({ kind: "error", message: result.error });
+      if (result.error || !result.updatedAt) {
+        setSaveState({ kind: "error", message: result.error ?? "No se pudo guardar." });
         return;
       }
       // Nota: no se toca window.history aquí — con App Router un replaceState
       // dispara re-navegación y remonta el formulario perdiendo estado en edición.
       if (!quoteId && result.id) setQuoteId(result.id);
+      updatedAtRef.current = result.updatedAt;
       lastSaved.current = serialize(input);
       setSaveState({ kind: "saved", at: nowLabel() });
     });
@@ -458,6 +477,7 @@ export function QuoteForm({
           return;
         }
         setQuoteId(result.id);
+        updatedAtRef.current = result.updatedAt;
         doUpload(result.id);
       });
     }
@@ -490,6 +510,7 @@ export function QuoteForm({
           return;
         }
         setQuoteId(result.id);
+        updatedAtRef.current = result.updatedAt;
         doAttach(result.id);
       });
     }
@@ -508,6 +529,7 @@ export function QuoteForm({
         return;
       }
       if (!quoteId) setQuoteId(saved.id);
+      updatedAtRef.current = saved.updatedAt;
       lastSaved.current = serialize(input);
       const sent = await sendQuote(saved.id);
       if (sent.error) {

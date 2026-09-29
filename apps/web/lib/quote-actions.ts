@@ -56,6 +56,14 @@ export interface QuoteRecipientInput {
 
 export interface QuoteDraftInput {
   id?: string;
+  /** `quotes.updated_at` tal como lo cargó el formulario. Si ya no coincide con
+   * el valor real al momento de guardar, alguien más guardó primero — se
+   * rechaza el guardado en vez de pisarlo en silencio (ver saveQuoteDraft). */
+  updatedAt?: string | null;
+  /** ids de ítem que el formulario tenía cargados al abrir (no lo que hay hoy en
+   * la BD) — permite borrar solo lo que ESTE usuario quitó, sin arrastrarse
+   * ítems que otra persona haya agregado mientras tanto (ver replaceQuoteItems). */
+  originalItemIds?: string[];
   clientId: string;
   kamId: string;
   quoteType: "proyecto" | "evolutivo" | "";
@@ -72,6 +80,13 @@ export interface QuoteDraftInput {
 
 export type QuoteSaveResult = { id: string; error?: never } | { id?: never; error: string };
 
+/** Como QuoteSaveResult, pero además devuelve el `updated_at` real tras
+ * guardar — el formulario lo usa como nueva base para el chequeo de
+ * concurrencia del siguiente guardado (ver saveQuoteDraft). */
+export type QuoteDraftSaveResult =
+  | { id: string; updatedAt: string; error?: never }
+  | { id?: never; updatedAt?: never; error: string };
+
 function sanitizeNumber(value: unknown, fallback = 0): number {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
@@ -79,7 +94,7 @@ function sanitizeNumber(value: unknown, fallback = 0): number {
 
 /** Guarda (crea o actualiza) el borrador completo: cotización + ítems + destinatarios.
  * Lo usa tanto el botón "Guardar" como el autosave del formulario. */
-export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveResult> {
+export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteDraftSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
 
@@ -107,6 +122,15 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
     }
     if (existing.status === "accepted" || existing.status === "closed") {
       return { error: "La cotización ya fue aceptada y no se puede editar." };
+    }
+    // Concurrencia: si el `updated_at` que el formulario cargó ya no coincide
+    // con el real, alguien más guardó primero — se rechaza en vez de pisar sus
+    // cambios en silencio (bug de concurrencia real, encontrado y mitigado
+    // 2026-09-29; el usuario debe recargar para ver lo último y reintentar).
+    if (input.updatedAt && input.updatedAt !== existing.updated_at) {
+      return {
+        error: "Esta cotización fue modificada por otra persona. Recarga la página para ver los cambios más recientes.",
+      };
     }
   }
 
@@ -147,8 +171,9 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   try {
     let quoteId = input.id;
+    let updatedAt: string;
     if (quoteId) {
-      await updateQuote(db, quoteId, values);
+      updatedAt = (await updateQuote(db, quoteId, values)).updated_at;
     } else {
       const quote = await createQuote(db, {
         ...values,
@@ -158,6 +183,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
         status: "draft",
       });
       quoteId = quote.id;
+      updatedAt = quote.updated_at;
     }
 
     await replaceQuoteItems(
@@ -174,6 +200,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
           supplier: item.supplier.trim() || null,
           is_group: item.isGroup,
         })),
+      input.originalItemIds ?? [],
     );
 
     await replaceQuoteRecipients(
@@ -185,7 +212,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
     );
 
     revalidatePath("/crm");
-    return { id: quoteId };
+    return { id: quoteId, updatedAt };
   } catch (error) {
     console.error("saveQuoteDraft", error);
     return { error: "No se pudo guardar la cotización. Intenta de nuevo." };

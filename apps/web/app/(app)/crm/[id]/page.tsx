@@ -115,6 +115,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
   const initial: QuoteFormInitial = {
     id: quote.id,
+    updatedAt: quote.updated_at,
     code: quote.code,
     status: quote.status,
     clientId: quote.client_id,
