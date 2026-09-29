@@ -14,6 +14,7 @@ export * from "./repositories/users";
 export * from "./repositories/people";
 export * from "./repositories/quote-versions";
 export * from "./repositories/quote-recipients";
+export * from "./repositories/quote-presence";
 export * from "./repositories/supplier-orders";
 export * from "./repositories/notifications";
 export * from "./repositories/work-items";

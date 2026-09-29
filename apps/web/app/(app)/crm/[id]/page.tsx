@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
+  createSupabaseServiceRoleClient,
   getQuoteByIdMasked,
   listClients,
   listKams,
@@ -13,6 +14,7 @@ import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { QuoteForm, type QuoteFormInitial } from "@/components/crm/quote-form";
+import { QuotePresence } from "@/components/crm/quote-presence";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +27,22 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const quote = await getQuoteByIdMasked(db, params.id);
   if (!quote) notFound();
 
+  // `items`/`token` de supplier_orders y `snapshot` de quote_versions están
+  // bloqueados para `authenticated` a nivel de columna (ver
+  // 049_supplier_orders_column_grants.sql / 051_quote_versions_column_grants.sql):
+  // se leen con service-role. El token se enmascara abajo según
+  // `access.canSendSupplierOrder` antes de mandarlo al client component
+  // (QuoteForm), que de otro modo lo recibiría en el flight payload aunque el
+  // JSX no lo renderice; el snapshot de versión solo se usa aquí para calcular
+  // el total con el rol de precio correcto (versionViews abajo), nunca viaja
+  // crudo al navegador.
+  const service = createSupabaseServiceRoleClient();
   const [{ rows: clients }, versions, kams, statusMap, supplierOrderRows] = await Promise.all([
     listClients(db, { pageSize: 200 }),
-    listQuoteVersions(db, quote.id),
+    listQuoteVersions(service, quote.id),
     listKams(db, { onlyActive: true }),
     getQuoteStatusMap(db),
-    listSupplierOrders(db, quote.id),
+    listSupplierOrders(service, quote.id),
   ]);
   const statusMeta = resolveStatus(statusMap, quote.status);
 
@@ -83,7 +95,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     supplierName: o.supplier_name,
     supplierEmail: o.supplier_email,
     message: o.message,
-    token: o.token,
+    // Solo viaja al navegador si el usuario tiene permiso de enviar/ver la
+    // orden — es un magic link de 30 días a /proveedor/<token> con el costo.
+    token: access.canSendSupplierOrder ? o.token : null,
     status: o.status,
     sentAt: o.sent_at,
     confirmedAt: o.confirmed_at,
@@ -102,6 +116,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
   const initial: QuoteFormInitial = {
     id: quote.id,
+    updatedAt: quote.updated_at,
     code: quote.code,
     status: quote.status,
     clientId: quote.client_id,
@@ -158,6 +173,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           </div>
           {quote.quote_name && <p className="mt-1 text-sm text-muted">{quote.quote_name}</p>}
         </div>
+        <QuotePresence quoteId={quote.id} />
       </div>
       <QuoteForm
         initial={initial}

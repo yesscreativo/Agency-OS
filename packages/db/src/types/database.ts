@@ -1,6 +1,3 @@
-// Generado con `mcp__supabase__generate_typescript_types` contra el proyecto `agency-os`
-// (hicbkpwywwhnhiawulmu). Regenerar tras cada migración nueva — no editar a mano.
-
 export type Json =
   | string
   | number
@@ -520,6 +517,49 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_presence: {
+        Row: {
+          last_seen_at: string
+          organization_id: string
+          quote_id: string
+          user_id: string
+        }
+        Insert: {
+          last_seen_at?: string
+          organization_id: string
+          quote_id: string
+          user_id: string
+        }
+        Update: {
+          last_seen_at?: string
+          organization_id?: string
+          quote_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_presence_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_presence_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_presence_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1541,6 +1581,10 @@ export type Database = {
     Functions: {
       current_user_has_permission: {
         Args: { perm_code: string }
+        Returns: boolean
+      }
+      current_user_has_permission_in_org: {
+        Args: { p_org: string; perm_code: string }
         Returns: boolean
       }
       current_user_is_super: { Args: never; Returns: boolean }

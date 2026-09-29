@@ -10,6 +10,7 @@ import {
   getQuoteByIdMasked,
   listExistingBriefs,
   nextQuoteSeq,
+  renewQuoteRecipientLinks,
   replaceQuoteItems,
   replaceQuoteRecipients,
   resolveQuoteNotifyUserIds,
@@ -17,7 +18,13 @@ import {
   updateQuote,
   type TablesUpdate,
 } from "@agency-os/db";
-import { buildQuoteCode, calcQuote, validateBriefSize, validateQuote } from "@agency-os/domain";
+import {
+  buildQuoteCode,
+  calcQuote,
+  CLIENT_TOKEN_EXPIRY_DAYS,
+  validateBriefSize,
+  validateQuote,
+} from "@agency-os/domain";
 import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
@@ -49,6 +56,14 @@ export interface QuoteRecipientInput {
 
 export interface QuoteDraftInput {
   id?: string;
+  /** `quotes.updated_at` tal como lo cargó el formulario. Si ya no coincide con
+   * el valor real al momento de guardar, alguien más guardó primero — se
+   * rechaza el guardado en vez de pisarlo en silencio (ver saveQuoteDraft). */
+  updatedAt?: string | null;
+  /** ids de ítem que el formulario tenía cargados al abrir (no lo que hay hoy en
+   * la BD) — permite borrar solo lo que ESTE usuario quitó, sin arrastrarse
+   * ítems que otra persona haya agregado mientras tanto (ver replaceQuoteItems). */
+  originalItemIds?: string[];
   clientId: string;
   kamId: string;
   quoteType: "proyecto" | "evolutivo" | "";
@@ -65,6 +80,17 @@ export interface QuoteDraftInput {
 
 export type QuoteSaveResult = { id: string; error?: never } | { id?: never; error: string };
 
+/** Como QuoteSaveResult, pero además devuelve el `updated_at` real tras
+ * guardar — el formulario lo usa como nueva base para el chequeo de
+ * concurrencia del siguiente guardado (ver saveQuoteDraft). Si el rechazo es
+ * por concurrencia (alguien más guardó primero), `currentUpdatedAt` trae la
+ * fecha real actual — el formulario la toma de inmediato para que el botón
+ * "Guardar borrador" ya existente funcione al reintentar, sin recargar la
+ * página (que borraría lo que el usuario tenía escrito sin guardar). */
+export type QuoteDraftSaveResult =
+  | { id: string; updatedAt: string; error?: never; currentUpdatedAt?: never }
+  | { id?: never; updatedAt?: never; error: string; currentUpdatedAt?: string };
+
 function sanitizeNumber(value: unknown, fallback = 0): number {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
@@ -72,7 +98,7 @@ function sanitizeNumber(value: unknown, fallback = 0): number {
 
 /** Guarda (crea o actualiza) el borrador completo: cotización + ítems + destinatarios.
  * Lo usa tanto el botón "Guardar" como el autosave del formulario. */
-export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveResult> {
+export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteDraftSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
 
@@ -87,6 +113,32 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   const db = await getSupabaseServerClient();
 
+  // Aceptada/cerrada: la respuesta del cliente/el trabajo ya quedó fijado, no se
+  // permite editar (mismo bloqueo que aplica en la UI — ver quote-form.tsx —
+  // pero exigido aquí también porque un guardado no depende de la UI).
+  const access = quoteAccess(user);
+  let existing: Awaited<ReturnType<typeof getQuoteById>> = null;
+  if (input.id) {
+    const service = createSupabaseServiceRoleClient();
+    existing = await getQuoteById(service, input.id);
+    if (!existing || !user.organizationIds.includes(existing.organization_id)) {
+      return { error: "La cotización no existe." };
+    }
+    if (existing.status === "accepted" || existing.status === "closed") {
+      return { error: "La cotización ya fue aceptada y no se puede editar." };
+    }
+    // Concurrencia: si el `updated_at` que el formulario cargó ya no coincide
+    // con el real, alguien más guardó primero — se rechaza en vez de pisar sus
+    // cambios en silencio (bug de concurrencia real, encontrado y mitigado
+    // 2026-09-29; el usuario debe recargar para ver lo último y reintentar).
+    if (input.updatedAt && input.updatedAt !== existing.updated_at) {
+      return {
+        error: "Esta cotización fue modificada por otra persona. Vuelve a intentar guardar.",
+        currentUpdatedAt: existing.updated_at,
+      };
+    }
+  }
+
   // Precios enmascarados: quien no ve un precio no puede sobrescribirlo; se conserva
   // el valor almacenado (buscado por id ESTABLE de ítem). El status/comentario del
   // cliente NO se toca aquí: replaceQuoteItems no los incluye en el insert/update,
@@ -94,15 +146,10 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
   // Se lee con service-role (valor REAL, no enmascarado): si se leyera con el
   // cliente de sesión de un usuario sin el permiso, `quote_items_secure` devolvería
   // null y este guardado borraría a cero el precio que no puede ver.
-  const access = quoteAccess(user);
   const stored = new Map<string, { client_price: number; cost_price: number }>();
-  if (input.id && (!access.seeClientPrice || !access.seeCost)) {
-    const service = createSupabaseServiceRoleClient();
-    const existing = await getQuoteById(service, input.id);
-    if (existing && user.organizationIds.includes(existing.organization_id)) {
-      for (const it of existing.quote_items) {
-        stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
-      }
+  if (existing && (!access.seeClientPrice || !access.seeCost)) {
+    for (const it of existing.quote_items) {
+      stored.set(it.id, { client_price: it.client_price, cost_price: it.cost_price });
     }
   }
   const resolveClientPrice = (item: QuoteItemInput) =>
@@ -129,8 +176,9 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
 
   try {
     let quoteId = input.id;
+    let updatedAt: string;
     if (quoteId) {
-      await updateQuote(db, quoteId, values);
+      updatedAt = (await updateQuote(db, quoteId, values)).updated_at;
     } else {
       const quote = await createQuote(db, {
         ...values,
@@ -140,6 +188,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
         status: "draft",
       });
       quoteId = quote.id;
+      updatedAt = quote.updated_at;
     }
 
     await replaceQuoteItems(
@@ -156,6 +205,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
           supplier: item.supplier.trim() || null,
           is_group: item.isGroup,
         })),
+      input.originalItemIds ?? [],
     );
 
     await replaceQuoteRecipients(
@@ -167,7 +217,7 @@ export async function saveQuoteDraft(input: QuoteDraftInput): Promise<QuoteSaveR
     );
 
     revalidatePath("/crm");
-    return { id: quoteId };
+    return { id: quoteId, updatedAt };
   } catch (error) {
     console.error("saveQuoteDraft", error);
     return { error: "No se pudo guardar la cotización. Intenta de nuevo." };
@@ -221,8 +271,12 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       });
     }
 
+    // service-role: `snapshot` está bloqueado para `authenticated` a nivel de
+    // columna (ver 051_quote_versions_column_grants.sql), y de todos modos debe
+    // guardar el precio REAL sin importar el permiso de quien envía (mismo
+    // motivo que `getQuoteById(service, ...)` arriba).
     await createQuoteVersion(
-      db,
+      service,
       quoteId,
       {
         code,
@@ -254,6 +308,14 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       sent_at: new Date().toISOString(),
       sent_by: user.id,
     });
+
+    // Renueva el enlace público del cliente en cada envío/reenvío (mismo patrón
+    // que supplier_orders) — sin esto, reenviar una cotización con un
+    // destinatario de hace más de 5 días manda un enlace ya vencido.
+    const recipientExpiresAt = new Date(
+      Date.now() + CLIENT_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    await renewQuoteRecipientLinks(service, quoteId, recipientExpiresAt);
 
     const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     const totals = calcQuote(
