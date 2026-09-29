@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
+  createSupabaseServiceRoleClient,
   getQuoteByIdMasked,
   listClients,
   listKams,
@@ -25,12 +26,18 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const quote = await getQuoteByIdMasked(db, params.id);
   if (!quote) notFound();
 
+  // `items`/`token` de supplier_orders están bloqueados para `authenticated` a
+  // nivel de columna (ver 049_supplier_orders_column_grants.sql): se leen con
+  // service-role y el token se enmascara abajo según `access.canSendSupplierOrder`
+  // antes de mandarlo al client component (QuoteForm), que de otro modo lo
+  // recibiría en el flight payload aunque el JSX no lo renderice.
+  const service = createSupabaseServiceRoleClient();
   const [{ rows: clients }, versions, kams, statusMap, supplierOrderRows] = await Promise.all([
     listClients(db, { pageSize: 200 }),
     listQuoteVersions(db, quote.id),
     listKams(db, { onlyActive: true }),
     getQuoteStatusMap(db),
-    listSupplierOrders(db, quote.id),
+    listSupplierOrders(service, quote.id),
   ]);
   const statusMeta = resolveStatus(statusMap, quote.status);
 
@@ -83,7 +90,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     supplierName: o.supplier_name,
     supplierEmail: o.supplier_email,
     message: o.message,
-    token: o.token,
+    // Solo viaja al navegador si el usuario tiene permiso de enviar/ver la
+    // orden — es un magic link de 30 días a /proveedor/<token> con el costo.
+    token: access.canSendSupplierOrder ? o.token : null,
     status: o.status,
     sentAt: o.sent_at,
     confirmedAt: o.confirmed_at,

@@ -84,7 +84,8 @@ export interface SupplierOrderView {
   supplierName: string;
   supplierEmail: string;
   message: string | null;
-  token: string;
+  /** `null` si el usuario de sesión no tiene `quote.supplier_order` (ver crm/[id]/page.tsx). */
+  token: string | null;
   status: string;
   sentAt: string | null;
   confirmedAt: string | null;

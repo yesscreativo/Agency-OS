@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServiceRoleClient, getQuoteById, upsertSupplierOrder } from "@agency-os/db";
 import { SUPPLIER_TOKEN_EXPIRY_DAYS } from "@agency-os/domain";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { emitWebhook } from "@/lib/webhooks";
 
 export interface SendSupplierOrderInput {
@@ -31,12 +30,13 @@ export async function sendSupplierOrder(
   if (!supplierName) return { error: "Proveedor inválido." };
   if (!supplierEmail) return { error: "Ingresa el email del proveedor." };
 
-  const db = await getSupabaseServerClient();
   try {
     // Service-role: la orden de compra necesita el costo REAL del ítem sin
     // importar si quien la envía tiene quote.see_costs — hoy coincide que todos
     // los roles con quote.supplier_order también lo tienen (015_supplier_order_permission.sql),
     // pero no hay que depender de esa coincidencia (ver 045_quote_items_price_masking.sql).
+    // También se usa para leer/escribir `items`/`token`, bloqueados para
+    // `authenticated` a nivel de columna (ver 049_supplier_orders_column_grants.sql).
     const service = createSupabaseServiceRoleClient();
     const quote = await getQuoteById(service, quoteId);
     if (!quote || !user.organizationIds.includes(quote.organization_id)) {
@@ -61,7 +61,7 @@ export async function sendSupplierOrder(
     ).toISOString();
 
     const message = input.message.trim() || null;
-    const order = await upsertSupplierOrder(db, {
+    const order = await upsertSupplierOrder(service, {
       quoteId,
       supplierName,
       supplierEmail,

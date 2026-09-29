@@ -1,0 +1,23 @@
+-- Gap detectado en la auditoría de seguridad (revisor externo "Codex", 2026-09-14):
+-- `supplier_orders.items` (costo real por proveedor, JSONB) y `.token` (acceso
+-- de 30 días a /proveedor/<token>, que sí muestra costo) eran legibles por
+-- cualquier miembro de la organización vía REST directo — la policy
+-- `supplier_orders_select` solo exige membresía de organización, sin gate de
+-- permiso (mismo patrón que `quote_items` antes de 047/048). Además,
+-- `crm/[id]/page.tsx` pasaba el token SIN enmascarar a un client component
+-- (QuoteForm): viaja en el flight payload de cualquiera que abra el detalle de
+-- una cotización aceptada, aunque el JSX solo lo renderice si
+-- `canSendSupplierOrder` — confirmado, no requiere ni REST directo.
+--
+-- Intento 1 (NO-OP, revertido en la práctica por 050): revoke a nivel de
+-- COLUMNA sin revocar antes el privilegio de TABLA. Confirmado con
+-- has_column_privilege() + una tabla de prueba que esto NO restringe nada:
+-- si el rol ya tiene SELECT de tabla completa (el ACL "ancho" con el que nace
+-- toda tabla nueva en este proyecto), un `revoke select (col) ... from role`
+-- no resta del privilegio de tabla — Postgres evalúa el privilegio de columna
+-- como una concesión ADICIONAL, no como una excepción sobre el de tabla. El
+-- patrón que sí funciona (igual que 047/048 con quote_items) es: revocar la
+-- tabla completa primero, y volver a otorgar columna por columna lo que sí
+-- debe seguir siendo legible — ver 050_supplier_orders_column_grants_fix.sql.
+
+revoke select (items, token) on public.supplier_orders from anon, authenticated;
