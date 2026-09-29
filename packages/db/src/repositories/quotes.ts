@@ -6,18 +6,73 @@ import type { Db, Page } from "./shared";
 // FK, así que el tipo de código es `string` (incluye estados custom por org).
 export type QuoteStatusDb = string;
 
+/** Ítem tal como lo devuelve la RPC `get_quote_items_secure`: `client_price`/
+ * `cost_price` llegan en `null` cuando el usuario que consulta no tiene el
+ * permiso correspondiente (ver 046_quote_items_secure_rpc.sql). */
+type MaskedPriceFields = { client_price: number | null; cost_price: number | null };
+
+/** Fila cruda de `get_quote_items_secure`. */
+export interface SecureQuoteItemRow extends MaskedPriceFields {
+  id: string;
+  quote_id: string;
+  description: string;
+  quantity: number;
+  status: Tables<"quote_items">["status"];
+  client_comment: string | null;
+  sort_order: number;
+  supplier: string | null;
+  is_group: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** Trae los ítems enmascarados (según el permiso del usuario de la sesión) de
+ * un conjunto de cotizaciones vía RPC (no se puede embeber: `quote_items` no
+ * es seleccionable directo por `authenticated`, ver 046_quote_items_secure_rpc.sql)
+ * y los agrupa por `quote_id`, ya filtrados por `deleted_at` y ordenados por
+ * `sort_order` — mismo contrato que traía el embed de PostgREST. */
+export async function fetchSecureItemsByQuoteIds(
+  db: Db,
+  quoteIds: string[],
+): Promise<Map<string, SecureQuoteItemRow[]>> {
+  const map = new Map<string, SecureQuoteItemRow[]>();
+  if (quoteIds.length === 0) return map;
+  const { data, error } = await db
+    .rpc("get_quote_items_secure", { p_quote_ids: quoteIds })
+    .returns<SecureQuoteItemRow[]>();
+  if (error) throw error;
+  for (const item of data ?? []) {
+    if (item.deleted_at) continue;
+    const list = map.get(item.quote_id);
+    if (list) list.push(item);
+    else map.set(item.quote_id, [item]);
+  }
+  for (const list of map.values()) list.sort((a, b) => a.sort_order - b.sort_order);
+  return map;
+}
+
 /** Fila de la lista: cotización + cliente + ítems mínimos para calcular totales. */
 export type QuoteListRow = Tables<"quotes"> & {
   client: Pick<Tables<"clients">, "id" | "name" | "company"> | null;
-  quote_items: Pick<
-    Tables<"quote_items">,
-    "client_price" | "cost_price" | "quantity" | "is_group"
-  >[];
+  quote_items: (Pick<Tables<"quote_items">, "quantity" | "is_group"> & MaskedPriceFields)[];
 };
 
 export type QuoteDetail = Tables<"quotes"> & {
   client: Tables<"clients"> | null;
   quote_items: Tables<"quote_items">[];
+  quote_recipients: Tables<"quote_recipients">[];
+};
+
+/** Igual que `QuoteDetail`, pero los ítems vienen de `quote_items_secure`
+ * (precios enmascarados según el permiso de quien consulta). Úsala para
+ * DISPLAY con el cliente de sesión; para operaciones internas que necesitan el
+ * valor real sin importar el permiso del usuario (preservar al guardar, armar
+ * la orden a proveedor, snapshot de versión al enviar) usa `getQuoteById` con
+ * el cliente service-role — ver quote-actions.ts/supplier-order-actions.ts. */
+export type QuoteDetailMasked = Tables<"quotes"> & {
+  client: Tables<"clients"> | null;
+  quote_items: (Omit<Tables<"quote_items">, "client_price" | "cost_price"> & MaskedPriceFields)[];
   quote_recipients: Tables<"quote_recipients">[];
 };
 
@@ -35,8 +90,7 @@ export interface QuoteListFilters {
   pageSize?: number;
 }
 
-const LIST_SELECT =
-  "*, client:clients(id, name, company), quote_items(client_price, cost_price, quantity, is_group)";
+const LIST_SELECT = "*, client:clients(id, name, company)";
 
 /** Resuelve las condiciones del .or() de búsqueda (código, nombre de cotización y
  * cliente por name/company). PostgREST no permite un or() top-level sobre columnas
@@ -87,9 +141,19 @@ export async function listQuotes(
     if (conditions) query = query.or(conditions.join(","));
   }
 
-  const { data, error, count } = await query.returns<QuoteListRow[]>();
+  const { data, error, count } = await query.returns<Omit<QuoteListRow, "quote_items">[]>();
   if (error) throw error;
-  return { rows: data ?? [], total: count ?? 0, page, pageSize };
+  const rows = data ?? [];
+  const itemsByQuoteId = await fetchSecureItemsByQuoteIds(
+    db,
+    rows.map((r) => r.id),
+  );
+  return {
+    rows: rows.map((row) => ({ ...row, quote_items: itemsByQuoteId.get(row.id) ?? [] })),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
 }
 
 /** Fila del tablero Kanban: cotización + cliente + KAM + ítems para el total. */
@@ -98,7 +162,7 @@ export type PipelineQuoteRow = QuoteListRow & {
 };
 
 const PIPELINE_SELECT =
-  "*, client:clients(id, name, company), kam:kams(id, name), quote_items(client_price, cost_price, quantity, is_group)";
+  "*, client:clients(id, name, company), kam:kams(id, name)";
 
 /** Todas las cotizaciones no borradas para el pipeline (agrupadas por estado en
  * la app), con los mismos filtros que la lista. Pagina internamente en bloques de
@@ -111,7 +175,7 @@ export async function listPipelineQuotes(
   const { search, status, dateFrom, dateTo, includeClosed = false, kamId } = filters;
   const searchConditions = search ? await buildSearchConditions(db, search) : null;
   const pageSize = 1000;
-  const rows: PipelineQuoteRow[] = [];
+  const rows: Omit<PipelineQuoteRow, "quote_items">[] = [];
   for (let from = 0; ; from += pageSize) {
     let query = db
       .from("quotes")
@@ -125,27 +189,27 @@ export async function listPipelineQuotes(
     if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999Z`);
     if (kamId) query = query.eq("kam_id", kamId);
     if (searchConditions) query = query.or(searchConditions.join(","));
-    const { data, error } = await query.returns<PipelineQuoteRow[]>();
+    const { data, error } = await query.returns<Omit<PipelineQuoteRow, "quote_items">[]>();
     if (error) throw error;
     rows.push(...(data ?? []));
     if (!data || data.length < pageSize) break;
   }
-  return rows;
+  const itemsByQuoteId = await fetchSecureItemsByQuoteIds(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((row) => ({ ...row, quote_items: itemsByQuoteId.get(row.id) ?? [] }));
 }
 
 /** Fila mínima para los KPIs globales de la lista (conteo + suma por estado). */
 export type QuoteStatsRow = Pick<
   Tables<"quotes">,
-  "status" | "currency" | "has_iva" | "iva_percentage"
+  "id" | "status" | "currency" | "has_iva" | "iva_percentage"
 > & {
-  quote_items: Pick<
-    Tables<"quote_items">,
-    "client_price" | "cost_price" | "quantity" | "is_group"
-  >[];
+  quote_items: (Pick<Tables<"quote_items">, "quantity" | "is_group"> & MaskedPriceFields)[];
 };
 
-const STATS_SELECT =
-  "status, currency, has_iva, iva_percentage, quote_items(client_price, cost_price, quantity, is_group)";
+const STATS_SELECT = "id, status, currency, has_iva, iva_percentage";
 
 /** Filtros de los KPI: los mismos de la lista SALVO `status`, para que el desglose
  * por estado (Enviadas/Aceptadas/…) siga teniendo sentido aunque filtres por un
@@ -163,7 +227,7 @@ export async function listQuoteStatsRows(
   const { search, dateFrom, dateTo, includeClosed = false, kamId } = filters;
   const searchConditions = search ? await buildSearchConditions(db, search) : null;
   const pageSize = 1000;
-  const rows: QuoteStatsRow[] = [];
+  const rows: Omit<QuoteStatsRow, "quote_items">[] = [];
   for (let from = 0; ; from += pageSize) {
     let query = db
       .from("quotes")
@@ -176,14 +240,23 @@ export async function listQuoteStatsRows(
     if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999Z`);
     if (kamId) query = query.eq("kam_id", kamId);
     if (searchConditions) query = query.or(searchConditions.join(","));
-    const { data, error } = await query.returns<QuoteStatsRow[]>();
+    const { data, error } = await query.returns<Omit<QuoteStatsRow, "quote_items">[]>();
     if (error) throw error;
     rows.push(...(data ?? []));
     if (!data || data.length < pageSize) break;
   }
-  return rows;
+  const itemsByQuoteId = await fetchSecureItemsByQuoteIds(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((row) => ({ ...row, quote_items: itemsByQuoteId.get(row.id) ?? [] }));
 }
 
+/** Ítems SIN enmascarar (cost_price/client_price reales). Debe llamarse con el
+ * cliente service-role — quien la use debe validar antes que la cotización
+ * pertenece a la organización del usuario, ya que el service-role no pasa por
+ * RLS (ver saveQuoteDraft, sendQuote, sendSupplierOrder). Para DISPLAY con el
+ * cliente de sesión usa `getQuoteByIdMasked`. */
 export async function getQuoteById(db: Db, id: string): Promise<QuoteDetail | null> {
   const { data, error } = await db
     .from("quotes")
@@ -197,6 +270,23 @@ export async function getQuoteById(db: Db, id: string): Promise<QuoteDetail | nu
     .filter((item) => !item.deleted_at)
     .sort((a, b) => a.sort_order - b.sort_order);
   return data;
+}
+
+/** Igual que `getQuoteById`, pero los ítems vienen de la RPC `get_quote_items_secure`:
+ * cost_price/client_price llegan en null si el usuario de la sesión no tiene
+ * el permiso correspondiente. Úsala para renderizar (list/detalle/impresión);
+ * NO para operaciones que necesiten el valor real (ver `getQuoteById`). */
+export async function getQuoteByIdMasked(db: Db, id: string): Promise<QuoteDetailMasked | null> {
+  const { data, error } = await db
+    .from("quotes")
+    .select("*, client:clients(*), quote_recipients(*)")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle<Omit<QuoteDetailMasked, "quote_items">>();
+  if (error) throw error;
+  if (!data) return null;
+  const itemsByQuoteId = await fetchSecureItemsByQuoteIds(db, [data.id]);
+  return { ...data, quote_items: itemsByQuoteId.get(data.id) ?? [] };
 }
 
 export async function createQuote(db: Db, values: TablesInsert<"quotes">) {
@@ -223,10 +313,15 @@ export async function softDeleteQuote(db: Db, id: string) {
 /** Reemplaza el set de ítems de una cotización (estrategia del autosave:
  * borrar+insertar mantiene el sort_order simple y atómico a nivel de fila). */
 /** Sincroniza los ítems por id ESTABLE (el cliente genera el uuid de los nuevos):
- * borra los que ya no están, y hace upsert del resto. NO incluye status/client_comment
- * en el payload, así el upsert conserva la respuesta del cliente de las filas existentes
- * (y las nuevas quedan con el default `pending`). Los ids estables evitan que un
- * reguardado/autosave pierda la respuesta o los precios preservados por rol. */
+ * borra los que ya no están, e inserta/actualiza el resto SEPARADO a mano
+ * (nunca upsert/ON CONFLICT: Postgres exige SELECT sobre cualquier columna
+ * referenciada como `excluded.col`, lo que reabriría la lectura de
+ * cost_price/client_price que 048_quote_items_column_grants.sql bloqueó a
+ * propósito para `authenticated`). El insert de ítems nuevos NO incluye
+ * status/client_comment, así quedan con su default (`pending`/null); el update
+ * de ítems existentes tampoco los toca, así se conserva la respuesta del
+ * cliente. Los ids estables evitan que un reguardado/autosave la pierda o
+ * pierda los precios preservados por rol. */
 export async function replaceQuoteItems(
   db: Db,
   quoteId: string,
@@ -245,12 +340,26 @@ export async function replaceQuoteItems(
     .not("id", "in", `(${ids.join(",")})`);
   if (deleteError) throw deleteError;
 
-  const { data, error } = await db
+  const { data: existingRows, error: existingError } = await db
     .from("quote_items")
-    .upsert(items.map((item, i) => ({ ...item, quote_id: quoteId, sort_order: i })))
-    .select();
-  if (error) throw error;
-  return data;
+    .select("id")
+    .eq("quote_id", quoteId);
+  if (existingError) throw existingError;
+  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
+
+  const rows = items.map((item, i) => ({ ...item, quote_id: quoteId, sort_order: i }));
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+  const toUpdate = rows.filter((row) => existingIds.has(row.id));
+
+  if (toInsert.length > 0) {
+    const { error } = await db.from("quote_items").insert(toInsert);
+    if (error) throw error;
+  }
+  for (const { id, ...values } of toUpdate) {
+    const { error } = await db.from("quote_items").update(values).eq("id", id);
+    if (error) throw error;
+  }
+  return rows.map((row) => ({ id: row.id }));
 }
 
 export interface QuoteItemResponse {

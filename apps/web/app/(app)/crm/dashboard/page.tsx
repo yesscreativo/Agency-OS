@@ -26,7 +26,7 @@ function addAmount(acc: Amounts, currency: string, amount: number) {
   acc[currency] = (acc[currency] ?? 0) + amount;
 }
 /** Valor legacy de una cotización: Σ precio_cliente × cantidad (sin IVA). */
-function quoteValue(items: { client_price: number; quantity: number }[]): number {
+function quoteValue(items: { client_price: number | null; quantity: number }[]): number {
   return items.reduce((s, i) => s + (i.client_price || 0) * (i.quantity || 1), 0);
 }
 function amountLines(amounts: Amounts, tone: KpiTone): ReactNode {

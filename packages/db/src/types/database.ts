@@ -1547,6 +1547,25 @@ export type Database = {
       current_user_module_codes: { Args: never; Returns: string[] }
       current_user_organization_ids: { Args: never; Returns: string[] }
       current_user_person_id: { Args: never; Returns: string }
+      get_quote_items_secure: {
+        Args: { p_quote_ids: string[] }
+        Returns: {
+          client_comment: string
+          client_price: number
+          cost_price: number
+          created_at: string
+          deleted_at: string
+          description: string
+          id: string
+          is_group: boolean
+          quantity: number
+          quote_id: string
+          sort_order: number
+          status: string
+          supplier: string
+          updated_at: string
+        }[]
+      }
       next_quote_seq: {
         Args: { p_client_id: string; p_day: string }
         Returns: number

@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { calcQuote, formatDate, formatMoney } from "@agency-os/domain";
-import { getQuoteById } from "@agency-os/db";
+import { getQuoteByIdMasked } from "@agency-os/db";
 import { getCurrentUser, quoteAccess } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
@@ -23,7 +23,7 @@ export default async function QuotePrintPage({
   const access = quoteAccess(user);
 
   const db = await getSupabaseServerClient();
-  const quote = await getQuoteById(db, params.id);
+  const quote = await getQuoteByIdMasked(db, params.id);
   if (!quote) notFound();
 
   const statusLabel = resolveStatus(await getQuoteStatusMap(db), quote.status).label;
@@ -32,13 +32,13 @@ export default async function QuotePrintPage({
   const internal = searchParams.vista === "interna" && access.seeMargin;
 
   // Precio de línea a mostrar: cliente para admin/viewer, costo para el creador.
-  const unitPrice = (item: { client_price: number; cost_price: number }) =>
-    access.seeClientPrice ? item.client_price : item.cost_price;
+  const unitPrice = (item: { client_price: number | null; cost_price: number | null }) =>
+    (access.seeClientPrice ? item.client_price : item.cost_price) ?? 0;
 
   const totals = calcQuote(
     quote.quote_items.map((item) => ({
-      clientPrice: item.client_price,
-      costPrice: item.cost_price,
+      clientPrice: item.client_price ?? 0,
+      costPrice: item.cost_price ?? 0,
       quantity: item.quantity,
       isGroup: item.is_group,
     })),
@@ -134,7 +134,7 @@ export default async function QuotePrintPage({
                 </td>
                 {internal && (
                   <td className="py-2.5 pr-3 text-right font-mono text-[13px] text-[#71717a]">
-                    {money(item.cost_price)}
+                    {money(item.cost_price ?? 0)}
                   </td>
                 )}
                 <td className="py-2.5 text-right font-mono text-[13px] font-bold">

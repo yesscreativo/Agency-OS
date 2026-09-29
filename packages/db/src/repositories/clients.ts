@@ -1,5 +1,6 @@
 import type { Tables, TablesInsert, TablesUpdate } from "../types/database";
 import type { Db, Page } from "./shared";
+import { fetchSecureItemsByQuoteIds } from "./quotes";
 
 export interface ClientListFilters {
   search?: string;
@@ -122,26 +123,32 @@ export type ClientQuoteRow = Pick<
   Tables<"quotes">,
   "id" | "code" | "quote_name" | "status" | "currency" | "has_iva" | "iva_percentage" | "created_at"
 > & {
-  quote_items: Pick<
-    Tables<"quote_items">,
-    "client_price" | "cost_price" | "quantity" | "is_group"
-  >[];
+  quote_items: (Pick<Tables<"quote_items">, "quantity" | "is_group"> & {
+    client_price: number | null;
+    cost_price: number | null;
+  })[];
 };
 
 /** Cotizaciones de un cliente (historial de la ficha), con lo justo para calcular
- * totales en app con calcQuote. Incluye cerradas; ordena por fecha desc. */
+ * totales en app con calcQuote. Incluye cerradas; ordena por fecha desc.
+ * Precios vía la RPC `get_quote_items_secure` (enmascarados según el permiso de
+ * quien consulta; `quote_items` no es seleccionable directo para `authenticated`,
+ * ver 046_quote_items_secure_rpc.sql). */
 export async function listClientQuotes(db: Db, clientId: string): Promise<ClientQuoteRow[]> {
   const { data, error } = await db
     .from("quotes")
-    .select(
-      "id, code, quote_name, status, currency, has_iva, iva_percentage, created_at, quote_items(client_price, cost_price, quantity, is_group)",
-    )
+    .select("id, code, quote_name, status, currency, has_iva, iva_percentage, created_at")
     .eq("client_id", clientId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
-    .returns<ClientQuoteRow[]>();
+    .returns<Omit<ClientQuoteRow, "quote_items">[]>();
   if (error) throw error;
-  return data ?? [];
+  const rows = data ?? [];
+  const itemsByQuoteId = await fetchSecureItemsByQuoteIds(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((row) => ({ ...row, quote_items: itemsByQuoteId.get(row.id) ?? [] }));
 }
 
 /** Nº de cotizaciones no borradas por cliente (para la columna de la lista).
