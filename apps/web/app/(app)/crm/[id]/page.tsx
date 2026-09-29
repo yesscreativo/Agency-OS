@@ -26,15 +26,19 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const quote = await getQuoteByIdMasked(db, params.id);
   if (!quote) notFound();
 
-  // `items`/`token` de supplier_orders están bloqueados para `authenticated` a
-  // nivel de columna (ver 049_supplier_orders_column_grants.sql): se leen con
-  // service-role y el token se enmascara abajo según `access.canSendSupplierOrder`
-  // antes de mandarlo al client component (QuoteForm), que de otro modo lo
-  // recibiría en el flight payload aunque el JSX no lo renderice.
+  // `items`/`token` de supplier_orders y `snapshot` de quote_versions están
+  // bloqueados para `authenticated` a nivel de columna (ver
+  // 049_supplier_orders_column_grants.sql / 051_quote_versions_column_grants.sql):
+  // se leen con service-role. El token se enmascara abajo según
+  // `access.canSendSupplierOrder` antes de mandarlo al client component
+  // (QuoteForm), que de otro modo lo recibiría en el flight payload aunque el
+  // JSX no lo renderice; el snapshot de versión solo se usa aquí para calcular
+  // el total con el rol de precio correcto (versionViews abajo), nunca viaja
+  // crudo al navegador.
   const service = createSupabaseServiceRoleClient();
   const [{ rows: clients }, versions, kams, statusMap, supplierOrderRows] = await Promise.all([
     listClients(db, { pageSize: 200 }),
-    listQuoteVersions(db, quote.id),
+    listQuoteVersions(service, quote.id),
     listKams(db, { onlyActive: true }),
     getQuoteStatusMap(db),
     listSupplierOrders(service, quote.id),

@@ -221,8 +221,12 @@ export async function sendQuote(quoteId: string): Promise<QuoteSendResult> {
       });
     }
 
+    // service-role: `snapshot` está bloqueado para `authenticated` a nivel de
+    // columna (ver 051_quote_versions_column_grants.sql), y de todos modos debe
+    // guardar el precio REAL sin importar el permiso de quien envía (mismo
+    // motivo que `getQuoteById(service, ...)` arriba).
     await createQuoteVersion(
-      db,
+      service,
       quoteId,
       {
         code,
