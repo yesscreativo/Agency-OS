@@ -39,6 +39,63 @@ export function barWidthDays(startIso: string, dueIso: string): number {
   return Math.max(1, dayOffset(startIso, dueIso) + 1);
 }
 
+const MONTH_NAMES_ES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+
+export interface MonthSegment {
+  /** "Enero 2026" — incluye el año porque el rango puede cruzar años. */
+  label: string;
+  /** Primer día calendario de este mes (YYYY-MM-DD), siempre "01". */
+  startIso: string;
+  /** Días que tiene este mes (28-31). */
+  days: number;
+}
+
+/** Header del Gantt: un segmento por MES CALENDARIO completo que cruza el
+ * rango [startIso, dueIso] — no recorta al día exacto de la tarea más
+ * temprana/tardía, para que las columnas del header sean meses enteros (igual
+ * que un Gantt convencional). El primer `startIso` devuelto es el punto cero
+ * que debe usarse para posicionar las barras (`dayOffset`/`barLeftPx`), para
+ * que header y barras queden alineados. */
+export function monthSegments(startIso: string, dueIso: string): MonthSegment[] {
+  const start = toUTCDate(startIso);
+  const end = toUTCDate(dueIso);
+  const segments: MonthSegment[] = [];
+
+  let year = start.getUTCFullYear();
+  let month = start.getUTCMonth();
+  const endYear = end.getUTCFullYear();
+  const endMonth = end.getUTCMonth();
+
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    segments.push({
+      label: `${MONTH_NAMES_ES[month]} ${year}`,
+      startIso: `${year}-${String(month + 1).padStart(2, "0")}-01`,
+      days: daysInMonth,
+    });
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+  }
+
+  return segments;
+}
+
 export function isSelfDependency(workItemId: string, dependsOnWorkItemId: string): boolean {
   return workItemId === dependsOnWorkItemId;
 }

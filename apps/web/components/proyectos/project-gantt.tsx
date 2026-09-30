@@ -3,13 +3,14 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Button } from "@agency-os/ui";
-import { barWidthDays, dayOffset } from "@agency-os/domain";
+import { barWidthDays, dayOffset, monthSegments } from "@agency-os/domain";
 import { updateGanttTaskDatesAction } from "@/lib/gantt-actions";
 import { GanttTaskModal, type GanttTask } from "./gantt-task-modal";
 import type { BoardOrgUser, BoardStatus } from "./project-board";
 
 const PX_PER_DAY = 10;
 const ROW_HEIGHT = 44;
+const HEADER_HEIGHT = 32;
 
 export interface GanttDependency {
   id: string;
@@ -73,8 +74,16 @@ export function ProjectGantt({
   );
 
   const dated = tasks.filter((t) => t.startDate && t.dueDate);
-  const projectStart =
+  const rangeStart =
     dated.length > 0 ? dated.reduce((min, t) => (t.startDate! < min ? t.startDate! : min), dated[0]!.startDate!) : null;
+  const rangeEnd =
+    dated.length > 0 ? dated.reduce((max, t) => (t.dueDate! > max ? t.dueDate! : max), dated[0]!.dueDate!) : null;
+  // Header de meses calendario completos + punto cero para posicionar las
+  // barras (`gridStart` = primer día del primer mes, no la fecha exacta de la
+  // tarea más temprana) — así header y barras quedan alineados.
+  const segments = rangeStart && rangeEnd ? monthSegments(rangeStart, rangeEnd) : [];
+  const gridStart = segments[0]?.startIso ?? null;
+  const gridWidth = segments.reduce((sum, s) => sum + s.days, 0) * PX_PER_DAY;
 
   const topTasks = tasks.filter((t) => !t.parentId);
   const childrenByParent = useMemo(() => {
@@ -151,7 +160,7 @@ export function ProjectGantt({
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  if (!projectStart) {
+  if (!gridStart) {
     return (
       <div className="rounded-lg border border-line bg-glass p-6 text-center text-sm text-muted backdrop-blur-xl">
         Todavía no hay tareas en el Gantt.
@@ -199,6 +208,9 @@ export function ProjectGantt({
 
       <div className="ds-scroll flex overflow-x-auto rounded-lg border border-line bg-glass backdrop-blur-xl">
         <div className="w-[300px] shrink-0 border-r border-line">
+          {/* Spacer para alinear las filas con las barras, que empiezan
+              debajo del header de meses del panel derecho. */}
+          <div style={{ height: HEADER_HEIGHT }} className="border-b border-line" />
           {orderedRows.map(({ task, depth }) => (
             <div
               key={task.id}
@@ -226,16 +238,42 @@ export function ProjectGantt({
           ))}
         </div>
 
-        <div className="relative" style={{ height: orderedRows.length * ROW_HEIGHT }}>
-          {orderedRows.map(({ task }, index) => {
-            const preview = dragPreview?.id === task.id ? dragPreview : null;
-            const startDate = preview?.startDate ?? task.startDate;
-            const dueDate = preview?.dueDate ?? task.dueDate;
-            if (!startDate || !dueDate) return null;
-            const status = task.statusId ? statusById.get(task.statusId) : null;
-            const left = dayOffset(projectStart, startDate) * PX_PER_DAY;
-            const width = barWidthDays(startDate, dueDate) * PX_PER_DAY;
-            return (
+        <div>
+          {/* Header: un mes calendario completo por segmento, ancho
+              proporcional a sus días — mismo punto cero (`gridStart`) que las
+              barras de abajo, para que quede todo alineado. */}
+          <div className="flex" style={{ height: HEADER_HEIGHT }}>
+            {segments.map((seg) => (
+              <div
+                key={seg.startIso}
+                style={{ width: seg.days * PX_PER_DAY }}
+                className="flex shrink-0 items-center justify-center border-b border-r border-line text-xs font-semibold text-muted"
+              >
+                {seg.label}
+              </div>
+            ))}
+          </div>
+
+          <div className="relative" style={{ height: orderedRows.length * ROW_HEIGHT, width: gridWidth }}>
+            {/* Líneas verticales de la cuadrícula, un divisor por mes. */}
+            <div className="absolute inset-0 flex">
+              {segments.map((seg) => (
+                <div
+                  key={seg.startIso}
+                  style={{ width: seg.days * PX_PER_DAY }}
+                  className="h-full shrink-0 border-r border-line/40"
+                />
+              ))}
+            </div>
+            {orderedRows.map(({ task }, index) => {
+              const preview = dragPreview?.id === task.id ? dragPreview : null;
+              const startDate = preview?.startDate ?? task.startDate;
+              const dueDate = preview?.dueDate ?? task.dueDate;
+              if (!startDate || !dueDate) return null;
+              const status = task.statusId ? statusById.get(task.statusId) : null;
+              const left = dayOffset(gridStart, startDate) * PX_PER_DAY;
+              const width = barWidthDays(startDate, dueDate) * PX_PER_DAY;
+              return (
               <div
                 key={task.id}
                 className={`absolute flex items-center rounded-md px-2 text-xs font-semibold text-white ${
@@ -273,6 +311,7 @@ export function ProjectGantt({
               </div>
             );
           })}
+          </div>
         </div>
       </div>
 

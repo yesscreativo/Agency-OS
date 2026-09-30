@@ -5,6 +5,7 @@ import {
   dayOffset,
   isDirectCycle,
   isSelfDependency,
+  monthSegments,
 } from "./gantt";
 
 describe("isSelfDependency", () => {
@@ -86,5 +87,34 @@ describe("cascadeForwardShift", () => {
     ];
     const result = cascadeForwardShift(tasks, edges, "design");
     expect(result).toEqual([{ id: "dev", startDate: "2026-01-30", dueDate: "2026-02-14" }]);
+  });
+});
+
+describe("monthSegments", () => {
+  it("un solo mes cuando el rango cae dentro de un mes calendario", () => {
+    expect(monthSegments("2026-01-06", "2026-01-20")).toEqual([
+      { label: "Enero 2026", startIso: "2026-01-01", days: 31 },
+    ]);
+  });
+
+  it("un segmento por cada mes calendario completo que cruza el rango", () => {
+    expect(monthSegments("2026-01-15", "2026-03-05")).toEqual([
+      { label: "Enero 2026", startIso: "2026-01-01", days: 31 },
+      { label: "Febrero 2026", startIso: "2026-02-01", days: 28 },
+      { label: "Marzo 2026", startIso: "2026-03-01", days: 31 },
+    ]);
+  });
+
+  it("cruza el límite de año correctamente", () => {
+    expect(monthSegments("2026-12-10", "2027-01-15")).toEqual([
+      { label: "Diciembre 2026", startIso: "2026-12-01", days: 31 },
+      { label: "Enero 2027", startIso: "2027-01-01", days: 31 },
+    ]);
+  });
+
+  it("respeta años bisiestos", () => {
+    expect(monthSegments("2028-02-01", "2028-02-28")).toEqual([
+      { label: "Febrero 2028", startIso: "2028-02-01", days: 29 },
+    ]);
   });
 });
