@@ -6,6 +6,7 @@ import {
   listComments,
   listOrgUsers,
   listTimeEntries,
+  listWatchers,
   resolveProjectByShortId,
   resolveTaskByShortId,
 } from "@agency-os/db";
@@ -76,6 +77,7 @@ export default async function WorkItemDetailPage({
     commentAttachmentsResult,
     timeEntryRows,
     activeTimer,
+    watcherRows,
   ] = await Promise.all([
     getWorkItem(db, taskId),
     organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
@@ -95,6 +97,7 @@ export default async function WorkItemDetailPage({
     listCommentAttachmentsForWorkItem(taskId),
     listTimeEntries(db, taskId),
     getActiveTimerAction(),
+    listWatchers(db, taskId),
   ]);
   if (!task || task.organization_id !== organizationId || task.project_id !== projectId) {
     notFound();
@@ -126,6 +129,7 @@ export default async function WorkItemDetailPage({
       .filter((a) => a.users)
       .map((a) => ({ id: a.user_id, name: assigneeName(a) })),
     onGantt: task.on_gantt,
+    watcherIds: watcherRows.map((w) => w.user_id),
   };
 
   const subtasks: DetailSubtask[] = task.subtasks.map((st) => ({
