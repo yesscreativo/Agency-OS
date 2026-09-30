@@ -62,6 +62,8 @@ export interface CreateCommentInput {
   workItemId: string;
   body: string;
   parentCommentId?: string | null;
+  /** true si el equipo lo marca "compartir con cliente". Default 'internal'. */
+  visibleToClient?: boolean;
 }
 
 /** Crea un comentario (raíz o reply), registra actividad y notifica menciones. */
@@ -104,6 +106,7 @@ export async function createComment(input: CreateCommentInput): Promise<CommentR
       author_user_id: auth.user.id,
       body,
       mentioned_user_ids: mentionedIds,
+      visibility: input.visibleToClient ? "client_visible" : "internal",
     });
 
     // Actividad (secundaria: no bloquea).

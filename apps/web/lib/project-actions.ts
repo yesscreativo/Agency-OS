@@ -670,6 +670,7 @@ export interface WorkItemAttachment {
   sizeBytes: number | null;
   /** URL firmada temporal (1 h) para descargar/previsualizar. */
   url: string | null;
+  isClientVisible: boolean;
 }
 
 export type AttachmentResult =
@@ -703,6 +704,7 @@ function toAttachment(row: AttachmentRow, url: string | null): WorkItemAttachmen
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     url,
+    isClientVisible: row.visibility === "client_visible",
   };
 }
 
@@ -739,6 +741,7 @@ export async function uploadWorkItemAttachment(
       return { error: "No se pudo subir el archivo." };
     }
 
+    const shareWithClient = formData.get("visibility") === "client_visible";
     const row = await insertAttachment(db, {
       work_item_id: workItemId,
       organization_id: auth.organizationId,
@@ -747,6 +750,7 @@ export async function uploadWorkItemAttachment(
       mime_type: file.type || null,
       size_bytes: file.size,
       created_by: auth.userId,
+      visibility: shareWithClient ? "client_visible" : "internal",
     });
 
     const { data: taskRow } = await db.from("work_items").select("title").eq("id", workItemId).maybeSingle();
@@ -862,6 +866,7 @@ export async function uploadCommentAttachment(
       return { error: "No se pudo subir el archivo." };
     }
 
+    const shareWithClient = formData.get("visibility") === "client_visible";
     const row = await insertAttachment(db, {
       work_item_id: comment.work_item_id,
       comment_id: commentId,
@@ -871,6 +876,7 @@ export async function uploadCommentAttachment(
       mime_type: file.type || null,
       size_bytes: file.size,
       created_by: user.id,
+      visibility: shareWithClient ? "client_visible" : "internal",
     });
 
     const { data: taskRow } = await db
