@@ -6,6 +6,7 @@ import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
 import { formatDate, formatDuration, isOverdue, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
 import { enableGanttAction } from "@/lib/gantt-actions";
+import { generateShareLinkAction, getShareLinkAction, revokeShareLinkAction } from "@/lib/client-share-actions";
 import { taskHref } from "@/lib/project-paths";
 import { WorkItemEditor } from "./work-item-editor";
 import { ProjectStatusManager } from "./project-status-manager";
@@ -122,6 +123,19 @@ export function ProjectBoard({
   const [view, setView] = useState<"board" | "list" | "statuses" | "gantt">("board");
   const [creating, setCreating] = useState<CreateTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  useEffect(() => {
+    if (view !== "gantt" || !ganttEnabled) return;
+    let cancelled = false;
+    void getShareLinkAction(projectId).then((res) => {
+      if (!cancelled && res.token !== undefined) setShareToken(res.token);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, ganttEnabled, projectId]);
 
   const openTask = (task: { id: string; title: string }) => router.push(taskHref(basePath, task));
   const avatarByUserId = useMemo(
@@ -272,14 +286,62 @@ export function ProjectBoard({
       {view === "statuses" ? (
         <ProjectStatusManager projectId={projectId} statuses={statuses} />
       ) : view === "gantt" ? (
-        <ProjectGantt
-          projectId={projectId}
-          tasks={ganttTasks}
-          dependencies={ganttDependencies}
-          statuses={statuses}
-          orgUsers={orgUsers}
-          canManage={canManage}
-        />
+        <>
+          {canManage && (
+            <div className="mb-3 flex items-center justify-end gap-2">
+              {shareToken ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(`${window.location.origin}/proyecto/${shareToken}`);
+                    }}
+                  >
+                    Copiar link
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={shareBusy}
+                    onClick={() => {
+                      setShareBusy(true);
+                      void revokeShareLinkAction(projectId).then((res) => {
+                        setShareBusy(false);
+                        if (!res.error) setShareToken(null);
+                      });
+                    }}
+                  >
+                    Revocar link
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={shareBusy}
+                  onClick={() => {
+                    setShareBusy(true);
+                    void generateShareLinkAction(projectId).then((res) => {
+                      setShareBusy(false);
+                      if (res.token) setShareToken(res.token);
+                    });
+                  }}
+                >
+                  Generar link
+                </Button>
+              )}
+            </div>
+          )}
+          <ProjectGantt
+            projectId={projectId}
+            tasks={ganttTasks}
+            dependencies={ganttDependencies}
+            statuses={statuses}
+            orgUsers={orgUsers}
+            canManage={canManage}
+          />
+        </>
       ) : view === "board" ? (
         <div className="ds-scroll flex gap-4 overflow-x-auto pb-4">
           {statuses.map((col) => {
