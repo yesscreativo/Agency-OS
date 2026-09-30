@@ -22,7 +22,7 @@ import {
   WORK_ITEM_PRIORITIES,
   type WorkItemPriority,
 } from "@agency-os/domain";
-import { saveWorkItem, setWorkItemAssignees } from "@/lib/project-actions";
+import { saveWorkItem, setWorkItemAssignees, setWorkItemWatchers } from "@/lib/project-actions";
 import type { BoardStatus } from "./project-board";
 import { AssigneeMultiSelect, PRIORITY_LABEL, PriorityBadge } from "./work-item-fields";
 
@@ -44,6 +44,7 @@ export interface FieldsPanelTask {
   estimatedMinutes: number | null;
   assignees: FieldsPanelAssignee[];
   onGantt: boolean;
+  watcherIds: string[];
 }
 
 /** Fila etiqueta→valor con icono. El valor se pinta con `children`. */
@@ -147,6 +148,7 @@ export function WorkItemFieldsPanel({
   // que se editan por popover (estado/prioridad). Estos últimos se pintan de
   // forma OPTIMISTA: al elegir se ven al instante, sin esperar al `router.refresh`.
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignees.map((a) => a.id));
+  const [watcherIds, setWatcherIds] = useState<string[]>(task.watcherIds);
   const [estimateInput, setEstimateInput] = useState(formatDuration(task.estimatedMinutes));
   const [statusIdLocal, setStatusIdLocal] = useState(task.statusId);
   const [priorityLocal, setPriorityLocal] = useState(task.priority);
@@ -155,11 +157,12 @@ export function WorkItemFieldsPanel({
   // Re-sincroniza si el server manda datos nuevos tras un refresh.
   useEffect(() => {
     setAssigneeIds(task.assignees.map((a) => a.id));
+    setWatcherIds(task.watcherIds);
     setEstimateInput(formatDuration(task.estimatedMinutes));
     setStatusIdLocal(task.statusId);
     setPriorityLocal(task.priority);
     setOnGanttLocal(task.onGantt);
-  }, [task.assignees, task.estimatedMinutes, task.statusId, task.priority, task.onGantt]);
+  }, [task.assignees, task.watcherIds, task.estimatedMinutes, task.statusId, task.priority, task.onGantt]);
 
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const currentStatus = statusIdLocal ? statusById.get(statusIdLocal) : null;
@@ -203,6 +206,15 @@ export function WorkItemFieldsPanel({
     setError(null);
     startTransition(async () => {
       const res = await setWorkItemAssignees(task.id, ids);
+      if (res.error) setError(res.error);
+      else router.refresh();
+    });
+  };
+
+  const saveWatchers = (ids: string[]) => {
+    setError(null);
+    startTransition(async () => {
+      const res = await setWorkItemWatchers(task.id, ids);
       if (res.error) setError(res.error);
       else router.refresh();
     });
@@ -396,6 +408,52 @@ export function WorkItemFieldsPanel({
           </InlineEdit>
         </Row>
 
+        {/* Seguidores: cualquiera con project.view puede sumar/sacar a
+            cualquiera (a sí mismo o a otros) — por eso editable=true siempre,
+            a diferencia de Asignados que exige canAssign. */}
+        <Row icon={<IconEye />} label="Seguidores">
+          <InlineEdit
+            editable
+            display={
+              watcherIds.length > 0 ? (
+                <AvatarGroup more={watcherIds.length > 3 ? watcherIds.length - 3 : undefined}>
+                  {watcherIds.slice(0, 3).map((uid) => {
+                    const u = orgUsers.find((o) => o.id === uid);
+                    return (
+                      <Avatar
+                        key={uid}
+                        initials={initialsOf(u?.name ?? "—")}
+                        src={u?.avatarUrl ?? null}
+                        size="xs"
+                        title={u?.name ?? "—"}
+                      />
+                    );
+                  })}
+                </AvatarGroup>
+              ) : (
+                <span className="text-faint">+ Seguir</span>
+              )
+            }
+          >
+            {() => (
+              <div className="w-64">
+                <AssigneeMultiSelect
+                  users={orgUsers}
+                  selectedIds={watcherIds}
+                  onToggle={(uid) => {
+                    const next = watcherIds.includes(uid)
+                      ? watcherIds.filter((x) => x !== uid)
+                      : [...watcherIds, uid];
+                    setWatcherIds(next);
+                    saveWatchers(next);
+                  }}
+                  disabled={false}
+                />
+              </div>
+            )}
+          </InlineEdit>
+        </Row>
+
         {/* Duración estimada */}
         <Row icon={<IconClock />} label="Duración estimada">
           <InlineEdit
@@ -495,5 +553,11 @@ const IconTag = () => (
 const IconTimer = () => (
   <svg {...iconProps}>
     <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+const IconEye = () => (
+  <svg {...iconProps}>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
   </svg>
 );

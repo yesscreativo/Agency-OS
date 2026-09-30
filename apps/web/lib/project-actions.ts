@@ -14,9 +14,11 @@ import {
   insertAttachment,
   listAttachments,
   listCommentAttachments,
+  listWatchers,
   recordActivity,
   reorderStatuses,
   setAssignees,
+  setWatchers,
   softDeleteProjectCascade,
   softDeleteWorkItem,
   updateStatus,
@@ -55,6 +57,20 @@ async function requireProjectAssigner(): Promise<ManagerAuth> {
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
   if (!hasPermission(user, "project.assign")) {
     return { error: "No tienes permiso para asignar responsables." };
+  }
+  const organizationId = user.organizationIds[0];
+  if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
+  return { organizationId, userId: user.id, fullName: user.fullName };
+}
+
+/** Seguir/dejar de seguir requiere solo `project.view` — más laxo que
+ * `project.assign` a propósito (seguir es de menor riesgo que asumir
+ * responsabilidad, ver spec de watchers). */
+async function requireProjectViewer(): Promise<ManagerAuth> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  if (!hasPermission(user, "project.view")) {
+    return { error: "No tienes permiso para ver proyectos." };
   }
   const organizationId = user.organizationIds[0];
   if (!organizationId) return { error: "Tu usuario no pertenece a ninguna organización." };
@@ -143,6 +159,46 @@ async function statusLabel(db: Db, id: string | null): Promise<string | null> {
   if (!id) return null;
   const { data } = await db.from("work_item_statuses").select("label").eq("id", id).maybeSingle();
   return data?.label ?? null;
+}
+
+/** Notifica a los seguidores de una tarea que cambió de estado (excluyendo a
+ * quien hizo el cambio). Best-effort: un fallo acá no debe tumbar la acción
+ * que llama (mismo criterio que el resto de notificaciones de este archivo). */
+async function notifyWatchersStatusChanged(
+  db: Db,
+  args: { orgId: string; workItemId: string; actorUserId: string; actorFullName: string; newLabel: string | null },
+): Promise<void> {
+  try {
+    const watchers = await listWatchers(db, args.workItemId);
+    const notifyIds = watchers.map((w) => w.user_id).filter((uid) => uid !== args.actorUserId);
+    if (notifyIds.length === 0) return;
+
+    const { data: workItem } = await db
+      .from("work_items")
+      .select("id, title, project_id")
+      .eq("id", args.workItemId)
+      .maybeSingle();
+    if (!workItem) return;
+
+    const link = await resolveTaskLink(db, workItem.project_id, workItem);
+    const service = createSupabaseServiceRoleClient();
+    await createNotifications(
+      service,
+      notifyIds.map((uid) => ({
+        organization_id: args.orgId,
+        user_id: uid,
+        type: "status_change",
+        title: args.newLabel
+          ? `${args.actorFullName} cambió el estado de "${workItem.title}" a "${args.newLabel}"`
+          : `${args.actorFullName} cambió el estado de "${workItem.title}"`,
+        body: null,
+        work_item_id: workItem.id,
+        link,
+      })),
+    );
+  } catch (error) {
+    console.error("notifyWatchersStatusChanged", error);
+  }
 }
 
 // ---------- Proyecto ----------
@@ -313,12 +369,20 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
           });
         }
         if ((prev.status_id ?? null) !== newStatusId) {
+          const newLabel = await statusLabel(db, newStatusId);
           await safeActivity(db, {
             orgId: auth.organizationId,
             workItemId: id,
             actorUserId: auth.userId,
             eventType: "status_changed",
-            payload: { from: prev.status_id ?? null, to: newStatusId, label: await statusLabel(db, newStatusId) },
+            payload: { from: prev.status_id ?? null, to: newStatusId, label: newLabel },
+          });
+          await notifyWatchersStatusChanged(db, {
+            orgId: auth.organizationId,
+            workItemId: id,
+            actorUserId: auth.userId,
+            actorFullName: auth.fullName,
+            newLabel,
           });
         }
       }
@@ -424,12 +488,20 @@ export async function moveWorkItem(id: string, statusId: string): Promise<Action
     await updateWorkItem(db, id, { status_id: statusId });
 
     if (!prev || prev.status_id !== statusId) {
+      const newLabel = await statusLabel(db, statusId);
       await safeActivity(db, {
         orgId: auth.organizationId,
         workItemId: id,
         actorUserId: auth.userId,
         eventType: "status_changed",
-        payload: { from: prev?.status_id ?? null, to: statusId, label: await statusLabel(db, statusId) },
+        payload: { from: prev?.status_id ?? null, to: statusId, label: newLabel },
+      });
+      await notifyWatchersStatusChanged(db, {
+        orgId: auth.organizationId,
+        workItemId: id,
+        actorUserId: auth.userId,
+        actorFullName: auth.fullName,
+        newLabel,
       });
     }
 
@@ -526,6 +598,28 @@ export async function setWorkItemAssignees(id: string, userIds: string[]): Promi
   } catch (error) {
     console.error("setWorkItemAssignees", error);
     return { error: "No se pudieron actualizar los asignados. Intenta de nuevo." };
+  }
+}
+
+/** Reemplaza el set completo de seguidores de una tarea. Requiere solo
+ * `project.view` (no `project.assign`) — ver spec de watchers. */
+export async function setWorkItemWatchers(id: string, userIds: string[]): Promise<ActionResult> {
+  const auth = await requireProjectViewer();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const projectId = await assertWorkItemInOrg(db, id, auth.organizationId);
+    if (!projectId) return { error: "La tarea no existe o no pertenece a tu organización." };
+
+    await setWatchers(db, id, auth.organizationId, userIds);
+
+    const projectLink = await resolveProjectLink(db, projectId);
+    revalidatePath(projectLink ?? "/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("setWorkItemWatchers", error);
+    return { error: "No se pudieron actualizar los seguidores. Intenta de nuevo." };
   }
 }
 

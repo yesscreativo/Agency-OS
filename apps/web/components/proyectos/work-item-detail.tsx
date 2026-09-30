@@ -49,6 +49,7 @@ export interface DetailTask {
   estimatedMinutes: number | null;
   assignees: DetailAssignee[];
   onGantt: boolean;
+  watcherIds: string[];
 }
 
 export interface DetailSubtask {
@@ -230,6 +231,7 @@ export function WorkItemDetail({
             estimatedMinutes: task.estimatedMinutes,
             assignees: task.assignees,
             onGantt: task.onGantt,
+            watcherIds: task.watcherIds,
           }}
           statuses={statuses}
           orgUsers={orgUsers}

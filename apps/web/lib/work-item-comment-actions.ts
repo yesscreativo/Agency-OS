@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  addWatcherIfAbsent,
   createNotifications,
   createSupabaseServiceRoleClient,
   getComment,
   insertComment,
   listOrgUsers,
+  listWatchers,
   recordActivity,
   softDeleteComment,
   updateCommentBody,
@@ -122,6 +124,23 @@ export async function createComment(input: CreateCommentInput): Promise<CommentR
       console.error("recordActivity:comment", error);
     }
 
+    // Auto-seguir: quien comenta sin ser asignado queda siguiendo la tarea
+    // (silencioso). Si ya es asignado o ya la sigue, no hace nada (upsert
+    // ignora el conflicto de PK).
+    try {
+      const { data: isAssignee } = await db
+        .from("work_item_assignees")
+        .select("user_id")
+        .eq("work_item_id", input.workItemId)
+        .eq("user_id", auth.user.id)
+        .maybeSingle();
+      if (!isAssignee) {
+        await addWatcherIfAbsent(db, input.workItemId, auth.organizationId, auth.user.id);
+      }
+    } catch (error) {
+      console.error("createComment:autoWatch", error);
+    }
+
     // Ruta real de la tarea (con slugs) — se usa para notificar menciones y
     // para revalidar solo esa página en vez de toda la sección /proyectos.
     const link = await resolveTaskLink(db, workItem.projectId, {
@@ -151,6 +170,34 @@ export async function createComment(input: CreateCommentInput): Promise<CommentR
       } catch (error) {
         console.error("createComment:notifyMentions", error);
       }
+    }
+
+    // Notificar a los seguidores (menos al autor y a quienes ya se notifican
+    // por mención, para no duplicar el aviso del mismo comentario).
+    try {
+      const watchers = await listWatchers(db, input.workItemId);
+      const alreadyNotified = new Set([...targets, auth.user.id]);
+      const watcherTargets = watchers
+        .map((w) => w.user_id)
+        .filter((uid) => !alreadyNotified.has(uid));
+      if (watcherTargets.length > 0) {
+        const excerpt = body.length > 140 ? `${body.slice(0, 140)}…` : body;
+        const service = createSupabaseServiceRoleClient();
+        await createNotifications(
+          service,
+          watcherTargets.map((uid) => ({
+            organization_id: auth.organizationId,
+            user_id: uid,
+            type: "comment",
+            title: `${auth.user.fullName} comentó en "${workItem.title}"`,
+            body: excerpt,
+            work_item_id: workItem.id,
+            link,
+          })),
+        );
+      }
+    } catch (error) {
+      console.error("createComment:notifyWatchers", error);
     }
 
     revalidatePath(link ?? "/proyectos");
