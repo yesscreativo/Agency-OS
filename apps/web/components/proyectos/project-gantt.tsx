@@ -9,7 +9,7 @@ import { GanttTaskModal, type GanttTask } from "./gantt-task-modal";
 import type { BoardOrgUser, BoardStatus } from "./project-board";
 
 const PX_PER_DAY = 10;
-const ROW_HEIGHT = 44;
+const ROW_HEIGHT = 56;
 const HEADER_HEIGHT = 32;
 
 export interface GanttDependency {
@@ -235,12 +235,19 @@ export function ProjectGantt({
           {orderedRows.map(({ task, depth }) => (
             <div
               key={task.id}
-              style={{ height: ROW_HEIGHT, paddingLeft: depth * 20 }}
-              className="flex cursor-pointer flex-col justify-center border-b border-line px-3 hover:bg-glass"
+              style={{ height: ROW_HEIGHT, paddingLeft: 12 + depth * 28 }}
+              className="flex cursor-pointer flex-col justify-center gap-1 border-b border-line py-2 pr-3 hover:bg-glass"
               onClick={() => setEditing(task)}
             >
               <div className="flex items-center gap-2">
-                <span className="truncate text-[13px] font-bold text-ink">{task.title}</span>
+                {depth > 0 && <span className="shrink-0 text-faint">↳</span>}
+                <span
+                  className={`truncate ${
+                    depth > 0 ? "text-[12px] font-semibold text-muted" : "text-[13px] font-bold text-ink"
+                  }`}
+                >
+                  {task.title}
+                </span>
                 {task.assigneeIds.length > 0 && (
                   <AvatarGroup>
                     {task.assigneeIds.slice(0, 3).map((id) => {
