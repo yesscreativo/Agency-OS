@@ -334,23 +334,25 @@ export function WorkItemFieldsPanel({
 
         {/* Mostrar en Gantt */}
         <Row icon={<IconCalendar />} label="Gantt">
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-[var(--green)]"
-              disabled={!canManage || isPending}
-              checked={onGanttLocal}
-              onChange={() => {
-                const next = !onGanttLocal;
-                setOnGanttLocal(next);
-                save({ onGantt: next });
-              }}
-            />
-            Mostrar en Gantt
-            {!task.startDate || !task.dueDate ? (
-              <span className="text-xs text-faint">(requiere fecha de inicio y fin)</span>
-            ) : null}
-          </label>
+          <div>
+            <label className="flex w-fit items-center gap-2 whitespace-nowrap text-sm text-ink">
+              <input
+                type="checkbox"
+                className="h-4 w-4 shrink-0 accent-[var(--green)]"
+                disabled={!canManage || isPending}
+                checked={onGanttLocal}
+                onChange={() => {
+                  const next = !onGanttLocal;
+                  setOnGanttLocal(next);
+                  save({ onGantt: next });
+                }}
+              />
+              Mostrar en Gantt
+            </label>
+            {(!task.startDate || !task.dueDate) && (
+              <p className="mt-0.5 text-xs text-faint">Requiere fecha de inicio y fin</p>
+            )}
+          </div>
         </Row>
 
         {/* Asignados */}
