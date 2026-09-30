@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Button } from "@agency-os/ui";
 import { barWidthDays, dayOffset, monthSegments } from "@agency-os/domain";
@@ -103,13 +103,34 @@ export function ProjectGantt({
 
   const commitDates = async (id: string, startDate: string, dueDate: string) => {
     const result = await updateGanttTaskDatesAction(id, startDate, dueDate);
-    setDragPreview(null);
     if (result.error) {
+      // La mutación falló: no hay fecha nueva que esperar, se descarta el preview ya.
+      setDragPreview(null);
       setError(result.error);
       return;
     }
+    // OJO: no limpiar `dragPreview` acá. `router.refresh()` no espera a que el
+    // Server Component vuelva a renderizar con la fecha nueva — si lo
+    // limpiáramos ahora, la barra cae un frame a `task.startDate/dueDate`
+    // (todavía la prop vieja) y después salta a la nueva cuando llega el
+    // refresh: exactamente el parpadeo "vuelve a la fecha anterior y luego a
+    // la nueva" reportado. El preview se limpia solo, más abajo, recién
+    // cuando `tasks` (prop fresca) confirma la fecha nueva — mismo patrón que
+    // el overlay de `statusById` en project-board.tsx.
     router.refresh();
   };
+
+  // Una vez que `tasks` (prop fresca, tras el `router.refresh()` de arriba)
+  // confirma la fecha nueva de la tarea arrastrada, soltamos el preview: ya no
+  // hace falta y así no queda una sombra permanente tapando futuros arrastres
+  // de esa misma tarea.
+  useEffect(() => {
+    if (!dragPreview) return;
+    const fresh = tasks.find((t) => t.id === dragPreview.id);
+    if (fresh && fresh.startDate === dragPreview.startDate && fresh.dueDate === dragPreview.dueDate) {
+      setDragPreview(null);
+    }
+  }, [tasks, dragPreview]);
 
   const onBarMouseDown = (task: GanttTask, mode: DragMode) => (e: React.MouseEvent) => {
     if (!canManage || !task.startDate || !task.dueDate) return;
