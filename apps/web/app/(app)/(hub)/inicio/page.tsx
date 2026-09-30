@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 const MODULE_HREFS: Record<string, string> = {
   crm: "/crm",
   proyectos: "/proyectos",
+  rrhh: "/rrhh",
 };
 
 export default async function InicioPage() {
