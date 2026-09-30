@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import { Avatar, AvatarGroup, Badge, Button, Chip } from "@agency-os/ui";
 import { formatDate, formatDuration, isOverdue, type WorkItemPriority } from "@agency-os/domain";
 import { moveWorkItem } from "@/lib/project-actions";
+import { enableGanttAction } from "@/lib/gantt-actions";
 import { taskHref } from "@/lib/project-paths";
 import { WorkItemEditor } from "./work-item-editor";
 import { ProjectStatusManager } from "./project-status-manager";
+import { ProjectGantt, type GanttDependency } from "./project-gantt";
+import type { GanttTask } from "./gantt-task-modal";
 
 export interface BoardStatus {
   id: string;
@@ -96,6 +99,9 @@ export function ProjectBoard({
   canManage,
   canAssign,
   minutesByTask,
+  ganttEnabled,
+  ganttTasks,
+  ganttDependencies,
 }: {
   projectId: string;
   /** Ruta canónica del proyecto (/proyectos/[cliente]/[proyecto]); base para
@@ -108,9 +114,12 @@ export function ProjectBoard({
   canAssign: boolean;
   /** Minutos registrados por work_item_id (columna de tiempo en la Lista). */
   minutesByTask?: Record<string, number>;
+  ganttEnabled: boolean;
+  ganttTasks: GanttTask[];
+  ganttDependencies: GanttDependency[];
 }) {
   const router = useRouter();
-  const [view, setView] = useState<"board" | "list" | "statuses">("board");
+  const [view, setView] = useState<"board" | "list" | "statuses" | "gantt">("board");
   const [creating, setCreating] = useState<CreateTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -228,8 +237,28 @@ export function ProjectBoard({
               Estados
             </Chip>
           )}
+          {ganttEnabled && (
+            <Chip active={view === "gantt"} onClick={() => setView("gantt")}>
+              Gantt
+            </Chip>
+          )}
         </div>
-        {canManage && view !== "statuses" && (
+        {canManage && !ganttEnabled && view !== "statuses" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              const result = await enableGanttAction(projectId);
+              if (!result.error) {
+                setView("gantt");
+                router.refresh();
+              }
+            }}
+          >
+            Activar Gantt
+          </Button>
+        )}
+        {canManage && view !== "statuses" && view !== "gantt" && (
           <Button
             variant="primary"
             size="sm"
@@ -242,6 +271,15 @@ export function ProjectBoard({
 
       {view === "statuses" ? (
         <ProjectStatusManager projectId={projectId} statuses={statuses} />
+      ) : view === "gantt" ? (
+        <ProjectGantt
+          projectId={projectId}
+          tasks={ganttTasks}
+          dependencies={ganttDependencies}
+          statuses={statuses}
+          orgUsers={orgUsers}
+          canManage={canManage}
+        />
       ) : view === "board" ? (
         <div className="ds-scroll flex gap-4 overflow-x-auto pb-4">
           {statuses.map((col) => {

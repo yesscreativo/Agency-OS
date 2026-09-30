@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
   getProject,
+  listDependenciesForProject,
+  listGanttTasks,
   listOrgUsers,
   resolveProjectByShortId,
   sumMinutesByProject,
@@ -18,6 +20,8 @@ import {
   type BoardStatus,
   type BoardTask,
 } from "@/components/proyectos/project-board";
+import type { GanttTask } from "@/components/proyectos/gantt-task-modal";
+import type { GanttDependency } from "@/components/proyectos/project-gantt";
 import { NoAccessPanel } from "@/components/no-access-panel";
 
 export const dynamic = "force-dynamic";
@@ -55,11 +59,13 @@ export default async function ProjectDetailPage({
   // `getProject` y las tres consultas de abajo solo necesitan `projectId`
   // (ninguna depende del resultado de `getProject`) — corren en paralelo en
   // vez de esperar a que `getProject` termine primero.
-  const [project, orgUserRows, projectMinutes, minutesByTask] = await Promise.all([
+  const [project, orgUserRows, projectMinutes, minutesByTask, ganttTaskRows, dependencyRows] = await Promise.all([
     getProject(db, projectId),
     organizationId ? listOrgUsers(db, organizationId) : Promise.resolve([]),
     sumMinutesByProject(db, projectId),
     sumMinutesByTask(db, projectId),
+    projectId ? listGanttTasks(db, projectId) : Promise.resolve([]),
+    projectId ? listDependenciesForProject(db, projectId) : Promise.resolve([]),
   ]);
   if (!project) notFound();
 
@@ -99,6 +105,22 @@ export default async function ProjectDetailPage({
     avatarUrl: u.avatarUrl,
   }));
 
+  const ganttTasks: GanttTask[] = ganttTaskRows.map((t) => ({
+    id: t.id,
+    parentId: t.parent_id,
+    title: t.title,
+    statusId: t.status_id,
+    startDate: t.start_date,
+    dueDate: t.due_date,
+    assigneeIds: t.assignees.map((a) => a.user_id),
+    dependsOnIds: dependencyRows.filter((d) => d.work_item_id === t.id).map((d) => d.depends_on_work_item_id),
+  }));
+  const ganttDependencies: GanttDependency[] = dependencyRows.map((d) => ({
+    id: d.id,
+    workItemId: d.work_item_id,
+    dependsOnWorkItemId: d.depends_on_work_item_id,
+  }));
+
   const state = PROJECT_STATE_BADGE[project.project_state ?? "active"] ?? PROJECT_STATE_BADGE.active;
 
   return (
@@ -132,6 +154,9 @@ export default async function ProjectDetailPage({
         canManage={hasPermission(user, "project.manage")}
         canAssign={hasPermission(user, "project.assign")}
         minutesByTask={minutesByTask}
+        ganttEnabled={project.gantt_enabled}
+        ganttTasks={ganttTasks}
+        ganttDependencies={ganttDependencies}
       />
     </div>
   );
