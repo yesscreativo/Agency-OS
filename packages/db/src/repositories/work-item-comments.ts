@@ -90,3 +90,25 @@ export async function softDeleteComment(db: Db, id: string): Promise<void> {
     .eq("id", id);
   if (error) throw error;
 }
+
+/** Comentarios `client_visible` de TODOS los work items de un proyecto (para
+ * la ruta pública del Gantt). Embebe `work_items!inner` para filtrar por
+ * `project_id` server-side — a diferencia de otros lugares del repo que
+ * escanean y filtran en memoria, acá SÍ hay FK directa
+ * (`work_item_comments.work_item_id -> work_items.id`), así que el embed con
+ * filtro funciona sin ambigüedad. */
+export async function listClientVisibleCommentsForProject(
+  db: Db,
+  projectId: string,
+): Promise<CommentWithAuthor[]> {
+  const { data, error } = await db
+    .from("work_item_comments")
+    .select(`${COMMENT_SELECT}, work_item:work_items!inner(project_id)`)
+    .eq("work_item.project_id", projectId)
+    .eq("visibility", "client_visible")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .returns<(CommentSelectRow & { work_item: { project_id: string } })[]>();
+  if (error) throw error;
+  return (data ?? []).map(toComment);
+}
