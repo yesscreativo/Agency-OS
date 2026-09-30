@@ -43,6 +43,7 @@ export interface FieldsPanelTask {
   dueDate: string | null;
   estimatedMinutes: number | null;
   assignees: FieldsPanelAssignee[];
+  onGantt: boolean;
 }
 
 /** Fila etiqueta→valor con icono. El valor se pinta con `children`. */
@@ -149,6 +150,7 @@ export function WorkItemFieldsPanel({
   const [estimateInput, setEstimateInput] = useState(formatDuration(task.estimatedMinutes));
   const [statusIdLocal, setStatusIdLocal] = useState(task.statusId);
   const [priorityLocal, setPriorityLocal] = useState(task.priority);
+  const [onGanttLocal, setOnGanttLocal] = useState(task.onGantt);
 
   // Re-sincroniza si el server manda datos nuevos tras un refresh.
   useEffect(() => {
@@ -156,7 +158,8 @@ export function WorkItemFieldsPanel({
     setEstimateInput(formatDuration(task.estimatedMinutes));
     setStatusIdLocal(task.statusId);
     setPriorityLocal(task.priority);
-  }, [task.assignees, task.estimatedMinutes, task.statusId, task.priority]);
+    setOnGanttLocal(task.onGantt);
+  }, [task.assignees, task.estimatedMinutes, task.statusId, task.priority, task.onGantt]);
 
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const currentStatus = statusIdLocal ? statusById.get(statusIdLocal) : null;
@@ -169,7 +172,13 @@ export function WorkItemFieldsPanel({
   const save = (overrides: Partial<FieldsPanelTask>, onDone?: () => void) => {
     setError(null);
     startTransition(async () => {
-      const merged = { ...task, statusId: statusIdLocal, priority: priorityLocal, ...overrides };
+      const merged = {
+        ...task,
+        statusId: statusIdLocal,
+        priority: priorityLocal,
+        onGantt: onGanttLocal,
+        ...overrides,
+      };
       const res = await saveWorkItem({
         id: task.id,
         projectId,
@@ -180,6 +189,7 @@ export function WorkItemFieldsPanel({
         startDate: merged.startDate,
         dueDate: merged.dueDate,
         estimatedMinutes: merged.estimatedMinutes,
+        onGantt: merged.onGantt,
       });
       if (res.error) setError(res.error);
       else {
@@ -320,6 +330,29 @@ export function WorkItemFieldsPanel({
               </div>
             )}
           </InlineEdit>
+        </Row>
+
+        {/* Mostrar en Gantt */}
+        <Row icon={<IconCalendar />} label="Gantt">
+          <div>
+            <label className="flex w-fit items-center gap-2 whitespace-nowrap text-sm text-ink">
+              <input
+                type="checkbox"
+                className="h-4 w-4 shrink-0 accent-[var(--green)]"
+                disabled={!canManage || isPending}
+                checked={onGanttLocal}
+                onChange={() => {
+                  const next = !onGanttLocal;
+                  setOnGanttLocal(next);
+                  save({ onGantt: next });
+                }}
+              />
+              Mostrar en Gantt
+            </label>
+            {(!task.startDate || !task.dueDate) && (
+              <p className="mt-0.5 text-xs text-faint">Requiere fecha de inicio y fin</p>
+            )}
+          </div>
         </Row>
 
         {/* Asignados */}

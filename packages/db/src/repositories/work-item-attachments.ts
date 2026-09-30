@@ -56,3 +56,21 @@ export async function deleteAttachmentRow(db: Db, id: string): Promise<void> {
   const { error } = await db.from("work_item_attachments").delete().eq("id", id);
   if (error) throw error;
 }
+
+/** Adjuntos `client_visible` de TODOS los work items de un proyecto (para la
+ * ruta pública del Gantt). Mismo motivo de embed que
+ * `listClientVisibleCommentsForProject`. */
+export async function listClientVisibleAttachmentsForProject(
+  db: Db,
+  projectId: string,
+): Promise<AttachmentRow[]> {
+  const { data, error } = await db
+    .from("work_item_attachments")
+    .select("*, work_item:work_items!inner(project_id)")
+    .eq("work_item.project_id", projectId)
+    .eq("visibility", "client_visible")
+    .order("created_at", { ascending: true })
+    .returns<(AttachmentRow & { work_item: { project_id: string } })[]>();
+  if (error) throw error;
+  return data ?? [];
+}

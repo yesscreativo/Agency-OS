@@ -17,6 +17,7 @@ import {
   recordActivity,
   reorderStatuses,
   setAssignees,
+  softDeleteProjectCascade,
   softDeleteWorkItem,
   updateStatus,
   updateWorkItem,
@@ -185,6 +186,33 @@ export async function createProjectAction(input: CreateProjectInput): Promise<Id
   }
 }
 
+/** Borra un proyecto en cascada (el proyecto + todas sus tareas/subtareas,
+ * soft-delete). Ver `softDeleteProjectCascade`. */
+export async function deleteProjectAction(id: string): Promise<ActionResult> {
+  const auth = await requireProjectManager();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const { data } = await db
+      .from("work_items")
+      .select("organization_id, type")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!data || data.organization_id !== auth.organizationId || data.type !== "project") {
+      return { error: "El proyecto no existe o no pertenece a tu organización." };
+    }
+
+    await softDeleteProjectCascade(db, id);
+    revalidatePath("/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteProjectAction", error);
+    return { error: "No se pudo eliminar el proyecto. Intenta de nuevo." };
+  }
+}
+
 // ---------- Tareas / subtareas ----------
 
 export interface WorkItemInput {
@@ -203,6 +231,9 @@ export interface WorkItemInput {
   dueDate?: string | null;
   /** Duración estimada en minutos (null limpia la estimación). */
   estimatedMinutes?: number | null;
+  /** Solo aplica al editar: agrega/quita esta tarea del Gantt del proyecto
+   * (checkbox "Mostrar en Gantt" fuera de la pestaña Gantt, ver spec). */
+  onGantt?: boolean;
 }
 
 /** Crea o actualiza una tarea/subtarea. */
@@ -250,6 +281,7 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         start_date: input.startDate || null,
         due_date: input.dueDate || null,
         estimated_minutes: input.estimatedMinutes ?? null,
+        on_gantt: input.onGantt,
       });
 
       if (prev) {
@@ -638,6 +670,7 @@ export interface WorkItemAttachment {
   sizeBytes: number | null;
   /** URL firmada temporal (1 h) para descargar/previsualizar. */
   url: string | null;
+  isClientVisible: boolean;
 }
 
 export type AttachmentResult =
@@ -671,6 +704,7 @@ function toAttachment(row: AttachmentRow, url: string | null): WorkItemAttachmen
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     url,
+    isClientVisible: row.visibility === "client_visible",
   };
 }
 
@@ -707,6 +741,7 @@ export async function uploadWorkItemAttachment(
       return { error: "No se pudo subir el archivo." };
     }
 
+    const shareWithClient = formData.get("visibility") === "client_visible";
     const row = await insertAttachment(db, {
       work_item_id: workItemId,
       organization_id: auth.organizationId,
@@ -715,6 +750,7 @@ export async function uploadWorkItemAttachment(
       mime_type: file.type || null,
       size_bytes: file.size,
       created_by: auth.userId,
+      visibility: shareWithClient ? "client_visible" : "internal",
     });
 
     const { data: taskRow } = await db.from("work_items").select("title").eq("id", workItemId).maybeSingle();
@@ -830,6 +866,7 @@ export async function uploadCommentAttachment(
       return { error: "No se pudo subir el archivo." };
     }
 
+    const shareWithClient = formData.get("visibility") === "client_visible";
     const row = await insertAttachment(db, {
       work_item_id: comment.work_item_id,
       comment_id: commentId,
@@ -839,6 +876,7 @@ export async function uploadCommentAttachment(
       mime_type: file.type || null,
       size_bytes: file.size,
       created_by: user.id,
+      visibility: shareWithClient ? "client_visible" : "internal",
     });
 
     const { data: taskRow } = await db
