@@ -26,3 +26,4 @@ export * from "./repositories/work-item-activity";
 export * from "./repositories/work-item-time";
 export * from "./repositories/work-item-dependencies";
 export * from "./repositories/work-item-share-links";
+export * from "./repositories/work-item-watchers";
