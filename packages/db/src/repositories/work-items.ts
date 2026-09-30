@@ -453,6 +453,8 @@ export interface CreateWorkItemInput {
   statusId?: string | null;
   priority?: Enums<"work_item_priority">;
   dueDate?: string | null;
+  /** true cuando la tarea se crea desde la pestaña Gantt. */
+  onGantt?: boolean;
 }
 
 /** Crea una tarea o subtarea dentro de un proyecto. Devuelve el id creado. */
@@ -468,6 +470,7 @@ export async function createWorkItem(db: Db, input: CreateWorkItemInput): Promis
       status_id: input.statusId ?? null,
       priority: input.priority ?? "normal",
       due_date: input.dueDate ?? null,
+      on_gantt: input.onGantt ?? false,
     })
     .select("id")
     .single();
@@ -487,6 +490,7 @@ export type WorkItemPatch = Partial<
     | "estimated_minutes"
     | "sort_order"
     | "project_state"
+    | "on_gantt"
   >
 >;
 
@@ -717,4 +721,48 @@ export async function resolveTaskByShortId(
     .maybeSingle();
   if (error) throw error;
   return data?.id ?? null;
+}
+
+/** Activa/desactiva la pestaña Gantt de un proyecto. No toca `on_gantt` de
+ * ninguna tarea — activar el Gantt arranca vacío a propósito (ver spec). */
+export async function setGanttEnabled(db: Db, projectId: string, enabled: boolean): Promise<void> {
+  const { error } = await db.from("work_items").update({ gantt_enabled: enabled }).eq("id", projectId);
+  if (error) throw error;
+}
+
+/** Tareas/subtareas de un proyecto marcadas `on_gantt = true`, con el mismo
+ * shape que `getProject().tasks` (status + assignees embebidos) para poder
+ * reusar los mismos componentes de UI. */
+export async function listGanttTasks(db: Db, projectId: string): Promise<ProjectTaskRow[]> {
+  const { data, error } = await db
+    .from("work_items")
+    .select(TASKS_SELECT)
+    .eq("project_id", projectId)
+    .in("type", ["task", "subtask"])
+    .eq("on_gantt", true)
+    .is("deleted_at", null)
+    .order("start_date")
+    .returns<ProjectTaskRow[]>();
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Aplica en bloque los corrimientos de fecha calculados por
+ * `cascadeForwardShift` (`@agency-os/domain`). Varias filas con valores
+ * distintos entre sí — no hay upsert de una sola llamada en PostgREST para
+ * esto, así que se dispara una actualización por fila en paralelo (mismo
+ * trade-off que otras operaciones "en bloque" del repo, ej. `setAssignees`). */
+export async function bulkUpdateGanttDates(
+  db: Db,
+  updates: { id: string; startDate: string; dueDate: string }[],
+): Promise<void> {
+  await Promise.all(
+    updates.map(async (u) => {
+      const { error } = await db
+        .from("work_items")
+        .update({ start_date: u.startDate, due_date: u.dueDate })
+        .eq("id", u.id);
+      if (error) throw error;
+    }),
+  );
 }
