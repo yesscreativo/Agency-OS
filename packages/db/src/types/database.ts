@@ -1264,6 +1264,7 @@ export type Database = {
           organization_id: string
           path: string
           size_bytes: number | null
+          visibility: string
           work_item_id: string
         }
         Insert: {
@@ -1276,6 +1277,7 @@ export type Database = {
           organization_id: string
           path: string
           size_bytes?: number | null
+          visibility?: string
           work_item_id: string
         }
         Update: {
@@ -1288,6 +1290,7 @@ export type Database = {
           organization_id?: string
           path?: string
           size_bytes?: number | null
+          visibility?: string
           work_item_id?: string
         }
         Relationships: [
