@@ -236,8 +236,10 @@ export function ProjectGantt({
             <div
               key={task.id}
               style={{ height: ROW_HEIGHT, paddingLeft: 12 + depth * 28 }}
-              className="flex cursor-pointer flex-col justify-center gap-1 border-b border-line py-2 pr-3 hover:bg-glass"
-              onClick={() => setEditing(task)}
+              className={`flex flex-col justify-center gap-1 border-b border-line py-2 pr-3 ${
+                canManage ? "cursor-pointer hover:bg-glass" : ""
+              }`}
+              onClick={canManage ? () => setEditing(task) : undefined}
             >
               <div className="flex items-center gap-2">
                 {depth > 0 && <span className="shrink-0 text-faint">↳</span>}
