@@ -48,8 +48,11 @@ export function NewProjectModal({
     startTransition(async () => {
       const res = await createProjectAction({ clientId, title });
       if (res.error) setError(res.error);
-      else if (res.id)
-        router.push(projectHref({ id: clientId, name: clientName }, { id: res.id, title: title.trim() }));
+      else if (res.id) {
+        const href = projectHref({ id: clientId, name: clientName }, { id: res.id, title: title.trim() });
+        close();
+        router.push(href);
+      }
     });
   };
 
