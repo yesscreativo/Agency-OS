@@ -10,6 +10,7 @@ describe("groupLabel", () => {
     expect(groupLabel("kam.manage")).toBe("KAM / PM");
     expect(groupLabel("people.manage")).toBe("Personas");
     expect(groupLabel("users.manage")).toBe("Usuarios y roles");
+    expect(groupLabel("leave.approve_hr")).toBe("Vacaciones y permisos");
   });
 
   it("cae al prefijo capitalizado si no hay etiqueta mapeada", () => {

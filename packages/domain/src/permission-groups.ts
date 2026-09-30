@@ -11,6 +11,7 @@ const GROUP_LABELS: Record<string, string> = {
   kam: "KAM / PM",
   people: "Personas",
   users: "Usuarios y roles",
+  leave: "Vacaciones y permisos",
 };
 
 function capitalize(text: string): string {
