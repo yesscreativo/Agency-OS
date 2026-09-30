@@ -248,7 +248,7 @@ export function ProjectGantt({
                 >
                   {task.title}
                 </span>
-                {task.assigneeIds.length > 0 && (
+                {task.assigneeIds.length > 0 && orgUsers.length > 0 && (
                   <AvatarGroup>
                     {task.assigneeIds.slice(0, 3).map((id) => {
                       const info = avatarByUserId.get(id);
