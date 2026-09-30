@@ -2,441 +2,96 @@
 
 ## Objetivo
 
-Mapear las funcionalidades disponibles hoy en el MCP de ClickUp contra Agency OS para usar este documento como referencia de alcance del reemplazo. Este documento sirve para que Claude, Hermes u otro agente pueda analizar rápidamente:
-
-- qué capacidades de ClickUp ya fueron identificadas
-- dónde viven conceptualmente dentro de Agency OS
-- qué ya está documentado
-- qué sigue faltando por especificar o implementar
-
-**Contexto:** el servidor MCP de ClickUp disponible en Hermes expone 54 herramientas activas. Agency OS no necesita copiar la UI o naming de ClickUp 1:1, pero sí debe cubrir los jobs-to-be-done que hoy resuelve ClickUp para el equipo.
+Mapear qué necesita Agency OS para reemplazar a ClickUp **para este equipo específico** (no para ClickUp en general) — usando dos fuentes de verdad: el código real ya implementado, y una auditoría del workspace real de ClickUp de Laburu (no el catálogo teórico de features del MCP). Este documento reemplaza la versión anterior (2026-07-29, puramente teórica/pre-código) — casi todo lo que ahí se marcaba "V2 sin implementar" ya está construido, y algunos gaps que se daban por sentados resultaron ser falsos al verificar uso real.
 
 ## Funcionalidades
 
-### 1. Work Items / Tareas / Tickets / Proyectos (MVP)
+### 1. Ya implementado y verificado en código (2026-09-29)
 
-**Funciones de ClickUp relacionadas**
-- `clickup_create_task`
-- `clickup_get_task`
-- `clickup_update_task`
-- `clickup_delete_task`
-- `clickup_move_task`
-- `clickup_merge_tasks`
-- `clickup_filter_tasks`
-- `clickup_search`
+Todo esto existe hoy en `work_items` y tablas relacionadas, no es "spec" ni "V2 pendiente":
 
-**Mapeo en Agency OS**
-- Módulo: `Operación`
-- Docs base existentes:
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/30-Functional/Tickets.md`
-  - `Docs/30-Functional/Proyectos.md`
-  - `Docs/superpowers/specs/2026-07-29-proyectos-workitems-fase-a-design.md`
+- **Jerarquía**: `work_items` (tipo `project`/`task`/`subtask`, `parent_id`, `project_id` dueño). Un proyecto pertenece a un cliente (`client_id` obligatorio en `type=project`).
+- **Carpetas por cliente** (`project_folders`, 2026-09-29): agrupa proyectos de un mismo cliente en carpetas con nombre y color, arrastrando entre ellas — confirmado por la auditoría que replica el patrón real que usan en ClickUp (ver sección 2).
+- **Estados por proyecto** (`work_item_statuses`): columnas de tablero configurables (label/color/orden/`is_done`) por proyecto, con drag&drop de tareas y de las columnas mismas.
+- **Comentarios** (`work_item_comments`): threads (`parent_comment_id`), menciones.
+- **Adjuntos** (`work_item_attachments`): a nivel work item o de un comentario.
+- **Actividad** (`work_item_activity`): timeline de eventos por work item.
+- **Asignados múltiples** (`work_item_assignees`).
+- **Time tracking completo**: `work_item_time_entries` + `work_item_active_timers` (timer en vivo), vista "Mis tiempos" (maestro-detalle por cliente).
+- **Checklist simple** (`checklist_items`): una lista plana de pasos por work item (no checklists nombrados/múltiples).
+- **RBAC**: roles/permisos delegados por módulo, editor de roles configurable (crear rol, marcar permisos, sin migración).
+- **Notificaciones**: in-app, polling (no realtime), por asignación/mención/vencimiento.
 
-**Lectura del estado actual**
-- Ya existe dirección clara para el core de `work_items` como reemplazo de tasks/tickets/proyectos.
-- Ya existe spec de Fase A para proyectos + tareas + subtareas.
-- Aún falta una especificación explícita de parity funcional frente a ClickUp en términos de búsqueda global, merge, papelera/borrado, vistas y consistencia entre task/ticket/work item.
+### 2. Auditoría de uso real de ClickUp (2026-09-29)
 
-**Decisión de producto**
-- Agency OS debe consolidar `task`, `ticket`, `subtask` y `project` bajo la entidad canónica `work_item`.
-- No se debe propagar nomenclatura `task.*` como entidad técnica separada; usar `work_item` como modelo base.
+Se investigó el workspace real (66 spaces = clientes) vía MCP, no la lista de herramientas disponibles. Hallazgos con evidencia concreta:
 
-### 2. Dependencias y relaciones entre work items (V2)
+- **Jerarquía real**: Cliente (space) → Área/Carpeta (folder) → Lista → Tareas. Patrón de plantilla casi idéntico en todos los clientes: "Área Contenidos / Área Estrategia / Área Innovación / BTL y Logística / Cuentas". **Confirma** que `project_folders` (Cliente→Carpeta→Proyecto) es el mapeo correcto, y que "Lista" = "Proyecto" en Agency OS (ya lo tiene sus tareas y su contador).
+- **Time tracking**: uso pesado real (156h30 en un mes de un solo usuario, agregado visible por tarea). Ya cubierto.
+- **Watchers/seguidores**: **gap real confirmado con datos** — una tarea con 3 asignados tenía 6 watchers; otra con 1 asignado tenía 3. Es gente que sigue una tarea sin ser responsable (típico de un PM/cuentas). Agency OS solo tiene `assignees`, no un concepto de "seguir sin asignar".
+- **Custom fields**: NO es un motor configurable por proyecto — es **un único set fijo de 5 campos compartido en todo el workspace** (`Size`, `🐱 ESTATUS COPY` con ~10 sub-estados de flujo de copy, `CUENTA` multi-select de 19 clientes usado como tag cruzado, `🫥 COPY` = asignado de copywriting, `TRÁFICO COPY` = fecha). Es un flujo de contenido/copy específico, no un sistema genérico.
+- **Dependencias/links entre tareas**: **falso gap**. Se verificaron tareas reales dentro de listas literalmente llamadas "GANTT GENERAL PROYECTOS": `dependencies: []`, `linked_tasks_count: 0`, sin fechas. Esas listas "GANTT" son en realidad checklists de proceso de entrega estandarizado (Kick Off → Requerimientos → Diseño → Desarrollo → QA → Entrega), no cronogramas reales.
+- **Reminders**: 0 uso confirmado.
+- **Tags**: uso vestigial (4/34 tareas muestreadas), y redundante con el campo `CUENTA`.
+- **Docs (ClickUp Docs)**: sin evidencia de uso vía API — el equipo pega links de Figma/Slides/Drive directo en la descripción de la tarea en vez de usar Docs.
+- **Chat**: incipiente (4 canales, todos de los últimos ~2-3 meses, naming inconsistente) — no consolidado todavía.
+- **Subtareas**: uso real confirmado (relación parent/child real en tareas muestreadas). Ya cubierto.
+- **Adjuntos**: uso pesado en tareas de diseño/desarrollo (una sola tarea con 36 adjuntos). Ya cubierto.
 
-**Funciones de ClickUp relacionadas**
-- `clickup_add_task_dependency`
-- `clickup_remove_task_dependency`
-- `clickup_add_task_link`
-- `clickup_remove_task_link`
+### 3. Gap real, priorizado
 
-**Mapeo en Agency OS**
-- Módulo: `Operación`
-- Docs base existentes:
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/superpowers/specs/2026-07-29-proyectos-workitems-fase-a-design.md`
+1. **Watchers/seguidores** (prioridad alta) — construir `work_item_watchers` (tabla simple: quién sigue qué work item sin estar asignado) + incluirlos en las notificaciones de actividad. Bajo costo, uso confirmado con datos reales.
+2. **Sub-estatus de contenido/copy** (prioridad media-alta) — un campo select opcional en `work_items` (ej. `content_sub_status`) con las ~10 opciones reales vistas (enviado a diseño, pendiente cliente, tráfico copy, por aprobar, ajustes...). **No** construir un motor genérico de custom fields configurables — el uso real es un set fijo y pequeño, acotado al flujo de contenidos.
+3. **Vista Gantt/timeline por proyecto** (prioridad alta — **decisión de producto de Yesid, 2026-09-29**) — el uso INTERNO real de ClickUp no tiene Gantt real (ver sección 4), pero el motivo de construirlo en Agency OS es otro: **mostrarle al cliente el flujo completo del proyecto** (visibilidad externa/comercial), no reemplazar un hábito interno. Sin spec todavía — definir con qué datos de `work_items` alcanza (fechas de tareas/subtareas, ¿hace falta algo de dependencia mínima solo para que el orden se vea coherente, sin construir un motor de dependencias bloqueantes completo?) antes de implementar.
 
-**Lectura del estado actual**
-- `Dependencias` ya aparece mencionada en `WorkItems.md`.
-- En la spec de Fase A quedó explícitamente fuera de alcance y enviada a fases posteriores.
-- No existe todavía una definición formal para diferenciar:
-  - dependencia bloqueante
-  - relación informativa
-  - relación padre/hijo
+### 4. Falso gap para el uso INTERNO del equipo — no confundir con la sección 3
 
-**Decisión de producto**
-- Agency OS debe soportar dos conceptos separados:
-  1. **jerarquía** (`parent_id`) para proyecto/tarea/subtarea
-  2. **relaciones laterales** entre work items:
-     - dependency (bloqueo)
-     - link (relación no bloqueante)
+Verificado con datos reales que el equipo NO usa estas features en su día a día — pero **el Gantt de la sección 3 es una excepción**: se construye igual, por una razón de producto distinta (cara al cliente), no por replicar este uso interno:
 
-### 3. Comentarios y colaboración (V2)
+- Dependencias/relaciones bloqueantes entre work items (uso interno).
+- Recordatorios personales tipo ClickUp reminders.
+- Tags como taxonomía rica (el campo `CUENTA`/cliente ya cumple ese rol).
+- Documentos colaborativos tipo ClickUp Docs (adjuntos + descripción con links externos ya resuelve el job-to-be-done real).
+- Motor de custom fields configurable por proyecto/organización (el uso real es un set fijo, no una taxonomía por cliente).
+- Chat interno como prioridad (uso incipiente, no crítico todavía — reevaluar si crece).
+- Checklists nombrados/múltiples por tarea (en las tareas muestreadas, `checklists_count` fue 0 — sin evidencia de uso pesado hoy).
 
-**Funciones de ClickUp relacionadas**
-- `clickup_create_comment`
-- `clickup_get_task_comments`
-- `clickup_get_threaded_comments`
+### 5. Checklist de paridad 100% con ClickUp (referencia general, no priorizado)
 
-**Mapeo en Agency OS**
-- Módulo: `Operación`
-- Docs base existentes:
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/30-Functional/Tickets.md`
-  - `Docs/70-Database/Tables.md` (`comments`)
+Lista de features de ClickUp que existen en el catálogo del MCP pero no se auditaron a fondo por uso real (ni se descartaron ni se priorizaron) — queda para consulta si en algún momento se quiere evaluar paridad más completa, no solo lo que usa hoy este equipo:
 
-**Lectura del estado actual**
-- Comentarios ya están contemplados como capability del work item y ticket.
-- Falta definir con detalle:
-  - comentarios planos vs threads
-  - menciones
-  - comentarios internos vs visibles al cliente
-  - auditoría de edición
-
-**Decisión de producto**
-- Agency OS debe modelar comentarios como entidad propia asociada a `work_items`, con posibilidad de thread y bandera de visibilidad (`internal`, `client_visible`).
-
-### 4. Adjuntos y archivos (V2)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_attach_task_file`
-- `clickup_request_attachment_upload`
-
-**Mapeo en Agency OS**
-- Módulo: `Operación`
-- Docs base existentes:
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/30-Functional/Tickets.md`
-  - `Docs/70-Database/Tables.md` (`attachments`)
-  - `Docs/80-API/Storage.md`
-
-**Lectura del estado actual**
-- Adjuntos/archivos ya están reconocidos en docs, pero no aterrizados como flujo completo.
-- Falta definir storage, permisos, tamaño, preview, versionado y vínculo con comentarios.
-
-**Decisión de producto**
-- Agency OS debe soportar adjuntos a nivel work item y comentario, con storage centralizado y permisos por organización/proyecto.
-
-### 5. Multi-lista y movimiento de trabajo (V2)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_add_task_to_list`
-- `clickup_remove_task_from_list`
-- `clickup_move_task`
-
-**Mapeo en Agency OS**
-- Módulo: `Operación`
-- Docs base existentes:
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/50-Design/Navigation.md`
-
-**Lectura del estado actual**
-- El modelo actual de Agency OS está más orientado a `project_id + status_id` que a “task in multiple lists”.
-- No existe todavía una decisión documental sobre si Agency OS debe replicar la multi-pertenencia de ClickUp.
-
-**Decisión de producto**
-- Para MVP, Agency OS **no necesita** copiar “Tasks in Multiple Lists”.
-- El reemplazo funcional preferido debe ser:
-  - work item con un proyecto dueño
-  - vistas filtradas por estado, tipo, cliente, responsable, prioridad
-  - relaciones/linking para cross-reference
-
-### 6. Tags y campos personalizados (MVP + V2)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_add_tag_to_task`
-- `clickup_remove_tag_from_task`
-- `clickup_get_custom_fields`
-
-**Mapeo en Agency OS**
-- Módulo: `Configuración`
-- Docs base existentes:
-  - `Docs/10-Product/Modules.md`
-  - `Docs/70-Database/Tables.md`
-  - `Docs/80-API/Integrations.md`
-
-**Lectura del estado actual**
-- `Campos personalizados` ya aparecen en módulos, pero sin diseño de producto ni modelo de datos detallado para work items.
-- Tags como concepto no están explicitados.
-
-**Decisión de producto**
-- Agency OS debe soportar:
-  - etiquetas ligeras (tags) para clasificación rápida
-  - custom fields configurables por organización/módulo/tipo de work item
-- Prioridad:
-  - **MVP:** custom fields mínimos para work items y tickets
-  - **V2:** tags + taxonomías configurables
-
-### 7. Asignaciones, miembros y participantes (MVP)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_get_workspace_members`
-- `clickup_find_member_by_name`
-- `clickup_resolve_assignees`
-
-**Mapeo en Agency OS**
-- Módulos: `Core` + `Operación`
-- Docs base existentes:
-  - `Docs/30-Functional/Core.md`
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/superpowers/specs/2026-07-29-proyectos-workitems-fase-a-design.md`
-
-**Lectura del estado actual**
-- Ya está decidido que los work items soportan múltiples asignados.
-- `Participantes` aparece en Work Items.
-- Falta definición más detallada sobre watchers/followers/owner/reporter.
-
-**Decisión de producto**
-- Roles funcionales mínimos en work items:
-  - creador
-  - responsable(s)
-  - participante(s)
-  - seguidor(es) / watcher(s) (V2)
-
-### 8. Time Tracking y tiempo por estado (MVP + V2)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_get_time_entries`
-- `clickup_get_current_time_entry`
-- `clickup_add_time_entry`
-- `clickup_start_time_tracking`
-- `clickup_stop_time_tracking`
-- `clickup_get_task_time_in_status`
-- `clickup_get_bulk_tasks_time_in_status`
-
-**Mapeo en Agency OS**
-- Módulos: `Operación` + `Inteligencia`
-- Docs base existentes:
-  - `Docs/30-Functional/TimeTracking.md`
-  - `Docs/30-Functional/WorkItems.md`
-  - `Docs/65-Operations/KPIs.md`
-  - `Docs/70-Database/Tables.md` (`time_entries`)
-
-**Lectura del estado actual**
-- Time tracking ya está contemplado, pero muy resumido.
-- No existe una spec completa para timer en vivo, carga manual, billable/non-billable, ni analítica de tiempo por estado.
-
-**Decisión de producto**
-- Agency OS debe cubrir dos capas:
-  1. **time entries** (registro real de horas)
-  2. **time in status** (analítica operacional para cuellos de botella)
-- Prioridad:
-  - **MVP:** carga manual + agregados por work item/usuario/cliente
-  - **V2:** timer en vivo + tiempo por estado + alertas operativas
-
-### 9. Estructura del workspace: spaces / folders / lists (MVP reinterpretado)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_get_workspace_hierarchy`
-- `clickup_get_folder`
-- `clickup_get_list`
-- `clickup_create_folder`
-- `clickup_update_folder`
-- `clickup_create_list`
-- `clickup_create_list_in_folder`
-- `clickup_update_list`
-
-**Mapeo en Agency OS**
-- Módulos: `Core`, `Comercial`, `Operación`, `Configuración`
-- Docs base existentes:
-  - `Docs/10-Product/Modules.md`
-  - `Docs/50-Design/Navigation.md`
-  - `Docs/30-Functional/Workflow.md`
-
-**Lectura del estado actual**
-- Agency OS no está diseñado como clon literal de la jerarquía `Space > Folder > List`.
-- El equivalente conceptual parece ser:
-  - organización / tenant
-  - módulos
-  - proyectos / vistas / filtros / tableros
-
-**Decisión de producto**
-- Agency OS **no debe copiar literalmente** spaces/folders/lists.
-- Debe reinterpretarlos así:
-  - `Space` → módulo o dominio operativo
-  - `Folder` → agrupador funcional opcional (cliente, área, unidad, portfolio)
-  - `List` → vista operacional configurable o tablero dentro de proyecto/módulo
-
-### 10. Documentos y conocimiento (V2)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_create_document`
-- `clickup_create_document_page`
-- `clickup_list_document_pages`
-- `clickup_get_document_pages`
-- `clickup_update_document_page`
-
-**Mapeo en Agency OS**
-- Módulos: `Operación`, `Inteligencia`, `Configuración`
-- Docs base existentes:
-  - `Docs/75-AI/Knowledge.md`
-  - `Docs/75-AI/Agents.md`
-  - `Docs/65-Operations/SOP.md`
-
-**Lectura del estado actual**
-- No aparece un módulo de documentos colaborativos tipo ClickUp Docs claramente definido como feature de producto.
-- Sí existe necesidad evidente de knowledge base, SOPs y soporte IA.
-
-**Decisión de producto**
-- Agency OS debe tener un sistema de documentos/knowledge, pero probablemente no en MVP si el foco es reemplazar operación primero.
-- Prioridad sugerida:
-  - **V2:** documentos internos ligados a clientes, proyectos y SOPs
-  - **V3:** páginas colaborativas más ricas
-
-### 11. Chat (V2/V3)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_get_chat_channels`
-- `clickup_get_chat_channel_messages`
-- `clickup_get_chat_message_replies`
-- `clickup_send_chat_message`
-
-**Mapeo en Agency OS**
-- Módulos: `Operación`, `Notificaciones`, `IA`
-- Docs base existentes:
-  - `Docs/30-Functional/Notificaciones.md`
-  - `Docs/80-API/Realtime.md`
-  - `Docs/80-API/Webhooks.md`
-
-**Lectura del estado actual**
-- No hay evidencia documental de un módulo de chat interno como feature prioritaria.
-- Para una agencia, probablemente el job-to-be-done principal se resuelve mejor con comentarios, menciones y notificaciones antes que con chat full.
-
-**Decisión de producto**
-- Chat interno nativo no es requisito MVP.
-- Reemplazo inicial suficiente:
-  - comentarios por work item
-  - activity feed
-  - notificaciones
-  - integraciones externas (WhatsApp/Email/Google Workspace) más adelante
-
-### 12. Recordatorios y seguimiento personal (V2)
-
-**Funciones de ClickUp relacionadas**
-- `clickup_create_reminder`
-- `clickup_update_reminder`
-- `clickup_search_reminders`
-
-**Mapeo en Agency OS**
-- Módulos: `Operación`, `Core`, `Notificaciones`
-- Docs base existentes:
-  - `Docs/30-Functional/Notificaciones.md`
-  - `Docs/65-Operations/Operational-Playbooks.md`
-
-**Lectura del estado actual**
-- No existe un submódulo explícito de recordatorios personales.
-
-**Decisión de producto**
-- Agency OS debería cubrir esto como parte de:
-  - inbox personal
-  - tareas pendientes
-  - follow-ups
-  - alertas automatizadas
-- No hace falta copiar literalmente el reminder personal de ClickUp, pero sí resolver el seguimiento individual.
+- Merge de tareas (`clickup_merge_tasks`).
+- Tareas en múltiples listas (`clickup_add_task_to_list`/`clickup_remove_task_from_list`) — Agency OS usa el modelo "un proyecto dueño" a propósito, no se planea replicar.
+- Búsqueda global tipo `clickup_search` (hoy Agency OS tiene filtros estructurados por cliente/proyecto/estado, no un buscador global de texto libre entre todo el workspace).
+- Automatizaciones (ClickUp Automations) — no auditado, sin evidencia de uso revisada.
+- Vistas múltiples (Calendar, Mind Map, Whiteboard) más allá de Board/List — no auditado.
+- Plantillas de proyecto/lista reutilizables — el patrón de carpetas repetido por cliente (sección 2) sugiere que SÍ podría haber valor en plantillas, pero no se profundizó.
+- Metas/Goals de ClickUp — no auditado.
+- Permisos granulares por espacio/carpeta/lista (ClickUp permite compartir a nivel muy fino) — Agency OS resuelve esto con RBAC por módulo/rol, modelo distinto a propósito.
 
 ## Reglas
 
-### Reglas de mapeo
-- Agency OS reemplaza capacidades, no necesariamente nomenclatura o estructura visual de ClickUp.
-- Cuando ClickUp tenga una feature que choque con el modelo canónico de Agency OS, prevalece el modelo de Agency OS.
-- Toda nueva implementación debe referirse a `work_items` como entidad central, no a `tasks` como entidad técnica aparte.
-- Cada capability debe etiquetarse por fase: `(MVP)`, `(V2)`, `(V3)`.
-
-### Priorización sugerida de parity
-
-#### MVP
-- Work items / proyectos / tareas / subtareas
-- Estados por proyecto
-- Múltiples asignados
-- Comentarios básicos
-- Adjuntos básicos
-- Custom fields mínimos
-- Time entries manuales
-- Filtros estructurados
-- Búsqueda operativa básica
-
-#### V2
-- Dependencias
-- Threads de comentarios
-- Visibilidad cliente/interno
-- Time tracking en vivo
-- Tiempo por estado
-- Tags
-- Recordatorios
-- Documentos internos
-
-#### V3
-- Chat interno
-- Multi-vistas más sofisticadas
-- Documentos colaborativos avanzados
-- Automatizaciones parity completa con ClickUp
-
-## KPIs
-
-- % de capacidades críticas de ClickUp cubiertas por Agency OS
-- % de trabajo operativo del equipo que puede migrarse sin depender de ClickUp
-- tiempo medio por estado de work item
-- adopción de time tracking
-- % de work items con responsable, fecha y estado válido
-- % de tickets/clientes operados completamente dentro de Agency OS
-
-## Flujo
-
-### Flujo de análisis continuo del proyecto
-1. Leer este documento primero para entender parity ClickUp → Agency OS.
-2. Contrastar con:
-   - `Docs/superpowers/specs/2026-07-29-proyectos-workitems-fase-a-design.md`
-   - `Docs/30-Functional/WorkItems.md`
-   - `Docs/30-Functional/Tickets.md`
-   - `Docs/30-Functional/TimeTracking.md`
-3. Identificar si una capability está:
-   - documentada
-   - especificada para implementación
-   - implementada en código
-   - pendiente
-4. Actualizar roadmap/backlog según fase y dependencia real.
-
-## Estado de cobertura documental actual
-
-### Ya mapeado parcialmente
-- Work Items
-- Tickets
-- Time Tracking
-- Dependencias (solo mención)
-- Comentarios (solo mención)
-- Adjuntos (solo mención)
-- Participantes (solo mención)
-- Estados por proyecto
-
-### No mapeado de forma suficiente
-- tags
-- custom fields aplicados a work items
-- merge de tasks
-- búsqueda global parity ClickUp
-- recordatorios
-- documentos colaborativos
-- chat interno
-- tiempo por estado
-- linking lateral entre work items
+- Agency OS reemplaza **jobs-to-be-done confirmados con uso real**, no el catálogo completo de features de ClickUp.
+- Antes de marcar algo como "gap a construir", verificar uso real (workspace de ClickUp o comportamiento actual del equipo) — no asumir por el catálogo de herramientas del MCP.
+- Toda nueva implementación se refiere a `work_items` como entidad central.
+- Cada capability se etiqueta por fase: `(MVP)`, `(V2)`, `(V3)`.
 
 ## Recomendación de implementación
 
-El siguiente spec de implementación debe enfocarse en una **Fase B de ClickUp Parity Operacional** con este alcance:
-- comentarios
-- adjuntos
-- participantes/watchers
-- activity timeline
-- búsqueda/filtros operativos
-- custom fields mínimos
+**A construir** (orden sugerido, ver [[pendientes-proyectos-2026-09-04]] en memoria de sesión para el orden de trabajo real acordado con Yesid — vacaciones RRHH y "recursos" van primero, esto queda después):
+1. Watchers/seguidores — gap real de uso interno.
+2. Sub-estatus de contenido/copy — gap real de uso interno.
+3. Vista Gantt/timeline por proyecto — **no** es gap de uso interno, es requisito nuevo de producto (mostrarle al cliente el flujo del proyecto). Necesita spec propia antes de implementar.
 
-Luego una **Fase C**:
-- time tracking completo
-- tiempo por estado
-- recordatorios
-- notificaciones
+**Diferido indefinidamente** (falso gap de uso interno, sin evidencia real): dependencias entre tareas, reminders, tags ricos, Docs colaborativos, motor de custom fields genérico.
 
-Y una **Fase D**:
-- dependencias avanzadas
-- linking lateral
-- documentos
-- chat / colaboración avanzada
+**Reevaluar más adelante si crece el uso real**: chat interno, checklists nombrados múltiples.
+
+**Sin auditar, solo listado para referencia** (ver sección "Checklist de paridad 100%"): merge de tareas, multi-lista, búsqueda global, automatizaciones, vistas adicionales, plantillas, goals, permisos granulares.
+
+## KPIs
+
+- % de trabajo operativo del equipo que puede migrarse sin depender de ClickUp.
+- Adopción de time tracking (ya alta en ClickUp — mantener el estándar en Agency OS).
+- % de work items con responsable, fecha y estado válido.
+- % de clientes operados completamente dentro de Agency OS (hoy: 100% del modelo de datos ya soporta esto; falta migración de datos históricos si se decide traerlos).
