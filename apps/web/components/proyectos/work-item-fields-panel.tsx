@@ -337,6 +337,7 @@ export function WorkItemFieldsPanel({
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
+              className="h-4 w-4 accent-[var(--green)]"
               disabled={!canManage || isPending}
               checked={onGanttLocal}
               onChange={() => {

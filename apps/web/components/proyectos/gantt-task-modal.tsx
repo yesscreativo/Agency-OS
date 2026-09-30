@@ -41,6 +41,7 @@ function BlockerMultiSelect({
         <label key={o.id} className="flex items-center gap-2 text-sm text-ink">
           <input
             type="checkbox"
+            className="h-4 w-4 accent-[var(--green)]"
             checked={selectedIds.includes(o.id)}
             onChange={() => onToggle(o.id)}
           />
