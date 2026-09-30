@@ -4,12 +4,17 @@ import { countBusinessDays, LEAVE_REQUEST_TYPE_LABELS, leaveRequestStatusLabel, 
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
-/** Escapa un valor para una celda CSV (comillas dobles si tiene coma, comilla
- * o salto de línea). Sin librería — el archivo es simple y no vale la pena
- * una dependencia nueva para esto. */
+/** Escapa un valor para una celda CSV: neutraliza inyección de fórmulas
+ * (Excel/Sheets ejecutan una celda que empieza con =, +, -, @ o tab/CR como
+ * fórmula — el nombre del colaborador o las observaciones son texto libre que
+ * alguien podría setear así a propósito) anteponiendo un apóstrofe, y entre
+ * comillas dobles si tiene coma, comilla o salto de línea. Sin librería — el
+ * archivo es simple y no vale la pena una dependencia nueva para esto. */
 function csvCell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
+  let v = value ?? "";
+  if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`;
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
 }
 
 export async function GET(request: Request) {
