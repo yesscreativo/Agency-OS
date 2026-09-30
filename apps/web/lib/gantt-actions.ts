@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   createWorkItem,
   deleteDependency,
+  getDependencyById,
   insertDependency,
   listDependenciesForProject,
   listGanttTasks,
@@ -172,6 +173,10 @@ export async function saveGanttTaskAction(input: GanttTaskInput): Promise<IdResu
     );
     const remaining = existing.filter((d) => d.work_item_id !== id);
     for (const dependsOnId of input.dependsOnIds) {
+      const blocker = await assertWorkItemInOrg(db, dependsOnId, auth.organizationId);
+      if (!blocker || blocker.projectId !== input.projectId) {
+        return { error: "Uno de los bloqueantes no pertenece a este proyecto." };
+      }
       const candidate = { workItemId: id, dependsOnWorkItemId: dependsOnId };
       if (
         isDirectCycle(
@@ -243,6 +248,10 @@ export async function addDependencyAction(
     const db = await getSupabaseServerClient();
     const found = await assertWorkItemInOrg(db, workItemId, auth.organizationId);
     if (!found) return { error: "La tarea no existe o no pertenece a tu organización." };
+    const blocker = await assertWorkItemInOrg(db, dependsOnWorkItemId, auth.organizationId);
+    if (!blocker || blocker.projectId !== found.projectId) {
+      return { error: "El bloqueante no pertenece a este proyecto." };
+    }
 
     const existing = await listDependenciesForProject(db, found.projectId);
     const candidate = { workItemId, dependsOnWorkItemId };
@@ -270,7 +279,14 @@ export async function removeDependencyAction(id: string): Promise<ActionResult> 
 
   try {
     const db = await getSupabaseServerClient();
+    const dependency = await getDependencyById(db, id);
+    if (!dependency) return { error: "La dependencia no existe." };
+    const found = await assertWorkItemInOrg(db, dependency.work_item_id, auth.organizationId);
+    if (!found) return { error: "La dependencia no pertenece a tu organización." };
+
     await deleteDependency(db, id);
+    const link = await resolveProjectLink(db, found.projectId);
+    if (link) revalidatePath(link);
     return { ok: true };
   } catch (error) {
     console.error("removeDependencyAction", error);

@@ -15,6 +15,12 @@ export async function listDependenciesForProject(db: Db, projectId: string): Pro
   return (data ?? []).filter((row) => row.work_item?.project_id === projectId);
 }
 
+export async function getDependencyById(db: Db, id: string): Promise<DependencyRow | null> {
+  const { data, error } = await db.from("work_item_dependencies").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function insertDependency(
   db: Db,
   values: { organizationId: string; workItemId: string; dependsOnWorkItemId: string },
