@@ -156,6 +156,7 @@ export default async function WorkItemDetailPage({
     createdAt: c.created_at,
     editedAt: c.edited_at,
     attachments: attachmentsByComment.get(c.id) ?? [],
+    visibleToClient: c.visibility === "client_visible",
   }));
   const activity = activityRows.map((a) => ({
     id: a.id,

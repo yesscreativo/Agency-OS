@@ -6,7 +6,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Avatar, Button, Textarea } from "@agency-os/ui";
+import { Avatar, Badge, Button, Textarea } from "@agency-os/ui";
 import { formatDuration, formatRelative, initialsOf } from "@agency-os/domain";
 import {
   createComment,
@@ -35,6 +35,7 @@ export interface PanelComment {
   createdAt: string;
   editedAt: string | null;
   attachments: WorkItemAttachment[];
+  visibleToClient: boolean;
 }
 
 export interface PanelActivity {
@@ -105,13 +106,14 @@ function CommentComposer({
   autoFocus?: boolean;
   /** Habilita adjuntar archivos (drag & drop / botón). Desactivado al editar. */
   allowFiles?: boolean;
-  onSubmit: (body: string, files: File[]) => void;
+  onSubmit: (body: string, files: File[], visibleToClient: boolean) => void;
   onCancel?: () => void;
 }) {
   const [body, setBody] = useState(initialBody);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [visibleToClient, setVisibleToClient] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -171,10 +173,11 @@ function CommentComposer({
 
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit(body.trim(), files);
+    onSubmit(body.trim(), files, visibleToClient);
     setBody("");
     setFiles([]);
     setFileError(null);
+    setVisibleToClient(false);
   };
 
   return (
@@ -234,10 +237,21 @@ function CommentComposer({
         </div>
       )}
       {fileError && <p className="mt-1 text-sm text-danger">{fileError}</p>}
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex items-center gap-3">
         <Button variant="primary" size="sm" disabled={!canSubmit} onClick={submit}>
           {submitLabel}
         </Button>
+        {allowFiles && (
+          <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-[var(--green)]"
+              checked={visibleToClient}
+              onChange={(e) => setVisibleToClient(e.target.checked)}
+            />
+            Compartir con cliente
+          </label>
+        )}
         {allowFiles && (
           <>
             <input
@@ -331,6 +345,7 @@ function CommentRow({
           <span className="font-semibold text-ink">{comment.authorName}</span>
           <span className="text-xs text-faint">{formatRelative(comment.createdAt)}</span>
           {comment.editedAt && <span className="text-xs text-faint">(editado)</span>}
+          {comment.visibleToClient && <Badge tone="info">Cliente</Badge>}
         </div>
         {editing ? (
           <div className="mt-1">
@@ -427,19 +442,27 @@ export function WorkItemActivityPanel({
     }
   }
 
-  const submitComment = (body: string, files: File[], parentCommentId: string | null) => {
+  const submitComment = (
+    body: string,
+    files: File[],
+    parentCommentId: string | null,
+    visibleToClient: boolean,
+  ) => {
     setError(null);
     startTransition(async () => {
-      const res = await createComment({ workItemId, body, parentCommentId });
+      const res = await createComment({ workItemId, body, parentCommentId, visibleToClient });
       if (res.error || !res.comment) {
         setError(res.error ?? "No se pudo publicar el comentario.");
         return;
       }
       const commentId = res.comment.id;
-      // Sube los adjuntos ya asociados al comentario recién creado.
+      // Sube los adjuntos ya asociados al comentario recién creado, con la
+      // misma visibilidad que el comentario (no tendría sentido compartir el
+      // comentario y esconder sus adjuntos, o viceversa).
       for (const file of files) {
         const fd = new FormData();
         fd.append("file", file);
+        if (visibleToClient) fd.append("visibility", "client_visible");
         const up = await uploadCommentAttachment(commentId, fd);
         if (up.error) {
           setError(up.error);
@@ -476,7 +499,7 @@ export function WorkItemActivityPanel({
 
       {tab === "comments" ? (
         <div className="space-y-4">
-          <CommentComposer users={orgUsers} onSubmit={(b, files) => submitComment(b, files, null)} />
+          <CommentComposer users={orgUsers} onSubmit={(b, files, v) => submitComment(b, files, null, v)} />
           {error && <p className="text-sm text-danger">{error}</p>}
 
           {roots.length === 0 ? (
@@ -509,7 +532,7 @@ export function WorkItemActivityPanel({
                         placeholder="Responder…"
                         submitLabel="Responder"
                         autoFocus
-                        onSubmit={(b, files) => submitComment(b, files, root.id)}
+                        onSubmit={(b, files, v) => submitComment(b, files, root.id, v)}
                         onCancel={() => setReplyTo(null)}
                       />
                     </div>
