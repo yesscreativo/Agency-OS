@@ -125,6 +125,7 @@ export default async function WorkItemDetailPage({
     assignees: task.assignees
       .filter((a) => a.users)
       .map((a) => ({ id: a.user_id, name: assigneeName(a) })),
+    onGantt: task.on_gantt,
   };
 
   const subtasks: DetailSubtask[] = task.subtasks.map((st) => ({

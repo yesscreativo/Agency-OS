@@ -231,6 +231,9 @@ export interface WorkItemInput {
   dueDate?: string | null;
   /** Duración estimada en minutos (null limpia la estimación). */
   estimatedMinutes?: number | null;
+  /** Solo aplica al editar: agrega/quita esta tarea del Gantt del proyecto
+   * (checkbox "Mostrar en Gantt" fuera de la pestaña Gantt, ver spec). */
+  onGantt?: boolean;
 }
 
 /** Crea o actualiza una tarea/subtarea. */
@@ -278,6 +281,7 @@ export async function saveWorkItem(input: WorkItemInput): Promise<IdResult> {
         start_date: input.startDate || null,
         due_date: input.dueDate || null,
         estimated_minutes: input.estimatedMinutes ?? null,
+        on_gantt: input.onGantt,
       });
 
       if (prev) {
