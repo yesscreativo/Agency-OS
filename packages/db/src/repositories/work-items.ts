@@ -509,6 +509,23 @@ export async function softDeleteWorkItem(db: Db, id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Borra un proyecto EN CASCADA: marca `deleted_at` en el proyecto y en todas
+ * sus tareas/subtareas no borradas. Sin esto, borrar solo el proyecto dejaría
+ * tareas huérfanas (seguirían contando en "Mis tareas"/reportes de tiempo). */
+export async function softDeleteProjectCascade(db: Db, projectId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error: tasksError } = await db
+    .from("work_items")
+    .update({ deleted_at: now })
+    .eq("project_id", projectId)
+    .in("type", ["task", "subtask"])
+    .is("deleted_at", null);
+  if (tasksError) throw tasksError;
+
+  const { error: projectError } = await db.from("work_items").update({ deleted_at: now }).eq("id", projectId);
+  if (projectError) throw projectError;
+}
+
 /** Reemplaza el set completo de asignados de un work item: borra todas las filas
  * existentes e inserta las nuevas (mismo patrón borrar+insertar de
  * `replaceQuoteItems`). Con `userIds` vacío deja el work item sin asignados. */

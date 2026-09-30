@@ -17,6 +17,7 @@ import {
   recordActivity,
   reorderStatuses,
   setAssignees,
+  softDeleteProjectCascade,
   softDeleteWorkItem,
   updateStatus,
   updateWorkItem,
@@ -182,6 +183,33 @@ export async function createProjectAction(input: CreateProjectInput): Promise<Id
   } catch (error) {
     console.error("createProjectAction", error);
     return { error: "No se pudo crear el proyecto. Intenta de nuevo." };
+  }
+}
+
+/** Borra un proyecto en cascada (el proyecto + todas sus tareas/subtareas,
+ * soft-delete). Ver `softDeleteProjectCascade`. */
+export async function deleteProjectAction(id: string): Promise<ActionResult> {
+  const auth = await requireProjectManager();
+  if (auth.error !== undefined) return { error: auth.error };
+
+  try {
+    const db = await getSupabaseServerClient();
+    const { data } = await db
+      .from("work_items")
+      .select("organization_id, type")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!data || data.organization_id !== auth.organizationId || data.type !== "project") {
+      return { error: "El proyecto no existe o no pertenece a tu organización." };
+    }
+
+    await softDeleteProjectCascade(db, id);
+    revalidatePath("/proyectos");
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteProjectAction", error);
+    return { error: "No se pudo eliminar el proyecto. Intenta de nuevo." };
   }
 }
 

@@ -23,6 +23,7 @@ import {
 import type { GanttTask } from "@/components/proyectos/gantt-task-modal";
 import type { GanttDependency } from "@/components/proyectos/project-gantt";
 import { NoAccessPanel } from "@/components/no-access-panel";
+import { DeleteProjectButton } from "@/components/proyectos/delete-project-button";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,7 @@ export default async function ProjectDetailPage({
             </p>
           )}
         </div>
+        {hasPermission(user, "project.manage") && <DeleteProjectButton projectId={project.id} />}
       </div>
       <ProjectBoard
         projectId={project.id}
