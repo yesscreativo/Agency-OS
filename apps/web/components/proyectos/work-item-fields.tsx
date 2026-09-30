@@ -42,6 +42,11 @@ export function AttachmentCard({
 }) {
   return (
     <div className="relative rounded-md border border-line bg-glass p-2">
+      {attachment.isClientVisible && (
+        <div className="absolute left-1 top-1 z-10">
+          <Badge tone="info">Cliente</Badge>
+        </div>
+      )}
       {onRemove && (
         <button
           type="button"

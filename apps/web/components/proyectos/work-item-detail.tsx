@@ -109,6 +109,7 @@ export function WorkItemDetail({
   const [attachments, setAttachments] = useState<WorkItemAttachment[]>(initialAttachments);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [shareAttachmentsWithClient, setShareAttachmentsWithClient] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSubmit = Boolean(title.trim());
@@ -128,6 +129,7 @@ export function WorkItemDetail({
       for (const file of list) {
         const fd = new FormData();
         fd.append("file", file);
+        if (shareAttachmentsWithClient) fd.append("visibility", "client_visible");
         const res = await uploadWorkItemAttachment(task.id, fd);
         if (res.error || !res.attachment) {
           setAttachmentError(res.error ?? "No se pudo subir el archivo.");
@@ -330,7 +332,16 @@ export function WorkItemDetail({
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-ink">Adjuntos</h2>
             {canManage && (
-              <div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 accent-[var(--green)]"
+                    checked={shareAttachmentsWithClient}
+                    onChange={(e) => setShareAttachmentsWithClient(e.target.checked)}
+                  />
+                  Compartir con cliente
+                </label>
                 <input
                   ref={fileInputRef}
                   type="file"
