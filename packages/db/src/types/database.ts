@@ -436,6 +436,64 @@ export type Database = {
         }
         Relationships: []
       }
+      project_folders: {
+        Row: {
+          client_id: string
+          color: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_folders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_folders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_folders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_code_counters: {
         Row: {
           client_id: string
@@ -1465,7 +1523,10 @@ export type Database = {
           description: string | null
           due_date: string | null
           estimated_minutes: number | null
+          folder_id: string | null
+          gantt_enabled: boolean
           id: string
+          on_gantt: boolean
           organization_id: string
           overdue_notified_at: string | null
           parent_id: string | null
@@ -1489,7 +1550,10 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
+          folder_id?: string | null
+          gantt_enabled?: boolean
           id?: string
+          on_gantt?: boolean
           organization_id: string
           overdue_notified_at?: string | null
           parent_id?: string | null
@@ -1513,7 +1577,10 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
+          folder_id?: string | null
+          gantt_enabled?: boolean
           id?: string
+          on_gantt?: boolean
           organization_id?: string
           overdue_notified_at?: string | null
           parent_id?: string | null
@@ -1542,6 +1609,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "project_folders"
             referencedColumns: ["id"]
           },
           {
