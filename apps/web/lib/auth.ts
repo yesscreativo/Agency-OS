@@ -86,6 +86,12 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
           .filter((code): code is string => code !== null),
       ),
     ];
+    // Cualquier colaborador con al menos un rol puede solicitar sus propios
+    // permisos/vacaciones (leave.request está en todos los roles desde
+    // 061_leave_requests.sql), sin importar el module_code de ese rol.
+    if (!moduleCodes.includes("rrhh") && permissionCodes.has("leave.request")) {
+      moduleCodes.push("rrhh");
+    }
   }
 
   const typedAppUser = appUser as
