@@ -4,6 +4,7 @@ import { countUnread, listNotifications } from "@agency-os/db";
 import { Avatar, ThemeToggle } from "@agency-os/ui";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getCurrentClientContact } from "@/lib/portal-auth";
 import { logout } from "@/lib/auth-actions";
 import { AppBackground } from "@/components/app-background";
 import { NotificationBell } from "@/components/notification-bell";
@@ -22,7 +23,10 @@ function initialsOf(name: string) {
 // /inicio-/usuarios-/perfil, barra propia dentro de cada módulo como /crm).
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    const contact = await getCurrentClientContact();
+    redirect(contact ? "/portal" : "/login");
+  }
 
   const db = await getSupabaseServerClient();
   const [notifs, unread] = await Promise.all([

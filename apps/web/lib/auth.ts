@@ -53,6 +53,12 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       .returns<UserRoleRow[]>(),
   ]);
 
+  // Sin fila en `users` → esta sesión no es un colaborador interno (el trigger
+  // handle_new_auth_user solo crea `users` para emails @laburuagencia.com) —
+  // típicamente un contacto de cliente. No construir un stub: el Portal
+  // Cliente depende de que getCurrentUser() devuelva null acá.
+  if (!appUser) return null;
+
   const roleRows = (userRoles ?? [])
     .map((ur) => ur.roles)
     .filter((role): role is NonNullable<UserRoleRow["roles"]> => role !== null);
