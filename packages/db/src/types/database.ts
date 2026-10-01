@@ -208,6 +208,91 @@ export type Database = {
           },
         ]
       }
+      leave_requests: {
+        Row: {
+          attachment_path: string | null
+          created_at: string
+          end_date: string
+          hr_decided_at: string | null
+          hr_reject_reason: string | null
+          hr_status: Database["public"]["Enums"]["leave_approval_status"]
+          id: string
+          manager_decided_at: string | null
+          manager_reject_reason: string | null
+          manager_status: Database["public"]["Enums"]["leave_approval_status"]
+          manager_user_id: string | null
+          notes: string | null
+          organization_id: string
+          requester_user_id: string
+          return_date: string | null
+          start_date: string
+          type: Database["public"]["Enums"]["leave_request_type"]
+          updated_at: string
+        }
+        Insert: {
+          attachment_path?: string | null
+          created_at?: string
+          end_date: string
+          hr_decided_at?: string | null
+          hr_reject_reason?: string | null
+          hr_status?: Database["public"]["Enums"]["leave_approval_status"]
+          id?: string
+          manager_decided_at?: string | null
+          manager_reject_reason?: string | null
+          manager_status?: Database["public"]["Enums"]["leave_approval_status"]
+          manager_user_id?: string | null
+          notes?: string | null
+          organization_id: string
+          requester_user_id: string
+          return_date?: string | null
+          start_date: string
+          type: Database["public"]["Enums"]["leave_request_type"]
+          updated_at?: string
+        }
+        Update: {
+          attachment_path?: string | null
+          created_at?: string
+          end_date?: string
+          hr_decided_at?: string | null
+          hr_reject_reason?: string | null
+          hr_status?: Database["public"]["Enums"]["leave_approval_status"]
+          id?: string
+          manager_decided_at?: string | null
+          manager_reject_reason?: string | null
+          manager_status?: Database["public"]["Enums"]["leave_approval_status"]
+          manager_user_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          requester_user_id?: string
+          return_date?: string | null
+          start_date?: string
+          type?: Database["public"]["Enums"]["leave_request_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_manager_user_id_fkey"
+            columns: ["manager_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_requester_user_id_fkey"
+            columns: ["requester_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       modules: {
         Row: {
           code: string
@@ -493,6 +578,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      public_holidays: {
+        Row: {
+          date: string
+          id: string
+          name: string
+        }
+        Insert: {
+          date: string
+          id?: string
+          name: string
+        }
+        Update: {
+          date?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
       }
       quote_code_counters: {
         Row: {
@@ -1849,6 +1952,15 @@ export type Database = {
       }
     }
     Enums: {
+      leave_approval_status: "pending" | "approved" | "rejected"
+      leave_request_type:
+        | "vacaciones"
+        | "home_office"
+        | "permiso_personal"
+        | "licencia_medica"
+        | "licencia_maternidad_paternidad"
+        | "calamidad_domestica"
+        | "otro"
       project_state: "active" | "completed" | "archived"
       quote_item_status: "pending" | "accepted" | "rejected" | "changes"
       quote_type: "proyecto" | "evolutivo"
@@ -1982,6 +2094,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      leave_approval_status: ["pending", "approved", "rejected"],
+      leave_request_type: [
+        "vacaciones",
+        "home_office",
+        "permiso_personal",
+        "licencia_medica",
+        "licencia_maternidad_paternidad",
+        "calamidad_domestica",
+        "otro",
+      ],
       project_state: ["active", "completed", "archived"],
       quote_item_status: ["pending", "accepted", "rejected", "changes"],
       quote_type: ["proyecto", "evolutivo"],

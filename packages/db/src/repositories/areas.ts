@@ -152,3 +152,17 @@ export async function listPeopleInArea(db: Db, areaId: string): Promise<AreaPers
     jobTitleName: r.job_title?.name ?? null,
   }));
 }
+
+/** Jefe (manager_user_id del área) de una persona, vía people.area_id. null
+ * si la persona no tiene área asignada o el área no tiene gerente. Para
+ * resolver el aprobador automático de una solicitud de vacaciones/permiso. */
+export async function getAreaManagerForPerson(db: Db, personId: string): Promise<string | null> {
+  const { data, error } = await db
+    .from("people")
+    .select("area:areas(manager_user_id)")
+    .eq("id", personId)
+    .maybeSingle()
+    .returns<{ area: { manager_user_id: string | null } | null } | null>();
+  if (error) throw error;
+  return data?.area?.manager_user_id ?? null;
+}

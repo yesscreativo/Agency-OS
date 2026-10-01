@@ -2,6 +2,7 @@ export * from "./agenda";
 export * from "./email-domain";
 export * from "./format";
 export * from "./gantt";
+export * from "./leave";
 export * from "./mentions";
 export * from "./quote-code";
 export * from "./quote-calc";

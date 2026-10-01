@@ -9,6 +9,7 @@ import {
   listGanttTasks,
 } from "@agency-os/db";
 import { formatDate } from "@agency-os/domain";
+import { AttachmentLink } from "@agency-os/ui";
 import { ProjectGantt, type GanttDependency } from "@/components/proyectos/project-gantt";
 import type { GanttTask } from "@/components/proyectos/gantt-task-modal";
 
@@ -103,15 +104,15 @@ export default async function PublicProjectGanttPage({ params }: { params: { tok
             {attachments.map((a) => {
               const url = urlByPath.get(a.path);
               return url ? (
-                <a
+                <AttachmentLink
                   key={a.id}
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
+                  url={url}
+                  filename={a.filename}
+                  mimeType={a.mime_type}
                   className="block text-sm text-[#378add] underline"
                 >
                   {a.filename}
-                </a>
+                </AttachmentLink>
               ) : null;
             })}
           </div>
