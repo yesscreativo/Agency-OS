@@ -29,3 +29,4 @@ export * from "./repositories/work-item-share-links";
 export * from "./repositories/work-item-watchers";
 export * from "./repositories/leave-requests";
 export * from "./repositories/public-holidays";
+export * from "./repositories/client-contacts";
