@@ -1,7 +1,7 @@
 # Vacaciones y Permisos (RRHH) — Diseño
 
-**Fecha:** 2026-09-30
-**Estado:** nuevo spec
+**Fecha:** 2026-09-30 (ajustes post-QA: 2026-10-01)
+**Estado:** implementado — `Feat/vacaciones-rrhh`
 **Objetivo:** reemplazar por completo el flujo externo actual (formulario HTML estático → webhook n8n → tarea de ClickUp → aprobación de jefe → aprobación de RRHH) por un módulo propio de Agency OS, con aprobación en dos pasos, control de fechas, adjuntos y reporte consolidado mes a mes / año.
 
 ## Contexto
@@ -32,6 +32,8 @@ Cualquier colaborador autenticado crea una solicitud:
 1. **Jefe** (el `manager_user_id` resuelto al crear la solicitud): aprueba o rechaza (con motivo si rechaza). Ve sus pendientes en `/rrhh/aprobaciones`.
 2. Si el jefe aprueba, pasa a **RRHH** (rol nuevo, ve todas las pendientes de RRHH de cualquier área): aprueba o rechaza (con motivo).
 3. Notificación in-app (la campana ya existente) en cada paso: al jefe cuando se crea, al solicitante cuando el jefe decide, a RRHH cuando el jefe aprueba, al solicitante cuando RRHH decide.
+4. **Historial del jefe**: además de sus pendientes, el jefe tiene una pestaña "Historial" en `/rrhh/aprobaciones` con sus decisiones ya tomadas (filtro año/mes/tipo + export CSV), para armar sus propios informes de equipo sin necesitar el permiso de RRHH. Agregado post-QA (2026-10-01) — el reporte global de RRHH no cubre esta necesidad porque es org-wide y requiere `leave.approve_hr`.
+5. La pestaña/nav "Aprobaciones" solo se muestra a quien es jefe de al menos un área (`areas.manager_user_id`) o tiene `leave.approve_hr` — para el resto de colaboradores la bandeja siempre estaría vacía y solo generaba confusión (hallazgo de QA 2026-10-01).
 
 ### 3. Mis solicitudes
 
@@ -39,7 +41,11 @@ Cualquier colaborador ve su propio historial: lista de solicitudes con estado (p
 
 ### 4. Reportes (solo rol RRHH)
 
-Vista filtrable por mes/año/persona/tipo/estado, con los días hábiles tomados por solicitud, más exportación a Excel/CSV del consolidado de un mes/año — para nómina y el tema legal/prestacional. Incluye el mismo resumen de aprobadas/rechazadas por persona que en "Mis solicitudes", filtrable a cualquier colaborador.
+Vista filtrable por mes/año/persona/tipo/estado, con los días hábiles tomados por solicitud, más exportación a Excel/CSV del consolidado de un mes/año — para nómina y el tema legal/prestacional. Incluye el mismo resumen de aprobadas/rechazadas por persona que en "Mis solicitudes", filtrable a cualquier colaborador. También muestra el adjunto de cada solicitud (si tiene) para verificarlo sin salir del reporte.
+
+### 5. Adjuntos: previsualización de imagen, descarga para el resto
+
+En toda vista que lista adjuntos de `leave_requests` (Aprobaciones pendientes, Historial del jefe, Reportes de RRHH), un adjunto que es imagen (jpg/png/webp/gif/bmp/avif) se abre en un modal de previsualización; cualquier otro tipo de archivo abre en pestaña nueva, igual que antes. Criterio compartido con el resto del proyecto (adjuntos de tareas, brief del CRM, portal de cliente) vía el componente `AttachmentLink` de `@agency-os/ui` — agregado post-QA (2026-10-01). Como `leave_requests` no guarda mime type (solo la ruta en Storage), acá la detección de imagen es por extensión del nombre de archivo, no por mime type real.
 
 ## Reglas
 
@@ -105,16 +111,21 @@ create table public.public_holidays (
 - `leave_requests` update: el jefe solo mientras `manager_status = 'pending'` y `manager_user_id = auth.uid()`; RRHH solo con su permiso, mientras `manager_status = 'approved'` y `hr_status = 'pending'`.
 - `public_holidays`: select para cualquier miembro de la organización; write requiere el permiso de RRHH (tabla global del sistema, sin `organization_id` — los festivos son iguales para toda Colombia).
 
+**Bug encontrado en QA (2026-10-01) y corregido en `063_fix_leave_requests_manager_update_check.sql`:** la policy de update del jefe no tenía `WITH CHECK` explícito, así que Postgres reutilizaba el mismo `USING` (`manager_status = 'pending'`) para validar la fila YA actualizada. Como decidir (aprobar/rechazar) cambia justamente ese campo, el `UPDATE` violaba siempre esa condición y la base lo rechazaba ("Aprobar como jefe" no dejaba nunca). El fix agrega un `WITH CHECK` que solo valida organización + `manager_user_id = auth.uid()`, sin exigir que siga en `pending`.
+
 ### Permisos y rol nuevo
 
-- `leave.request`: crear/ver las propias solicitudes — otorgado ampliamente (cualquier colaborador con el módulo `rrhh` activo).
+- `leave.request`: crear/ver las propias solicitudes — otorgado ampliamente (todos los roles existentes, vía `061_leave_requests.sql`).
 - `leave.approve_hr`: aprobar en segunda instancia + ver el reporte consolidado de todos. Se crea un rol **RRHH** (vía el editor de roles ya existente) con este permiso, asignable a quien corresponda.
 - La aprobación del jefe **no** usa un permiso nuevo — reusa el mismo criterio de "soy el `manager_user_id` de esta área" ya usado en `/mi-area`.
+
+**Corrección post-QA sobre el acceso al módulo (2026-10-01):** el supuesto original — "cualquier colaborador con el módulo `rrhh` activo" — no se cumplía en la práctica. El acceso a un módulo (`canAccessModule`) se resuelve por el `module_code` del/los rol(es) del usuario, no por el permiso `leave.request` ni por el flag `is_active` de `modules` (que solo controla si el módulo aparece en el catálogo, no quién lo ve). Un colaborador cuyo único rol fuera, por ejemplo, de CRM, no tenía ningún rol con `module_code = 'rrhh'` y por lo tanto no podía ver ni `/rrhh` ni la tarjeta en Inicio, pese a tener `leave.request`. Fix en `apps/web/lib/auth.ts`: un usuario no-super con **al menos un rol** (de cualquier módulo) y el permiso `leave.request` gana acceso al módulo `rrhh` igual. Decisión consciente, tomada con Yesid: queda sin resolver el caso de un usuario con **cero roles** (estado "pendiente", recién invitado) — arreglarlo requeriría reescribir `current_user_organization_ids()`, compartida por la RLS de todo el sistema (CRM, Proyectos, etc.), lo cual es un cambio de alcance mayor y riesgo de regresión fuera de este módulo.
 
 ## Vistas
 
 - `/rrhh`: mis solicitudes (historial + resumen aprobadas/rechazadas/pendientes) + botón crear solicitud.
-- `/rrhh/aprobaciones`: pendientes para mí — como jefe (de mi área) y/o como RRHH, en una sola bandeja.
+- `/rrhh/aprobaciones`: pendientes para mí — como jefe (de mi área) y/o como RRHH, en una sola bandeja. Visible en el nav solo si soy jefe de algún área o tengo `leave.approve_hr`.
+- `/rrhh/aprobaciones?view=historial` (solo jefes): decisiones ya tomadas por mí, con los mismos filtros año/mes/tipo que Reportes y su propio export CSV (`/rrhh/aprobaciones/historial/export`).
 - `/rrhh/reportes` (solo rol RRHH): filtros por mes/año/persona/tipo/estado, días hábiles por solicitud, exportar a Excel/CSV.
 - Activa el módulo `rrhh` (`is_active: true` en `modules`, ya existe en el registro, hoy apagado).
 
