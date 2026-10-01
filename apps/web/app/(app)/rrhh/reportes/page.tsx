@@ -1,12 +1,24 @@
 import { redirect } from "next/navigation";
 import { listForReport, listHolidays } from "@agency-os/db";
 import { countBusinessDays, LEAVE_REQUEST_TYPE_LABELS, leaveRequestStatusLabel, type LeaveRequestType } from "@agency-os/domain";
+import { AttachmentLink } from "@agency-os/ui";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { filenameFromAttachmentPath, signLeaveAttachments } from "@/lib/leave-attachments";
 import { NoAccessPanel } from "@/components/no-access-panel";
 import { ReportFilters } from "@/components/rrhh/report-filters";
 
 export const dynamic = "force-dynamic";
+
+function AttachmentCell({ path, url }: { path: string | null; url: string | undefined }) {
+  if (!path) return <span className="text-faint">—</span>;
+  if (!url) return <span className="text-faint">Adjunto</span>;
+  return (
+    <AttachmentLink url={url} filename={filenameFromAttachmentPath(path)} className="text-green underline">
+      Ver adjunto
+    </AttachmentLink>
+  );
+}
 
 export default async function LeaveReportsPage({
   searchParams,
@@ -32,6 +44,7 @@ export default async function LeaveReportsPage({
     listHolidays(db),
   ]);
   const holidayIsos = holidays.map((h) => h.date);
+  const attachmentUrls = await signLeaveAttachments(db, rows.map((r) => r.attachment_path));
 
   return (
     <div>
@@ -48,6 +61,7 @@ export default async function LeaveReportsPage({
               <th className="px-4 py-2">Fin</th>
               <th className="px-4 py-2">Días hábiles</th>
               <th className="px-4 py-2">Estado</th>
+              <th className="px-4 py-2">Adjunto</th>
             </tr>
           </thead>
           <tbody>
@@ -59,11 +73,14 @@ export default async function LeaveReportsPage({
                 <td className="px-4 py-2">{r.end_date}</td>
                 <td className="px-4 py-2">{countBusinessDays(r.start_date, r.end_date, holidayIsos)}</td>
                 <td className="px-4 py-2">{leaveRequestStatusLabel(r.manager_status, r.hr_status)}</td>
+                <td className="px-4 py-2">
+                  <AttachmentCell path={r.attachment_path} url={attachmentUrls.get(r.attachment_path ?? "")} />
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-faint">
+                <td colSpan={7} className="px-4 py-6 text-center text-faint">
                   Sin solicitudes en este rango.
                 </td>
               </tr>

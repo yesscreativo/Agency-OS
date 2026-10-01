@@ -108,6 +108,39 @@ export async function decideHr(
   if (error) throw error;
 }
 
+export interface ManagerHistoryFilters {
+  year?: number;
+  month?: number; // 1-12
+  type?: Enums<"leave_request_type">;
+}
+
+/** Historial de decisiones YA tomadas por el jefe (no pendientes) — para que
+ * arme sus propios informes de equipo, aparte del reporte global de RRHH. */
+export async function listDecidedByManager(
+  db: Db,
+  managerUserId: string,
+  filters: ManagerHistoryFilters = {},
+): Promise<LeaveRequestWithRequester[]> {
+  let query = db
+    .from("leave_requests")
+    .select(WITH_REQUESTER_SELECT)
+    .eq("manager_user_id", managerUserId)
+    .neq("manager_status", "pending")
+    .order("manager_decided_at", { ascending: false });
+
+  if (filters.year) {
+    const monthStr = filters.month ? String(filters.month).padStart(2, "0") : null;
+    const rangeStart = monthStr ? `${filters.year}-${monthStr}-01` : `${filters.year}-01-01`;
+    const rangeEnd = monthStr ? `${filters.year}-${monthStr}-31` : `${filters.year}-12-31`;
+    query = query.gte("start_date", rangeStart).lte("start_date", rangeEnd);
+  }
+  if (filters.type) query = query.eq("type", filters.type);
+
+  const { data, error } = await query.returns<WithRequesterDbRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(toWithRequester);
+}
+
 export interface LeaveReportFilters {
   year: number;
   month?: number; // 1-12

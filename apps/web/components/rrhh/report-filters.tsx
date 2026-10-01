@@ -9,7 +9,17 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-export function ReportFilters({ currentYear }: { currentYear: number }) {
+export function ReportFilters({
+  currentYear,
+  basePath = "/rrhh/reportes",
+  exportPath = "/rrhh/reportes/export",
+}: {
+  currentYear: number;
+  /** Ruta de la página a la que apuntan los filtros (query params). */
+  basePath?: string;
+  /** Ruta del endpoint de export CSV. */
+  exportPath?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -21,10 +31,10 @@ export function ReportFilters({ currentYear }: { currentYear: number }) {
     const params = new URLSearchParams(searchParams.toString());
     if (value) params.set(key, value);
     else params.delete(key);
-    router.push(`/rrhh/reportes?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   };
 
-  const exportHref = `/rrhh/reportes/export?${searchParams.toString()}`;
+  const exportHref = `${exportPath}?${searchParams.toString()}`;
 
   return (
     <div className="mb-6 flex flex-wrap items-end gap-3">
