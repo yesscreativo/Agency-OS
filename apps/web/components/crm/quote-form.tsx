@@ -18,7 +18,7 @@ import {
   getQuoteProgress,
   marginPctFromPrices,
 } from "@agency-os/domain";
-import { Badge, Button, Input, Label, Select, Textarea } from "@agency-os/ui";
+import { AttachmentLink, Badge, Button, Input, Label, Select, Textarea } from "@agency-os/ui";
 import {
   attachExistingBrief,
   deleteQuote,
@@ -1422,17 +1422,12 @@ export function QuoteForm({
         {canManageInternal && (
         <div className="rounded-lg border border-line bg-glass p-6 backdrop-blur-xl">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Brief</h3>
-          {briefUrl ? (
+          {briefUrl && briefName ? (
             <p className="mt-3 truncate text-sm text-ink">
               📎{" "}
-              <a
-                href={briefUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted underline hover:text-ink"
-              >
+              <AttachmentLink url={briefUrl} filename={briefName} className="text-muted underline hover:text-ink">
                 {briefName}
-              </a>
+              </AttachmentLink>
             </p>
           ) : (
             <p className="mt-3 text-[13px] text-muted">

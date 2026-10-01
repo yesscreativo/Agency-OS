@@ -5,7 +5,7 @@
 // prioridad, tarjetas de adjunto y el selector de asignados con buscador.
 
 import { useState } from "react";
-import { Badge, Input } from "@agency-os/ui";
+import { AttachmentLink, Badge, Input, isPreviewableImage } from "@agency-os/ui";
 import type { WorkItemPriority } from "@agency-os/domain";
 import type { WorkItemAttachment } from "@/lib/project-actions";
 
@@ -25,14 +25,9 @@ export interface AssigneeUser {
   name: string;
 }
 
-export function isImage(mime: string | null): boolean {
-  // Excluye SVG: aunque en <img> no ejecuta scripts, se sube como
-  // application/octet-stream (ver safeStorageContentType) y no debe previsualizarse.
-  return !!mime && mime.startsWith("image/") && !mime.startsWith("image/svg");
-}
-
-/** Tarjeta de un adjunto ya subido: preview de imagen o icono genérico, con
- * enlace a la URL firmada y (si hay permiso) botón para quitarlo. */
+/** Tarjeta de un adjunto ya subido: preview de imagen o icono genérico. Si es
+ * imagen se abre en un modal; cualquier otro archivo, en pestaña nueva (y si
+ * hay permiso, botón para quitarlo). */
 export function AttachmentCard({
   attachment,
   onRemove,
@@ -57,26 +52,35 @@ export function AttachmentCard({
           ✕
         </button>
       )}
-      <a
-        href={attachment.url ?? undefined}
-        target="_blank"
-        rel="noreferrer"
-        className="block"
-        title={attachment.filename}
-      >
-        {isImage(attachment.mimeType) && attachment.url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={attachment.url}
-            alt={attachment.filename}
-            className="h-24 w-full rounded object-cover"
-          />
-        ) : (
-          <div className="flex h-24 items-center justify-center rounded bg-glass-strong text-3xl backdrop-blur-xl">📄</div>
-        )}
-        <div className="mt-1 truncate text-xs text-muted">{attachment.filename}</div>
-      </a>
+      <AttachmentCardBody attachment={attachment} />
     </div>
+  );
+}
+
+function AttachmentCardBody({ attachment }: { attachment: WorkItemAttachment }) {
+  const preview = isPreviewableImage(attachment.filename, attachment.mimeType) && attachment.url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={attachment.url} alt={attachment.filename} className="h-24 w-full rounded object-cover" />
+  ) : (
+    <div className="flex h-24 items-center justify-center rounded bg-glass-strong text-3xl backdrop-blur-xl">📄</div>
+  );
+
+  // Sin URL firmada todavía (falló el signing server-side): se muestra inerte,
+  // igual que antes de centralizar el link en AttachmentLink.
+  if (!attachment.url) {
+    return (
+      <div title={attachment.filename}>
+        {preview}
+        <div className="mt-1 truncate text-xs text-muted">{attachment.filename}</div>
+      </div>
+    );
+  }
+
+  return (
+    <AttachmentLink url={attachment.url} filename={attachment.filename} mimeType={attachment.mimeType} className="block">
+      {preview}
+      <div className="mt-1 truncate text-xs text-muted">{attachment.filename}</div>
+    </AttachmentLink>
   );
 }
 

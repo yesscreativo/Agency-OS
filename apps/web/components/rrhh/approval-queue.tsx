@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Textarea } from "@agency-os/ui";
+import { AttachmentLink, Badge, Button, Textarea } from "@agency-os/ui";
 import { LEAVE_REQUEST_TYPE_LABELS, type LeaveRequestType } from "@agency-os/domain";
 
 export interface PendingRequestRow {
@@ -12,6 +12,9 @@ export interface PendingRequestRow {
   endDate: string;
   requesterName: string;
   notes: string | null;
+  /** URL firmada temporal del adjunto (licencia médica/otro), o null si no tiene. */
+  attachmentUrl: string | null;
+  attachmentFilename: string | null;
 }
 
 function QueueSection({
@@ -48,6 +51,15 @@ function QueueSection({
               </span>
             </div>
             {r.notes && <p className="mt-1 text-sm text-muted">{r.notes}</p>}
+            {r.attachmentUrl && r.attachmentFilename && (
+              <AttachmentLink
+                url={r.attachmentUrl}
+                filename={r.attachmentFilename}
+                className="mt-1 inline-block text-sm text-green underline"
+              >
+                Ver adjunto
+              </AttachmentLink>
+            )}
 
             {rejectingId === r.id ? (
               <div className="mt-3 flex flex-col gap-2">
