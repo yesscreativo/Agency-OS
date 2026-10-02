@@ -1,12 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { activateClientContact, createSupabaseServiceRoleClient } from "@agency-os/db";
+import { getCurrentUser } from "@/lib/auth";
 import { getCurrentClientContact } from "@/lib/portal-auth";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import type { AuthActionState } from "@/lib/auth-actions";
 
-export type AuthActionState = { error: string | null; success?: boolean };
-
-export async function login(
+export async function portalLogin(
   _prevState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
@@ -17,23 +18,33 @@ export async function login(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: "Credenciales inválidas" };
 
-  // Cruce de identidad: un contacto de cliente no entra por acá.
-  const contact = await getCurrentClientContact();
-  if (contact) {
+  // Cruce de identidad: un colaborador interno no entra por acá.
+  const internalUser = await getCurrentUser();
+  if (internalUser) {
     await supabase.auth.signOut();
-    return { error: "Esta cuenta es de un portal de cliente — ingresa por /portal/login." };
+    return { error: "Esta cuenta es de uso interno — ingresa por /login." };
   }
 
-  redirect("/inicio");
+  const contact = await getCurrentClientContact();
+  if (!contact) {
+    await supabase.auth.signOut();
+    return { error: "No encontramos un acceso de cliente para esta cuenta." };
+  }
+  if (contact.status === "disabled") {
+    await supabase.auth.signOut();
+    return { error: "Tu acceso fue deshabilitado. Contacta a tu agencia." };
+  }
+
+  redirect("/portal");
 }
 
-export async function logout() {
+export async function portalLogout() {
   const supabase = await getSupabaseServerClient();
   await supabase.auth.signOut();
-  redirect("/login");
+  redirect("/portal/login");
 }
 
-export async function requestPasswordReset(
+export async function requestPortalPasswordReset(
   _prevState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
@@ -42,14 +53,16 @@ export async function requestPasswordReset(
 
   const supabase = await getSupabaseServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl}/auth/callback?next=/update-password`,
+    redirectTo: `${siteUrl}/auth/callback?next=/portal/activar`,
   });
   if (error) return { error: "No se pudo enviar el correo de recuperación" };
 
   return { error: null, success: true };
 }
 
-export async function updatePassword(
+/** Sirve tanto para activar (primer password tras la invitación) como para
+ * completar un reset — mismo patrón que /update-password del lado interno. */
+export async function portalSetPassword(
   _prevState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
@@ -62,5 +75,11 @@ export async function updatePassword(
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: "No se pudo actualizar la contraseña" };
 
-  redirect("/inicio");
+  const contact = await getCurrentClientContact();
+  if (contact && contact.status === "invited") {
+    const service = createSupabaseServiceRoleClient();
+    await activateClientContact(service, contact.id);
+  }
+
+  redirect("/portal");
 }
