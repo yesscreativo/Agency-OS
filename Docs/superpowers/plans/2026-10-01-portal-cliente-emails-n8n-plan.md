@@ -1,10 +1,29 @@
-# Portal Cliente — emails de auth por n8n + QA pendiente
+# Portal Cliente — emails de auth por n8n + QA completado
 
 > Continuación de `Docs/superpowers/specs/2026-10-01-portal-cliente-design.md` y
 > `Docs/superpowers/plans/2026-10-01-portal-cliente-plan.md` (9/9 tareas
 > implementadas en la rama `Feat/portal-cliente`, sin PR todavía). Este
 > documento cubre lo que quedó pendiente de esa sesión: reemplazar el envío
 > de emails de Supabase Auth por un flujo n8n, y terminar el QA manual.
+
+## Estado de ejecución — 2026-10-02
+
+- **Tarea A implementada y validada:** existe `/auth/confirm`, valida
+  `token_hash`/`type`, establece la sesión con `verifyOtp` y conserva el gate
+  de identidad de `/auth/callback/finish`.
+- **Tarea B configurada y validada en n8n:**
+  `n8n/workflows/supabase-auth-emails.json` cubre `invite` y `recovery`,
+  verifica la firma Standard Webhooks sobre el body crudo, rechaza replay por
+  timestamp, evita duplicados por `webhook-id` y envía mediante Gmail. El
+  workflow fue publicado con Gmail, el hook HTTPS de Supabase quedó activo y
+  ambas clases de email llegaron correctamente.
+- **Tarea C completada:** se validaron recuperación, invitación, activación,
+  separación de login interno/portal, deshabilitación y reactivación.
+- Revisión adicional aplicada: rollback de `auth.users` si falla la creación
+  de `client_contacts`, mensaje visible para enlaces inválidos y trigger de
+  `updated_at` en la migración `065_client_contacts_updated_at.sql`.
+- Ajuste visual validado: el panel Portal quedó en la columna lateral, encima
+  de Zona peligro, para no extender la ficha debajo del historial.
 
 ## Contexto
 
@@ -144,9 +163,20 @@ consumida por Supabase (no reusar ese link — usar "olvidé mi contraseña").
    saca.
 5. Reactivar el contacto → vuelve a poder entrar normalmente.
 
+### Resultado del QA — 2026-10-02
+
+- Recuperación de contraseña: aprobada; el email llegó y permitió definir la
+  nueva contraseña y entrar a `/portal`.
+- Login cruzado: aprobado en ambas direcciones con los mensajes esperados.
+- Deshabilitar/reactivar: aprobado; el acceso se bloqueó y luego se restauró.
+- Invitación de contacto nuevo: aprobada; llegó el email, el enlace permitió
+  definir contraseña, entrar al portal y el contacto cambió a `active`.
+- Ejecución n8n: aprobada por la rama completa hasta Gmail y respuesta 200.
+
 ## Al terminar
 
-Con A+B+C validados: commit(s) + decidir con Yesid si se abre PR de
-`Feat/portal-cliente` hacia `main`, o se sigue encima con Tickets (siguiente
-feature decidida para construir sobre esta base — spec propio, todavía sin
-escribir).
+A+B+C están validados. Queda aplicar la migración pendiente en el entorno de
+destino, desplegar la aplicación, cambiar las URLs de localhost por el dominio
+HTTPS siguiendo `Docs/98-Deployment/Portal-Cliente-Auth-Emails.md`, crear los
+commit(s) y decidir con Yesid si se abre PR de `Feat/portal-cliente` hacia
+`main` o se continúa encima con Tickets.

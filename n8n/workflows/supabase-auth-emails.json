@@ -1,0 +1,279 @@
+{
+  "name": "Supabase Auth - Invitacion y recuperacion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supabase_send_email",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "5cc20a97-7de4-4ee4-b8f5-f54db7fbf05b",
+      "name": "Supabase Send Email Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        0
+      ],
+      "webhookId": "supabase-send-email"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first();\nconst headers = input.json.headers || {};\nconst webhookId = String(headers['webhook-id'] || '');\nconst timestamp = String(headers['webhook-timestamp'] || '');\nconst signatureHeader = String(headers['webhook-signature'] || '');\n\nfunction invalid(error, status = 401) {\n  return [{ json: { valid: false, duplicate: false, status, error } }];\n}\n\nif (!webhookId || !timestamp || !signatureHeader) {\n  return invalid('Faltan headers Standard Webhooks.');\n}\n\nconst timestampNumber = Number(timestamp);\nif (!Number.isFinite(timestampNumber) || Math.abs(Date.now() / 1000 - timestampNumber) > 300) {\n  return invalid('El timestamp del webhook esta fuera de la ventana permitida.');\n}\n\nconst rawSecret = String($env.SUPABASE_SEND_EMAIL_HOOK_SECRET || '');\nif (!rawSecret) {\n  return invalid('SUPABASE_SEND_EMAIL_HOOK_SECRET no esta configurado.', 500);\n}\n\nlet rawBuffer;\ntry {\n  rawBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n} catch (error) {\n  const encoded = input.binary?.data?.data;\n  if (!encoded) return invalid('n8n no entrego el body crudo.', 500);\n  rawBuffer = Buffer.from(encoded, 'base64');\n}\n\nconst rawBody = rawBuffer.toString('utf8');\nconst signedContent = `${webhookId}.${timestamp}.${rawBody}`;\nconst received = signatureHeader.split(' ').map((part) => part.trim()).filter(Boolean);\nconst secrets = rawSecret.split('|').map((value) => value.trim()).filter(Boolean);\nlet signatureValid = false;\n\nfor (const configuredSecret of secrets) {\n  const secret = configuredSecret.replace(/^v1,whsec_/, '').replace(/^whsec_/, '');\n  let key;\n  try {\n    key = Buffer.from(secret, 'base64');\n  } catch {\n    continue;\n  }\n\n  const expected = crypto.createHmac('sha256', key).update(signedContent).digest('base64');\n  for (const candidate of received) {\n    const parts = candidate.split(',');\n    if (parts.length !== 2 || parts[0] !== 'v1') continue;\n\n    const actualBuffer = Buffer.from(parts[1]);\n    const expectedBuffer = Buffer.from(expected);\n    if (\n      actualBuffer.length === expectedBuffer.length &&\n      crypto.timingSafeEqual(actualBuffer, expectedBuffer)\n    ) {\n      signatureValid = true;\n      break;\n    }\n  }\n\n  if (signatureValid) break;\n}\n\nif (!signatureValid) return invalid('Firma Standard Webhooks invalida.');\n\nlet payload;\ntry {\n  payload = JSON.parse(rawBody);\n} catch {\n  return invalid('El body no es JSON valido.', 400);\n}\n\nconst user = payload.user || {};\nconst emailData = payload.email_data || {};\nconst actionType = String(emailData.email_action_type || '');\nconst recipient = String(user.email || '').trim().toLowerCase();\nconst tokenHash = String(emailData.token_hash || '');\n\nif (!recipient || !tokenHash || !['invite', 'recovery'].includes(actionType)) {\n  return invalid('Payload incompleto o email_action_type no soportado.', 422);\n}\n\nfunction safePath(value) {\n  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')\n    ? value\n    : null;\n}\n\nfunction queryParam(value, name) {\n  const match = String(value || '').match(new RegExp('[?&]' + name + '=([^&#]*)'));\n  if (!match) return null;\n\n  try {\n    return decodeURIComponent(match[1].replace(/\\+/g, ' '));\n  } catch {\n    return null;\n  }\n}\n\nfunction extractOrigin(value) {\n  const match = String(value || '').trim().match(/^(https?:\\/\\/[^/?#]+)/i);\n  return match ? match[1].replace(/\\/+$/, '') : null;\n}\n\nlet next = safePath(queryParam(emailData.redirect_to, 'next'));\nif (!next) {\n  next = recipient.endsWith('@laburuagencia.com')\n    ? '/update-password'\n    : '/portal/activar';\n}\n\nconst appOrigin =\n  extractOrigin($env.AGENCY_OS_PUBLIC_URL) ||\n  extractOrigin(emailData.site_url) ||\n  extractOrigin(emailData.redirect_to);\n\nif (!appOrigin) {\n  return invalid('No se pudo resolver el dominio de Agency OS.', 422);\n}\n\nconst confirmUrl =\n  `${appOrigin}/auth/confirm` +\n  `?token_hash=${encodeURIComponent(tokenHash)}` +\n  `&type=${encodeURIComponent(actionType)}` +\n  `&next=${encodeURIComponent(next)}`;\n\nfunction escapeHtml(value) {\n  return String(value).replace(\n    /[&<>\\\"']/g,\n    (character) =>\n      ({\n        '&': '&amp;',\n        '<': '&lt;',\n        '>': '&gt;',\n        '\\\"': '&quot;',\n        \"'\": '&#039;',\n      })[character],\n  );\n}\n\nconst isInvite = actionType === 'invite';\nconst subject = isInvite\n  ? 'Te invitaron a Agency OS'\n  : 'Recuperar tu contrasena - Agency OS';\nconst title = isInvite\n  ? 'Te invitaron a Agency OS'\n  : 'Recuperar tu contrasena';\nconst description = isInvite\n  ? `Crea tu contrasena para empezar a usar tu cuenta (<span style=\\\"color:#f6f6f7;\\\">${escapeHtml(recipient)}</span>). Este enlace es personal y de un solo uso.`\n  : `Pediste restablecer la contrasena de <span style=\\\"color:#f6f6f7;\\\">${escapeHtml(recipient)}</span>. Haz clic abajo para elegir una nueva. Este enlace es personal, de un solo uso y expira pronto.`;\nconst buttonText = isInvite ? 'Aceptar invitacion' : 'Restablecer contrasena';\nconst footer = isInvite\n  ? 'Si no esperabas esta invitacion, puedes ignorar este correo. Nadie podra entrar sin usar el enlace.'\n  : 'Si no solicitaste este cambio, puedes ignorar este correo. Tu contrasena actual sigue siendo valida.';\nconst html = `<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" style=\\\"background-color:#0a0a0b;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;\\\"><tr><td align=\\\"center\\\"><table role=\\\"presentation\\\" width=\\\"100%\\\" style=\\\"max-width:480px;background-color:#161618;border:1px solid #2a2a2e;border-radius:16px;overflow:hidden;\\\"><tr><td style=\\\"padding:32px 32px 0 32px;\\\"><div style=\\\"font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#f6f6f7;\\\">Agency<span style=\\\"color:#b8ff3c;\\\">OS</span></div></td></tr><tr><td style=\\\"padding:28px 32px 8px 32px;\\\"><h1 style=\\\"margin:0;font-size:22px;line-height:1.3;font-weight:700;color:#f6f6f7;\\\">${title}</h1></td></tr><tr><td style=\\\"padding:0 32px 28px 32px;\\\"><p style=\\\"margin:0;font-size:14.5px;line-height:1.6;color:#a1a1aa;\\\">${description}</p></td></tr><tr><td style=\\\"padding:0 32px 32px 32px;\\\"><table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\"><tr><td style=\\\"border-radius:999px;background-color:#b8ff3c;\\\"><a href=\\\"${escapeHtml(confirmUrl)}\\\" style=\\\"display:inline-block;padding:13px 28px;font-size:14px;font-weight:700;color:#0d0f08;text-decoration:none;border-radius:999px;\\\">${buttonText}</a></td></tr></table></td></tr><tr><td style=\\\"padding:0 32px 32px 32px;border-top:1px solid #2a2a2e;\\\"><p style=\\\"margin:20px 0 0 0;font-size:12.5px;line-height:1.6;color:#6b6b73;\\\">${footer}</p></td></tr></table><p style=\\\"margin:20px 0 0 0;font-size:11.5px;color:#6b6b73;\\\">Laburu Agency - Agency OS</p></td></tr></table>`;\n\nconst state = $getWorkflowStaticData('global');\nstate.processedWebhookIds = state.processedWebhookIds || {};\nconst cutoff = Date.now() - 24 * 60 * 60 * 1000;\n\nfor (const [id, processedAt] of Object.entries(state.processedWebhookIds)) {\n  if (Number(processedAt) < cutoff) {\n    delete state.processedWebhookIds[id];\n  }\n}\n\nconst duplicate = Boolean(state.processedWebhookIds[webhookId]);\n\nreturn [\n  {\n    json: {\n      valid: true,\n      duplicate,\n      webhookId,\n      to: recipient,\n      subject,\n      html,\n      actionType,\n      confirmUrl,\n    },\n  },\n];"
+      },
+      "id": "6e81544c-2072-4d13-bcbd-e072050d1bd6",
+      "name": "Verificar firma y preparar correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1e2ee3fd-a8c1-4b64-81c4-6efea71ecdbb",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44378590-baa9-4c12-bec2-f2569177a5a3",
+      "name": "Firma valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5360532b-39b2-457f-9ee4-76e022fbaf1a",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "402fe9ad-b01b-40d7-aa35-f97e9762f1e6",
+      "name": "Webhook duplicado",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "16b48ae2-4c1b-4e54-9d83-8d31098bf23b",
+      "name": "Enviar email con Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $getWorkflowStaticData('global');\nstate.processedWebhookIds = state.processedWebhookIds || {};\nconst verified = $('Verificar firma y preparar correo').first().json;\nstate.processedWebhookIds[verified.webhookId] = Date.now();\nreturn [{ json: { ok: true, actionType: verified.actionType, to: verified.to } }];"
+      },
+      "id": "b80d3ba2-2705-4f1e-be24-b2485955aaec",
+      "name": "Marcar como enviado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b430410f-39dc-453f-8ad2-f0bda5e8922a",
+      "name": "Responder 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        680,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: { http_code: $json.status || 401, message: $json.error || 'Solicitud no autorizada' } } }}",
+        "options": {
+          "responseCode": "={{ $json.status || 401 }}"
+        }
+      },
+      "id": "7337d7d6-d4fb-4170-8b78-5d6dfca711b0",
+      "name": "Responder error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -40,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Configuracion obligatoria\n\n1. `SUPABASE_SEND_EMAIL_HOOK_SECRET=v1,whsec_...`\n2. `NODE_FUNCTION_ALLOW_BUILTIN=crypto`\n3. `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`\n4. `AGENCY_OS_PUBLIC_URL=http://localhost:3000` (usar HTTPS en produccion)\n5. Asignar la credencial Gmail existente.\n6. Publicar el workflow y registrar la Production URL en Supabase Auth Hooks.\n\nNo desactivar **Raw Body** en el Webhook.",
+        "height": 260,
+        "width": 420,
+        "color": 5
+      },
+      "id": "eb985945-cd33-42fc-8e3d-4c68f09942ff",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -380
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Supabase Send Email Hook": {
+      "main": [
+        [
+          {
+            "node": "Verificar firma y preparar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar firma y preparar correo": {
+      "main": [
+        [
+          {
+            "node": "Firma valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firma valida": {
+      "main": [
+        [
+          {
+            "node": "Webhook duplicado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook duplicado": {
+      "main": [
+        [
+          {
+            "node": "Responder 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar email con Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar email con Gmail": {
+      "main": [
+        [
+          {
+            "node": "Marcar como enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar como enviado": {
+      "main": [
+        [
+          {
+            "node": "Responder 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b4592bd0-1a88-47de-b076-bcc0d7bd88d1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
