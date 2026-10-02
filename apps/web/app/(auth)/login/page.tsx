@@ -31,6 +31,7 @@ function LoginForm() {
   const [state, formAction] = useFormState(login, initialState);
   const searchParams = useSearchParams();
   const domainError = searchParams.get("error") === "dominio";
+  const invalidLink = searchParams.get("error") === "enlace-invalido";
 
   return (
     <div className="space-y-5">
@@ -44,6 +45,12 @@ function LoginForm() {
       {domainError && (
         <p className="rounded-lg border border-danger/40 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
           Solo se permite acceso con correos @laburuagencia.com.
+        </p>
+      )}
+
+      {invalidLink && (
+        <p className="rounded-lg border border-danger/40 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
+          El enlace venció, ya fue usado o no es válido. Solicita uno nuevo.
         </p>
       )}
 

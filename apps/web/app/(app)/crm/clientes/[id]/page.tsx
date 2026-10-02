@@ -158,7 +158,16 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
           />
         </section>
 
-        <aside>
+        <aside className="space-y-6">
+          <ClientContactsPanel
+            clientId={client.id}
+            contacts={contacts.map((c) => ({
+              id: c.id,
+              fullName: c.full_name,
+              email: c.email,
+              status: c.status,
+            }))}
+          />
           <ClientDangerZone clientId={client.id} quoteCount={totalCount} />
         </aside>
       </div>
@@ -173,13 +182,6 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
           <ClientQuoteHistory rows={historyRows} />
         )}
       </section>
-
-      <div className="mt-6">
-        <ClientContactsPanel
-          clientId={client.id}
-          contacts={contacts.map((c) => ({ id: c.id, fullName: c.full_name, email: c.email, status: c.status }))}
-        />
-      </div>
     </div>
   );
 }

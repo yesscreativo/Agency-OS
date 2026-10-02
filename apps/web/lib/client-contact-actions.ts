@@ -49,6 +49,8 @@ export async function inviteClientContactAction(
     return { error: "No se puede invitar un correo @laburuagencia.com como contacto de cliente." };
   }
 
+  let invitedAuthUserId: string | null = null;
+
   try {
     const db = await getSupabaseServerClient();
     const client = await getClientById(db, clientId);
@@ -69,6 +71,7 @@ export async function inviteClientContactAction(
       console.error("inviteClientContactAction:auth", error);
       return { error: "No se pudo invitar al contacto. Verifica el correo e intenta de nuevo." };
     }
+    invitedAuthUserId = data.user.id;
 
     await createClientContact(service, {
       client_id: clientId,
@@ -77,11 +80,24 @@ export async function inviteClientContactAction(
       email: trimmedEmail,
       invited_by: auth.userId,
     });
+    invitedAuthUserId = null;
 
     revalidatePath(`/crm/clientes/${clientId}`);
     return { ok: true };
   } catch (error) {
     console.error("inviteClientContactAction", error);
+    // inviteUserByEmail crea auth.users antes de insertar client_contacts.
+    // Si esa segunda operación falla, borrar la cuenta evita que el siguiente
+    // intento quede bloqueado por "email ya registrado".
+    if (invitedAuthUserId) {
+      try {
+        const service = createSupabaseServiceRoleClient();
+        const { error: rollbackError } = await service.auth.admin.deleteUser(invitedAuthUserId);
+        if (rollbackError) console.error("inviteClientContactAction:rollback", rollbackError);
+      } catch (rollbackError) {
+        console.error("inviteClientContactAction:rollback", rollbackError);
+      }
+    }
     return { error: "No se pudo invitar al contacto. Intenta de nuevo." };
   }
 }
