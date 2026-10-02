@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { getClientById, listClientQuotes } from "@agency-os/db";
+import { getClientById, listClientContactsForClient, listClientQuotes } from "@agency-os/db";
 import { calcQuote, formatMoney } from "@agency-os/domain";
 import { KpiCard, KpiDot, type KpiTone } from "@agency-os/ui";
 import { getCurrentUser, hasPermission, quoteAccess } from "@/lib/auth";
@@ -9,6 +9,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getQuoteStatusMap, resolveStatus } from "@/lib/quote-status-catalog";
 import { ClientForm } from "@/components/crm/client-form";
 import { ClientDangerZone } from "@/components/crm/client-danger-zone";
+import { ClientContactsPanel } from "@/components/crm/client-contacts-panel";
 import {
   ClientQuoteHistory,
   type ClientQuoteHistoryRow,
@@ -44,9 +45,10 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
   const client = await getClientById(db, params.id);
   if (!client) notFound();
 
-  const [quotes, statusMap] = await Promise.all([
+  const [quotes, statusMap, contacts] = await Promise.all([
     listClientQuotes(db, client.id),
     getQuoteStatusMap(db),
+    listClientContactsForClient(db, client.id),
   ]);
 
   // KPIs por cliente + filas del historial (un solo recorrido).
@@ -171,6 +173,13 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
           <ClientQuoteHistory rows={historyRows} />
         )}
       </section>
+
+      <div className="mt-6">
+        <ClientContactsPanel
+          clientId={client.id}
+          contacts={contacts.map((c) => ({ id: c.id, fullName: c.full_name, email: c.email, status: c.status }))}
+        />
+      </div>
     </div>
   );
 }
