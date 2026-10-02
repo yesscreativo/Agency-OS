@@ -1,0 +1,61 @@
+<!--
+  Supabase Dashboard → Authentication → Email Templates → "Reset Password"
+  Subject sugerido: Recuperar tu contraseña — Agency OS
+  Variables usadas: {{ .ConfirmationURL }}, {{ .Email }}
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0b;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" style="max-width:480px;background-color:#161618;border:1px solid #2a2a2e;border-radius:16px;overflow:hidden;">
+        <tr>
+          <td style="padding:32px 32px 0 32px;">
+            <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#f6f6f7;">
+              Agency<span style="color:#b8ff3c;">OS</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 8px 32px;">
+            <h1 style="margin:0;font-size:22px;line-height:1.3;font-weight:700;color:#f6f6f7;">
+              Recuperar tu contraseña
+            </h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 28px 32px;">
+            <p style="margin:0;font-size:14.5px;line-height:1.6;color:#a1a1aa;">
+              Pediste restablecer la contraseña de <span style="color:#f6f6f7;">{{ .Email }}</span>.
+              Hacé click abajo para elegir una nueva. Este enlace es personal, de un solo uso y
+              expira pronto.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 32px 32px;">
+            <table role="presentation" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="border-radius:999px;background-color:#b8ff3c;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:700;color:#0d0f08;text-decoration:none;border-radius:999px;">
+                    Restablecer contraseña
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 32px 32px;border-top:1px solid #2a2a2e;">
+            <p style="margin:20px 0 0 0;font-size:12.5px;line-height:1.6;color:#6b6b73;">
+              Si no fuiste vos quien pidió esto, podés ignorar este correo — tu contraseña actual
+              sigue siendo válida y no se modificó nada.
+            </p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:20px 0 0 0;font-size:11.5px;color:#6b6b73;">
+        Laburu Agency · Agency OS
+      </p>
+    </td>
+  </tr>
+</table>

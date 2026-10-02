@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { Button, FieldError, Input, Label } from "@agency-os/ui";
-import { login, type AuthActionState } from "@/lib/auth-actions";
-import { GoogleButton } from "@/components/auth/google-button";
+import { portalLogin } from "@/lib/portal-actions";
+import type { AuthActionState } from "@/lib/auth-actions";
 
 const initialState: AuthActionState = { error: null };
 
@@ -19,48 +19,31 @@ function SubmitButton() {
   );
 }
 
-export default function LoginPage() {
+export default function PortalLoginPage() {
   return (
     <Suspense>
-      <LoginForm />
+      <PortalLoginForm />
     </Suspense>
   );
 }
 
-function LoginForm() {
-  const [state, formAction] = useFormState(login, initialState);
+function PortalLoginForm() {
+  const [state, formAction] = useFormState(portalLogin, initialState);
   const searchParams = useSearchParams();
-  const domainError = searchParams.get("error") === "dominio";
   const invalidLink = searchParams.get("error") === "enlace-invalido";
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-[22px] font-bold tracking-tight text-[#f6f6f7]">
-          Bienvenido de nuevo
-        </h1>
-        <p className="mt-1 text-[13.5px] text-[#a1a1aa]">Entra a tu workspace.</p>
+        <h1 className="text-[22px] font-bold tracking-tight text-[#f6f6f7]">Portal de clientes</h1>
+        <p className="mt-1 text-[13.5px] text-[#a1a1aa]">Entra a tu espacio con Laburu.</p>
       </div>
-
-      {domainError && (
-        <p className="rounded-lg border border-danger/40 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-          Solo se permite acceso con correos @laburuagencia.com.
-        </p>
-      )}
 
       {invalidLink && (
         <p className="rounded-lg border border-danger/40 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
           El enlace venció, ya fue usado o no es válido. Solicita uno nuevo.
         </p>
       )}
-
-      <GoogleButton />
-
-      <div className="flex items-center gap-3 text-[12.5px] text-[#71717a]">
-        <span className="h-px flex-1 bg-white/10" />
-        o con tu correo
-        <span className="h-px flex-1 bg-white/10" />
-      </div>
 
       <form action={formAction} className="space-y-4">
         <div>
@@ -74,13 +57,7 @@ function LoginForm() {
           <Label htmlFor="password" className="text-[#f6f6f7]">
             Contraseña
           </Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-          />
+          <Input id="password" name="password" type="password" required autoComplete="current-password" />
         </div>
 
         <FieldError>{state.error}</FieldError>
@@ -88,7 +65,7 @@ function LoginForm() {
         <SubmitButton />
 
         <Link
-          href="/reset-password"
+          href="/portal/recuperar"
           className="block text-center text-[12.5px] text-[#71717a] transition hover:text-[#b8ff3c]"
         >
           ¿Olvidaste tu contraseña?

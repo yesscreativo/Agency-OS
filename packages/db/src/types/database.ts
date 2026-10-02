@@ -62,6 +62,63 @@ export type Database = {
           },
         ]
       }
+      client_contacts: {
+        Row: {
+          activated_at: string | null
+          auth_user_id: string
+          client_id: string
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          invited_at: string
+          invited_by: string | null
+          status: Database["public"]["Enums"]["client_contact_status"]
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          auth_user_id: string
+          client_id: string
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          status?: Database["public"]["Enums"]["client_contact_status"]
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          auth_user_id?: string
+          client_id?: string
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          status?: Database["public"]["Enums"]["client_contact_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           code: string | null
@@ -1900,6 +1957,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_client_contact_id: { Args: never; Returns: string }
       current_user_has_permission: {
         Args: { perm_code: string }
         Returns: boolean
@@ -1952,6 +2010,7 @@ export type Database = {
       }
     }
     Enums: {
+      client_contact_status: "invited" | "active" | "disabled"
       leave_approval_status: "pending" | "approved" | "rejected"
       leave_request_type:
         | "vacaciones"
@@ -2094,6 +2153,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      client_contact_status: ["invited", "active", "disabled"],
       leave_approval_status: ["pending", "approved", "rejected"],
       leave_request_type: [
         "vacaciones",
