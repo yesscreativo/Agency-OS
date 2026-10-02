@@ -6,6 +6,7 @@ import {
   createClientContact,
   createSupabaseServiceRoleClient,
   getClientById,
+  getClientContactById,
   setClientContactStatus,
 } from "@agency-os/db";
 import { isAllowedEmailDomain } from "@agency-os/domain";
@@ -96,6 +97,10 @@ export async function setClientContactStatusAction(
 
   try {
     const db = await getSupabaseServerClient();
+    const contact = await getClientContactById(db, contactId);
+    if (!contact || contact.client?.organization_id !== auth.organizationId) {
+      return { error: "El contacto no existe o no pertenece a tu organización." };
+    }
     await setClientContactStatus(db, contactId, status);
     revalidatePath("/crm/clientes");
     return { ok: true };

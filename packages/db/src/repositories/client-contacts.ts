@@ -48,6 +48,22 @@ export async function getClientContactByAuthUserId(
   return data;
 }
 
+/** Para validar, antes de mutar, que el contacto pertenece a la organización
+ * de quien llama (defensa en profundidad además de la RLS — mismo patrón que
+ * updateClient/softDeleteClient en clients.ts). */
+export async function getClientContactById(
+  db: Db,
+  id: string,
+): Promise<(ClientContactRow & { client: { organization_id: string } | null }) | null> {
+  const { data, error } = await db
+    .from("client_contacts")
+    .select("*, client:clients(organization_id)")
+    .eq("id", id)
+    .maybeSingle<ClientContactRow & { client: { organization_id: string } | null }>();
+  if (error) throw error;
+  return data;
+}
+
 export async function activateClientContact(db: Db, id: string): Promise<void> {
   const { error } = await db
     .from("client_contacts")
